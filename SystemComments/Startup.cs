@@ -16,6 +16,7 @@ using SystemComments.Models.DataBase;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using System.Text;
+using System.Security.Cryptography;
 
 namespace SystemComments
 {
@@ -35,9 +36,11 @@ namespace SystemComments
             {
                 options.UseSqlServer(Configuration.GetConnectionString("MyEvalsConnectionString"));
             });
+            services.AddCors();
             services.AddControllers();
-            var key = "This is my first Test Key";
-
+            var key = "/DW4PZqv44Yr4Rk=";
+            //string clientID = GenerateRandomNumber();
+            //string clientSecret = GenerateRandomNumber();
             services.AddAuthentication(x =>
             {
                 x.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
@@ -101,6 +104,12 @@ namespace SystemComments
 
             app.UseRouting();
 
+            app.UseCors(x => x
+               .AllowAnyMethod()
+               .AllowAnyHeader()
+               .SetIsOriginAllowed(origin => true) // allow any origin
+               .AllowCredentials()); // allow credentials
+
             app.UseAuthentication();
 
             app.UseAuthorization();
@@ -109,6 +118,15 @@ namespace SystemComments
             {
                 endpoints.MapControllers();
             });
+        }
+
+        public string GenerateRandomNumber()
+        {
+            RandomNumberGenerator cryptoRandomDataGenerator = new RNGCryptoServiceProvider();
+            byte[] buffer = new byte[11];
+            cryptoRandomDataGenerator.GetBytes(buffer);
+            string uniq = Convert.ToBase64String(buffer);
+            return uniq;
         }
     }
 }

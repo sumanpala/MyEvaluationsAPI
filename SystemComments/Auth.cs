@@ -11,8 +11,8 @@ namespace SystemComments
 {   
     public class Auth: IJwtAuth
     {
-        private readonly string clientID = "myevaluations";
-        private readonly string clientSecret = "APPMyE12$98F";
+        private readonly string clientID = "VKfnd5JO6Fid3Ko=";
+        private readonly string clientSecret = "9dTZGIXFOyY5ZqA=";
         private readonly string key;
 
         public Auth(string key)
