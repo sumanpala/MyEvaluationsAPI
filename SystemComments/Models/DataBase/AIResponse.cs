@@ -25,6 +25,7 @@ namespace SystemComments.Models.DataBase
         public Int64 DepartmentID { get; set; }
 
         public string SearchCriteria { get; set; }
+        
     }
 
     public class Choice

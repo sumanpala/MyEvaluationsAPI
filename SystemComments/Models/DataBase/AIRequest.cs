@@ -21,5 +21,12 @@ namespace SystemComments.Models.DataBase
         public Int64 DepartmentID { get; set; }
 
         public string SearchCriteria { get; set; }
+
+        public string Feedback { get; set; }
+
+        public Int16 RequestType { get; set; } = 0;
+
+        public string AIResponseID { get; set; }
+
     }
 }

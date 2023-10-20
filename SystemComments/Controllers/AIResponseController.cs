@@ -138,7 +138,7 @@ namespace SystemComments.Controllers
                         "@Output = '" + aiResponse + "'";
                     //return await _context.output.ToListAsync();
                     aiSavedResponse = await _context.AIResponse.FromSqlRaw("InsertArtificialIntelligenceResponse {0},{1},{2},{3},{4},{5},{6},{7},{8},{9}"
-                        ,input.CreatedBy, input.DepartmentID, input.InputPrompt, aiResponse, aiComments, input.UserID, input.DateRange, input.SearchCriteria, "", "2").ToListAsync();
+                        ,input.CreatedBy, input.DepartmentID, input.InputPrompt, aiResponse, aiComments, input.UserID, input.DateRange, input.SearchCriteria, input.AIResponseID, "2").ToListAsync();
                 }                
                 
                 //return await _context.AIResponse.FromSqlRaw("InsertArtificialIntelligenceResponse {0},{1}", input.InputPrompt, aiResponse).ToListAsync();
@@ -148,6 +148,7 @@ namespace SystemComments.Controllers
             {
                 AIResponse aiErrorResponse = new AIResponse();
                 aiErrorResponse.AIResponseID = "";
+                aiErrorResponse.UserID = 0;
                 aiErrorResponse.CreatedDate = DateTime.Now;
                 aiErrorResponse.InputPrompt = "";
                 aiErrorResponse.OutputResponse = ex.Message;
@@ -171,8 +172,9 @@ namespace SystemComments.Controllers
                     var objUsers = JToken.Parse(inputJSON);
                     string userID = "0";
                     string userName = "", dateRange = "", comments = "";
-                    string prompt_initial = "You are an expert medical educator. Consider the data from {} listed in chronological order. These are comments from different evaluators and demonstrate the resident's performance over time. \nConsider the performance during the initial months and compare to their performance during the latter months.  Provide a comparison of the initial performance to the most recent performance, and detail a trend in the performance.\nAssume the resident has multiple opportunities to improve and grow in that period. Analyze the comments to demonstrate a trend in their performance.\nPlease provide the resident with detailed narrative summaries of their performance.\nExclude specific names of people. \nSeparate each narrative summary by the six core ACGME competencies and provide an 'Overall MyInsights' section to summarize all their strengths and weaknesses.\nPlease sort the competency headings into the following order: Patient Care, Medical Knowledge, System-Based Practices, Practice-Based Learning & Improvement, Professionalism, and Interpersonal & Communication Skills.\nPhrase the responses to the resident but do not use their name. Do not refer to them by name." + dateRange;
-                    string prompt_final = "You are an expert medical educator. Consider summary comments listed by ACGME core competencies from the period {}, followed by comments from different evaluators for the period 07/01/2022 - 04/13/2023 listed in chronological order. \nConsider the summary comments during the initial period and compare to their performance during the latter period.  Provide a comparison of the initial performance to the most recent performance, and detail a trend in the performance.\nAssume the resident has multiple opportunities to improve and grow in that period. Analyze the comments to demonstrate a trend in their performance. Please provide the resident with detailed narrative summaries of their performance.\nSeparate each narrative summary by the six core ACGME competencies and provide an 'Overall MyInsights' section to summarize all their strengths and weaknesses.\nPlease sort the competency headings into the following order: Patient Care, Medical Knowledge, System-Based Practices, Practice-Based Learning & Improvement, Professionalism, and Interpersonal & Communication Skills.\nPhrase the responses to the resident but do not use their name. Do not refer to them by name." + dateRange;
+                    string prompt_initial = String.Format("You are an expert medical educator. Consider the data from {0} listed in chronological order. These are comments from different evaluators and demonstrate the resident's performance over time. \nConsider the performance during the initial months and compare to their performance during the latter months.  Provide a comparison of the initial performance to the most recent performance, and detail a trend in the performance.\nAssume the resident has multiple opportunities to improve and grow in that period. Analyze the comments to demonstrate a trend in their performance.\nPlease provide the resident with detailed narrative summaries of their performance.\nExclude specific names of people. \nSeparate each narrative summary by the six core ACGME competencies and provide an 'Overall MyInsights' section to summarize all their strengths and weaknesses.\nPlease sort the competency headings into the following order: Patient Care, Medical Knowledge, System-Based Practices, Practice-Based Learning & Improvement, Professionalism, and Interpersonal & Communication Skills.\nPhrase the responses to the resident but do not use their name. Do not refer to them by name. display header in bold.", dateRange);
+                    string prompt_final = String.Format("You are an expert medical educator. Consider summary comments listed by ACGME core competencies from the period {0}, followed by comments from different evaluators for the period {0} listed in chronological order. \nConsider the summary comments during the initial period and compare to their performance during the latter period.  Provide a comparison of the initial performance to the most recent performance, and detail a trend in the performance.\nAssume the resident has multiple opportunities to improve and grow in that period. Analyze the comments to demonstrate a trend in their performance. Please provide the resident with detailed narrative summaries of their performance.\nSeparate each narrative summary by the six core ACGME competencies and provide an 'Overall MyInsights' section to summarize all their strengths and weaknesses.\nPlease sort the competency headings into the following order: Patient Care, Medical Knowledge, System-Based Practices, Practice-Based Learning & Improvement, Professionalism, and Interpersonal & Communication Skills.\nPhrase the responses to the resident but do not use their name. Do not refer to them by name. display header in bold.", dateRange);
+                    string prompt_feedback = "User accepted assistant reply. Consider this as user feedback. display header in bold.";
                     if (objUsers.Count() > 0)
                     {
                         if (objUsers["userid"] != null)
@@ -198,13 +200,26 @@ namespace SystemComments.Controllers
 
                         if (comments.Length > 0)
                         {
-                            comments = ((attemptNumber == 1) ? prompt_initial : prompt_final) + "\n\nComments:\n" + comments;
+                            //Accept Feedback
+                            if (input.RequestType == 2)
+                            {                               
+                                comments = prompt_initial + "\n\n" + input.Output + "\n\n"  + "Comments:\n" + comments + "\n" + input.Feedback + "\n\n" + prompt_feedback;
+                            }
+                            else if (input.RequestType == 1)
+                            {
+                                comments = "Display the headers and sub headers in bold. " + input.Feedback  + "\n\n" + input.Output + "\n\nComments:\n" + comments;
+                                //comments = prompt_initial + "\n\nComments:\n" + comments;
+                            }
+                            else
+                            {
+                                comments = prompt_initial + "\n\nComments:\n" + comments;
+                            }
                             var request = new OpenAIRequest
                             {
                                 //Model = "text-davinci-002",
                                 Model = "gpt-3.5-turbo",
                                 //Prompt = "dog types",
-                                Temperature = 0.7f,
+                                Temperature = 0.7f,                                
                                 //MaxTokens = 4000
                                 //Messages = "[{\"role\":\"system\",\"content\":\"You are helpful assistant\"},{\"role\":\"user\",\"content\":\"You will never use people name when responding and only use the workd 'Resident' instead of people name\"}]"
                             };
@@ -219,7 +234,7 @@ namespace SystemComments.Controllers
                                         new RequestMessage()
                                         {
                                              Role = "user",
-                                             Content = "You will never use people name when responding and only use the workd 'Resident' instead of people name"
+                                             Content = "You will never use people name when responding and only use the word 'Resident' instead of people name"                                             
                                         },
                                         new RequestMessage()
                                         {
