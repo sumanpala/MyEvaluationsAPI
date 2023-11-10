@@ -113,13 +113,15 @@ namespace SystemComments.Controllers
         //    return CreatedAtAction("GetAIResponse", new { id = aIResponse.AIResponseID }, aIResponse);
         //}
 
-        [HttpPost]
-        public async Task<ActionResult<IEnumerable<AIResponse>>> SaveAIRequest(AIRequest input)
+        [HttpPost]    
+        [Authorize]
+        public async Task<ActionResult<IEnumerable<AIResponse>>> SaveAIRequest([FromBody] AIRequest input)
         {
             List<AIResponse> aiSavedResponse = new List<AIResponse>();
             try
             {
-                string aiResponse = GetChatGptResponse(input);
+                string comments = GetComments(input);
+                string aiResponse = GetChatGptResponse(comments);
                 string aiComments = "";
                 if(aiResponse.Length > 0)
                 {
@@ -137,8 +139,10 @@ namespace SystemComments.Controllers
                         "@InputPrompt = '" + input.InputPrompt + "'," +
                         "@Output = '" + aiResponse + "'";
                     //return await _context.output.ToListAsync();
-                    aiSavedResponse = await _context.AIResponse.FromSqlRaw("InsertArtificialIntelligenceResponse {0},{1},{2},{3},{4},{5},{6},{7},{8},{9}"
-                        ,input.CreatedBy, input.DepartmentID, input.InputPrompt, aiResponse, aiComments, input.UserID, input.DateRange, input.SearchCriteria, input.AIResponseID, "2").ToListAsync();
+                    comments = comments.Replace("\n", "<br/>");
+                    comments = comments.Replace("\r\n", "<br/>");
+                    aiSavedResponse = await _context.AIResponse.FromSqlRaw("InsertArtificialIntelligenceResponse {0},{1},{2},{3},{4},{5},{6},{7},{8},{9},{10}"
+                        ,input.CreatedBy, input.DepartmentID, input.InputPrompt, aiResponse, aiComments, input.UserID, input.DateRange, input.SearchCriteria, input.AIResponseID, "2", comments).ToListAsync();
                 }                
                 
                 //return await _context.AIResponse.FromSqlRaw("InsertArtificialIntelligenceResponse {0},{1}", input.InputPrompt, aiResponse).ToListAsync();
@@ -157,75 +161,98 @@ namespace SystemComments.Controllers
             return aiSavedResponse;
         }
 
-        private string GetChatGptResponse(AIRequest input)
+        private string GetComments(AIRequest input)
+        {
+            string comments = string.Empty;
+            Int64 attemptNumber = input.AttemptNumber;
+            string inputJSON = input.InputPrompt;
+            try
+            {
+                var objUsers = JToken.Parse(inputJSON);
+                string userID = "0";
+                string userName = "", dateRange = "";                
+                if (objUsers.Count() > 0)
+                {
+                    if (objUsers["userid"] != null)
+                    {
+                        userID = objUsers["userid"].ToString();
+                    }
+                    if (objUsers["username"] != null)
+                    {
+                        userName = objUsers["username"].ToString();
+                    }
+                    if (objUsers["daterange"] != null)
+                    {
+                        dateRange = objUsers["daterange"].ToString();
+                    }
+                    string prompt_initial = "Expected Output Format:\n * Patient Care:    Initial Months: (sometext)\n Most Recent Months: (sometext)";
+                    prompt_initial += "\n * Medical Knowledge:    Initial Months: (sometext)\n Most Recent Months: (sometext)";
+                    prompt_initial += "\n * System-Based Practices:    Initial Months: (sometext)\nMost Recent Months: (sometext)";
+                    prompt_initial += "\n * Practice-Based Learning & Improvement:    Initial Months: (sometext)\n Most Recent Months: (sometext)";
+                    prompt_initial += "\n * Professionalism:    Initial Months: (sometext)\n Most Recent Months: (sometext)";
+                    prompt_initial += "\n * Interpersonal & Communication Skills:    Initial Months: (sometext)\n Most Recent Months: (sometext)";
+                    prompt_initial += "\n * Overall MyInsights:    Strengths: (sometext)\n Areas for Improvement:(sometext)";
+                    prompt_initial += "\n * Overall: (sometext)\n\nPlease consider the above output format when responding.\n";
+                    prompt_initial += String.Format("Replace the word resident (or) fellow (or) student with 'You' in response.\n Display the headers and sub headers in bold.\nYou are an expert medical educator. Consider the data from {0} listed in chronological order. These are comments from different evaluators and demonstrate the resident's (or) fellow's (or) student's performance over time.\n Consider the performance during the initial months and compare to their performance during the latter months.  Provide a comparison of the initial performance to the most recent performance, and detail a trend in the performance.\nAssume the resident (or) fellow (or) student has multiple opportunities to improve and grow in that period. Analyze the comments to demonstrate a trend in their performance.\nPlease provide the resident (or) fellow (or) student with detailed narrative summaries of their performance.\n Exclude specific names of people.\n Separate each narrative summary by the six core ACGME competencies and provide an 'Overall MyInsights' section to summarize all their strengths and weaknesses.\nPlease sort the competency headings into the following order: Patient Care, Medical Knowledge, System-Based Practices, Practice-Based Learning & Improvement, Professionalism, and Interpersonal & Communication Skills.\n Phrase the responses to the resident (or) fellow (or) student but do not use their name. Do not refer to them by name.\n Do not rewrite the comments in your response.", dateRange);
+                    string prompt_final = String.Format("You are an expert medical educator. Consider summary comments listed by ACGME core competencies from the period {0}, followed by comments from different evaluators for the period {0} listed in chronological order.\n Consider the summary comments during the initial period and compare to their performance during the latter period.  Provide a comparison of the initial performance to the most recent performance, and detail a trend in the performance.\nAssume the resident has multiple opportunities to improve and grow in that period. Analyze the comments to demonstrate a trend in their performance. Please provide the resident with detailed narrative summaries of their performance.\nSeparate each narrative summary by the six core ACGME competencies and provide an 'Overall MyInsights' section to summarize all their strengths and weaknesses.\nPlease sort the competency headings into the following order: Patient Care, Medical Knowledge, System-Based Practices, Practice-Based Learning & Improvement, Professionalism, and Interpersonal & Communication Skills.\nPhrase the responses to the resident but do not use their name. Do not refer to them by name.\ndisplay header in bold. Do not rewrite the comments in your response.", dateRange);
+                    string prompt_feedback = "User accepted assistant reply. Consider this as user feedback. display header in bold.";
+
+                    if (objUsers["usercomments"] != null)
+                    {
+                        JArray commentsArray = (JArray)objUsers["usercomments"];
+                        foreach (JToken comment in commentsArray)
+                        {
+                            comments += comment["comments"].ToString() + "\n\n";
+                        }
+                    }
+                    if (comments.Length > 0)
+                    {
+                        //Accept Feedback
+                        if (input.RequestType == 2)
+                        {
+                            comments = prompt_initial + "\n\n" + input.Output + "\n\n" + "Comments:\n" + comments + "\n" + input.Feedback + "\n\n" + prompt_feedback;
+                        }
+                        else if (input.RequestType == 1)
+                        {
+                            comments = "Display the headers and sub headers in bold. " + input.Feedback + "\n\n" + input.Output + "\n\nComments:\n" + comments;
+                            //comments = prompt_initial + "\n\nComments:\n" + comments;
+                        }
+                        else
+                        {
+                            comments = prompt_initial + "\n\nComments:\n" + comments;
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+
+            }
+
+            return comments;
+        }
+
+        private string GetChatGptResponse(string comments)
         {
             try
             {                
                 string aiKey = _config.GetSection("AppSettings:AIToken").Value;
                 HttpClient client = new HttpClient();
-                client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", aiKey);
-                Int64 attemptNumber = input.AttemptNumber;
-                string inputJSON = input.InputPrompt;
+                client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", aiKey);                
                 string aiResponse = "";
-                try
+                if (comments.Length > 0)
                 {
-                    var objUsers = JToken.Parse(inputJSON);
-                    string userID = "0";
-                    string userName = "", dateRange = "", comments = "";
-                    string prompt_initial = String.Format("You are an expert medical educator. Consider the data from {0} listed in chronological order. These are comments from different evaluators and demonstrate the resident's performance over time. \nConsider the performance during the initial months and compare to their performance during the latter months.  Provide a comparison of the initial performance to the most recent performance, and detail a trend in the performance.\nAssume the resident has multiple opportunities to improve and grow in that period. Analyze the comments to demonstrate a trend in their performance.\nPlease provide the resident with detailed narrative summaries of their performance.\nExclude specific names of people. \nSeparate each narrative summary by the six core ACGME competencies and provide an 'Overall MyInsights' section to summarize all their strengths and weaknesses.\nPlease sort the competency headings into the following order: Patient Care, Medical Knowledge, System-Based Practices, Practice-Based Learning & Improvement, Professionalism, and Interpersonal & Communication Skills.\nPhrase the responses to the resident but do not use their name. Do not refer to them by name. display header in bold.", dateRange);
-                    string prompt_final = String.Format("You are an expert medical educator. Consider summary comments listed by ACGME core competencies from the period {0}, followed by comments from different evaluators for the period {0} listed in chronological order. \nConsider the summary comments during the initial period and compare to their performance during the latter period.  Provide a comparison of the initial performance to the most recent performance, and detail a trend in the performance.\nAssume the resident has multiple opportunities to improve and grow in that period. Analyze the comments to demonstrate a trend in their performance. Please provide the resident with detailed narrative summaries of their performance.\nSeparate each narrative summary by the six core ACGME competencies and provide an 'Overall MyInsights' section to summarize all their strengths and weaknesses.\nPlease sort the competency headings into the following order: Patient Care, Medical Knowledge, System-Based Practices, Practice-Based Learning & Improvement, Professionalism, and Interpersonal & Communication Skills.\nPhrase the responses to the resident but do not use their name. Do not refer to them by name. display header in bold.", dateRange);
-                    string prompt_feedback = "User accepted assistant reply. Consider this as user feedback. display header in bold.";
-                    if (objUsers.Count() > 0)
+                    var request = new OpenAIRequest
                     {
-                        if (objUsers["userid"] != null)
-                        {
-                            userID = objUsers["userid"].ToString();
-                        }
-                        if (objUsers["username"] != null)
-                        {
-                            userName = objUsers["username"].ToString();
-                        }
-                        if (objUsers["daterange"] != null)
-                        {
-                            dateRange = objUsers["daterange"].ToString();
-                        }
-                        if (objUsers["usercomments"] != null)
-                        {
-                            JArray commentsArray = (JArray)objUsers["usercomments"];
-                            foreach (JToken comment in commentsArray)
-                            {
-                                comments += comment["comments"].ToString() + "\n\n";
-                            }
-                        }
+                        //Model = "text-davinci-002",
+                        //Model = "gpt-3.5-turbo",
+                        Model = "gpt-4",                       
+                        Temperature = 0.7f,
+                        //MaxTokens = 4000                        
+                    };
 
-                        if (comments.Length > 0)
-                        {
-                            //Accept Feedback
-                            if (input.RequestType == 2)
-                            {                               
-                                comments = prompt_initial + "\n\n" + input.Output + "\n\n"  + "Comments:\n" + comments + "\n" + input.Feedback + "\n\n" + prompt_feedback;
-                            }
-                            else if (input.RequestType == 1)
-                            {
-                                comments = "Display the headers and sub headers in bold. " + input.Feedback  + "\n\n" + input.Output + "\n\nComments:\n" + comments;
-                                //comments = prompt_initial + "\n\nComments:\n" + comments;
-                            }
-                            else
-                            {
-                                comments = prompt_initial + "\n\nComments:\n" + comments;
-                            }
-                            var request = new OpenAIRequest
-                            {
-                                //Model = "text-davinci-002",
-                                Model = "gpt-3.5-turbo",
-                                //Prompt = "dog types",
-                                Temperature = 0.7f,                                
-                                //MaxTokens = 4000
-                                //Messages = "[{\"role\":\"system\",\"content\":\"You are helpful assistant\"},{\"role\":\"user\",\"content\":\"You will never use people name when responding and only use the workd 'Resident' instead of people name\"}]"
-                            };
-
-                            request.Messages = new RequestMessage[]
-                               {
+                    request.Messages = new RequestMessage[]
+                       {
                                         new RequestMessage()
                                         {
                                              Role = "system",
@@ -234,43 +261,24 @@ namespace SystemComments.Controllers
                                         new RequestMessage()
                                         {
                                              Role = "user",
-                                             Content = "You will never use people name when responding and only use the word 'Resident' instead of people name"                                             
+                                             Content = "You will never use people name when responding and only use the word 'Resident' instead of people name"
                                         },
                                         new RequestMessage()
                                         {
                                              Role = "user",
                                              Content = comments
                                         }
-                               };
+                       };
 
-                            var json = JsonSerializer.Serialize(request);
-                            var content = new StringContent(json, Encoding.UTF8, "application/json");
-                            var response = client.PostAsync("https://api.openai.com/v1/chat/completions", content);
-                            var resjson = response.Result.Content.ReadAsStringAsync();
-                            aiResponse = resjson.Result;
-                        }
-                        else
-                        {
-                            throw new System.Exception("Comments are not available.");
-                        }
-                        //foreach (var objUser in objUsers)
-                        //{
-                            
-                        //}
-
-                    }
-                    else
-                    {
-                        throw new System.Exception("Comments are not available.");
-                    }
-
+                    var json = JsonSerializer.Serialize(request);
+                    var content = new StringContent(json, Encoding.UTF8, "application/json");
+                    var response = client.PostAsync("https://api.openai.com/v1/chat/completions", content);
+                    var resjson = response.Result.Content.ReadAsStringAsync();
+                    aiResponse = resjson.Result;
                 }
-                catch (Exception jex)
+                else
                 {
-                    //Exception in parsing json
-                    _logger.LogError(jex, "An error occurred while making the OpenAI API request");
-                    return "An error occurred:";
-
+                    throw new System.Exception("Comments are not available.");
                 }
 
 
