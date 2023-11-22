@@ -166,6 +166,7 @@ namespace SystemComments.Controllers
             string comments = string.Empty;
             Int64 attemptNumber = input.AttemptNumber;
             string inputJSON = input.InputPrompt;
+            inputJSON = inputJSON.Replace("#DQuote#", "\\\"");
             try
             {
                 var objUsers = JToken.Parse(inputJSON);
