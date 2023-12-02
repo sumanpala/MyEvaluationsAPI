@@ -20,5 +20,7 @@ namespace SystemComments.Models.DataBase
         }
 
         public DbSet<SystemComments.Models.DataBase.AIResponse> AIResponse { get; set; }
+
+        public DbSet<SystemComments.Models.DataBase.TaskResponse> TaskResponse { get; set; }
     }
 }
