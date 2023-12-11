@@ -126,6 +126,7 @@ namespace SystemComments.Controllers
                         commandInfo.Parameters.AddWithValue("StartIndex", input.StartIndex);
                         commandInfo.Parameters.AddWithValue("PageSize", input.PageSize);
                         commandInfo.Parameters.AddWithValue("EDIPI", input.EDIPI);
+                        commandInfo.Parameters.AddWithValue("Status", input.Status);
                         commandInfo.CommandTimeout = 0;
                         Con.Open();
                         SqlDataAdapter da = new SqlDataAdapter(commandInfo);

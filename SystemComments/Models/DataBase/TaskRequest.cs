@@ -18,5 +18,7 @@ namespace SystemComments.Models.DataBase
         public Int32 PageSize { get; set; } = 1000;
 
         public string EDIPI { get; set; }
+
+        public string Status { get; set; }
     }
 }
