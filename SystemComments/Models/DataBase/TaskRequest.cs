@@ -20,5 +20,9 @@ namespace SystemComments.Models.DataBase
         public string EDIPI { get; set; }
 
         public string Status { get; set; }
+
+        public string AOC { get; set; } = "";
+
+        public string MOS { get; set; } = "";
     }
 }

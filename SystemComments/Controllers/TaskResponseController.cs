@@ -127,6 +127,8 @@ namespace SystemComments.Controllers
                         commandInfo.Parameters.AddWithValue("PageSize", input.PageSize);
                         commandInfo.Parameters.AddWithValue("EDIPI", input.EDIPI);
                         commandInfo.Parameters.AddWithValue("Status", input.Status);
+                        commandInfo.Parameters.AddWithValue("AOC", input.AOC);
+                        commandInfo.Parameters.AddWithValue("MOS", input.MOS);
                         commandInfo.CommandTimeout = 0;
                         Con.Open();
                         SqlDataAdapter da = new SqlDataAdapter(commandInfo);
