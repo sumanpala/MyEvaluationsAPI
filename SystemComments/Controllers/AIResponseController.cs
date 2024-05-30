@@ -133,6 +133,7 @@ namespace SystemComments.Controllers
                         if (objMessages.Count > 0)
                         {
                             aiComments = objMessages["content"].ToString();
+                            aiComments = aiComments.Replace("```html", "");
                         }
                     }
                     string StoredProc = "exec InsertArtificialIntelligenceResponse " +
@@ -247,7 +248,7 @@ namespace SystemComments.Controllers
                     {
                         //Model = "text-davinci-002",
                         //Model = "gpt-3.5-turbo",
-                        Model = "gpt-4",                       
+                        Model = "gpt-4o",                       
                         Temperature = 0.7f,
                         //MaxTokens = 4000                        
                     };
