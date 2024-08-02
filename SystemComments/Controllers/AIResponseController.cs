@@ -194,9 +194,29 @@ namespace SystemComments.Controllers
                     prompt_initial += "\n * Professionalism:    Initial Months: (sometext)\n Most Recent Months: (sometext)";
                     prompt_initial += "\n * Interpersonal & Communication Skills:    Initial Months: (sometext)\n Most Recent Months: (sometext)";
                     prompt_initial += "\n * Overall MyInsights:    Strengths: (sometext)\n Areas for Improvement:(sometext)";
-                    prompt_initial += "\n * Overall: (sometext)\n\nPlease consider the above output format when responding.\n";
-                    prompt_initial += String.Format("Replace the word resident (or) fellow (or) student with 'You' in response.\n Display the headers and sub headers in bold.\nYou are an expert medical educator. Consider the data from {0} listed in chronological order. These are comments from different evaluators and demonstrate the resident's (or) fellow's (or) student's performance over time.\n Consider the performance during the initial months and compare to their performance during the latter months.  Provide a comparison of the initial performance to the most recent performance, and detail a trend in the performance.\nAssume the resident (or) fellow (or) student has multiple opportunities to improve and grow in that period. Analyze the comments to demonstrate a trend in their performance.\nPlease provide the resident (or) fellow (or) student with detailed narrative summaries of their performance.\n Exclude specific names of people.\n Separate each narrative summary by the six core ACGME competencies and provide an 'Overall MyInsights' section to summarize all their strengths and weaknesses.\nPlease sort the competency headings into the following order: Patient Care, Medical Knowledge, System-Based Practices, Practice-Based Learning & Improvement, Professionalism, and Interpersonal & Communication Skills.\n Phrase the responses to the resident (or) fellow (or) student but do not use their name. Do not refer to them by name.\n Do not rewrite the comments in your response.\n Provide the response with HTML formatting.", dateRange);
-                    string prompt_final = String.Format("You are an expert medical educator. Consider summary comments listed by ACGME core competencies from the period {0}, followed by comments from different evaluators for the period {0} listed in chronological order.\n Consider the summary comments during the initial period and compare to their performance during the latter period.  Provide a comparison of the initial performance to the most recent performance, and detail a trend in the performance.\nAssume the resident has multiple opportunities to improve and grow in that period. Analyze the comments to demonstrate a trend in their performance. Please provide the resident with detailed narrative summaries of their performance.\nSeparate each narrative summary by the six core ACGME competencies and provide an 'Overall MyInsights' section to summarize all their strengths and weaknesses.\nPlease sort the competency headings into the following order: Patient Care, Medical Knowledge, System-Based Practices, Practice-Based Learning & Improvement, Professionalism, and Interpersonal & Communication Skills.\nPhrase the responses to the resident but do not use their name. Do not refer to them by name.\ndisplay header in bold. Do not rewrite the comments in your response.", dateRange);
+                    prompt_initial += "\n * Overall: (sometext)\n\n";
+                    //prompt_initial += "Please consider the above output format when responding.\n";
+                    //prompt_initial += String.Format("Replace the word resident (or) fellow (or) student with 'You' in response.\n Display the headers and sub headers in bold.\nYou are an expert medical educator. Consider the data from {0} listed in chronological order. These are comments from different evaluators and demonstrate the resident's (or) fellow's (or) student's performance over time.\n Consider the performance during the initial months and compare to their performance during the latter months.  Provide a comparison of the initial performance to the most recent performance, and detail a trend in the performance.\nAssume the resident (or) fellow (or) student has multiple opportunities to improve and grow in that period. Analyze the comments to demonstrate a trend in their performance.\nPlease provide the resident (or) fellow (or) student with detailed narrative summaries of their performance.\n Exclude specific names of people.\n Separate each narrative summary by the six core ACGME competencies and provide an 'Overall MyInsights' section to summarize all their strengths and weaknesses.\nPlease sort the competency headings into the following order: Patient Care, Medical Knowledge, System-Based Practices, Practice-Based Learning & Improvement, Professionalism, and Interpersonal & Communication Skills.\n Phrase the responses to the resident (or) fellow (or) student but do not use their name. Do not refer to them by name.\n Do not rewrite the comments in your response.\n Provide the response with HTML formatting.", dateRange);
+                    prompt_initial += "Instructions:\n\n Replace the word resident (or) fellow (or) student with 'You' in response.";
+                    prompt_initial += "\n Display the headers and sub-headers in bold.";
+                    prompt_initial += "\n\n AI Prompt:";
+                    prompt_initial += String.Format("You are an expert medical educator. Consider the data from {0} listed in chronological order. These are comments from different evaluators and demonstrate the resident's (or) fellow's (or) student's performance over time.", dateRange);
+                    prompt_initial += "\n Consider the performance during the initial months and compare it to their performance during the latter months. Provide a comparison of the initial performance to the most recent performance, and detail a trend in the performance.";
+                    prompt_initial += "\n Assume the resident (or) fellow (or) student has multiple opportunities to improve and grow in that period. Analyze the comments to demonstrate a trend in their performance.";
+                    prompt_initial += "\n Please provide the resident (or) fellow (or) student with detailed narrative summaries of their performance.";
+                    prompt_initial += "\n Exclude specific names of people.";
+                    prompt_initial += "\n Separate each narrative summary by the six core ACGME competencies and provide an 'Overall MyInsights' section to summarize all their strengths and weaknesses.";
+                    prompt_initial += "\n Please sort the competency headings into the following order: Patient Care, Medical Knowledge, System-Based Practices, Practice-Based Learning & Improvement, Professionalism, and Interpersonal & Communication Skills.";
+                    prompt_initial += "\n Phrase the responses to the resident (or) fellow (or) student but do not use their name. Do not refer to them by name.";
+                    prompt_initial += "\n\n Adjustments to Address Deficiencies:";
+                    prompt_initial += "\n 1. Depth and Context: Ensure the narrative captures specific examples and scenarios from the evaluators' comments to add depth and context. Use phrases like \"For instance,\" or \"In one scenario,\" to provide concrete examples.";
+                    prompt_initial += "\n 2. Actionable Feedback: Provide clear, actionable suggestions for improvement. Use phrases like \"Consider focusing on,\" \"It would be beneficial to,\" or \"You may improve by.\"";
+                    prompt_initial += "\n 3. Nuanced Feedback: Highlight both strengths and areas for improvement with balanced and specific feedback. Avoid generic statements. Use phrases like \"While you excelled in,\" or \"A noticeable improvement is seen in,\" followed by specific details.";
+                    prompt_initial += "\n 4. Clarity in Identifying Strengths and Weaknesses: o	Clearly differentiate between strengths and weaknesses. Use bold text for headings and subheadings to improve readability and clarity. Ensure each strength and area for improvement is distinctly outlined.";
+                    prompt_initial += "\n 5. Consistency: Maintain a consistent tone and structure throughout the feedback to ensure clarity and coherence. Use transitional phrases to connect different points and maintain a logical flow.";
+                    prompt_initial += "\n\n Provide the response with HTML formatting.";
+
+                    string prompt_final = String.Format("You are an expert medical educator. Consider summary comments listed by ACGME core competencies from the period {0}, followed by comments from different evaluators for the period {0} listed in chronological order.\n Consider the summary comments during the initial period and compare to their performance during the latter period.  Provide a comparison of the initial performance to the most recent performance, and detail a trend in the performance.\n Assume the resident has multiple opportunities to improve and grow in that period. Analyze the comments to demonstrate a trend in their performance. Please provide the resident with detailed narrative summaries of their performance.\n Separate each narrative summary by the six core ACGME competencies and provide an 'Overall MyInsights' section to summarize all their strengths and weaknesses.\nPlease sort the competency headings into the following order: Patient Care, Medical Knowledge, System-Based Practices, Practice-Based Learning & Improvement, Professionalism, and Interpersonal & Communication Skills.\n Phrase the responses to the resident but do not use their name. Do not refer to them by name.\n display header in bold. Do not rewrite the comments in your response.", dateRange);
                     string prompt_feedback = "User accepted assistant reply. Consider this as user feedback. display header in bold.";
 
                     if (objUsers["usercomments"] != null)
@@ -248,7 +268,8 @@ namespace SystemComments.Controllers
                     {
                         //Model = "text-davinci-002",
                         //Model = "gpt-3.5-turbo",
-                        Model = "gpt-4o",                       
+                        Model = "gpt-4o",
+                        //Model = "GTP-4o mini",
                         Temperature = 0.7f,
                         //MaxTokens = 4000                        
                     };
@@ -327,6 +348,35 @@ namespace SystemComments.Controllers
             if (token == null)
                 return Unauthorized();
             return Ok(token);
+        }
+
+        [HttpPost("sendcustomcomments")]
+        [Authorize]        
+        public AIResponse SendCustomComments(Comments comments)
+        {
+            List<AIResponse> aiSavedResponse = new List<AIResponse>();
+            try
+            {
+                string response = GetChatGptResponse(comments.InputComments);
+                AIResponse aiMessage = new AIResponse();
+                aiMessage.AIResponseID = "";
+                aiMessage.UserID = 0;
+                aiMessage.CreatedDate = DateTime.Now;
+                aiMessage.InputPrompt = "";
+                aiMessage.OutputResponse = response;
+                aiSavedResponse.Add(aiMessage);
+            }
+            catch(Exception ex)
+            {
+                AIResponse aiErrorResponse = new AIResponse();
+                aiErrorResponse.AIResponseID = "";
+                aiErrorResponse.UserID = 0;
+                aiErrorResponse.CreatedDate = DateTime.Now;
+                aiErrorResponse.InputPrompt = "";
+                aiErrorResponse.OutputResponse = ex.Message;
+                aiSavedResponse.Add(aiErrorResponse);
+            }
+            return aiSavedResponse[0];
         }
 
         private bool AIResponseExists(string id)
