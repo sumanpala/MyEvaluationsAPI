@@ -28,5 +28,7 @@ namespace SystemComments.Models.DataBase
 
         public string AIResponseID { get; set; }
 
+        public Int16 IsNPV { get; set; } = 0;
+
     }
 }
