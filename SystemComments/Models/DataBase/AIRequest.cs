@@ -30,5 +30,21 @@ namespace SystemComments.Models.DataBase
 
         public Int16 IsNPV { get; set; } = 0;
 
+        public Int16 IsSage { get; set; } = 0;
+
+        public string RotationName { get; set; }
+
+        public string TrainingLevel { get; set; }
+
+        public Int64 EvaluationID { get; set; }
+
+        public string DepartmentName { get; set; }
+
+        public string ActivityName { get; set; }
+
+        public string Answer { get; set; }
+
+        public string SageRequest { get; set; }
+
     }
 }

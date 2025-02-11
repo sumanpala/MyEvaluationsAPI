@@ -27,6 +27,15 @@ namespace SystemComments.Models.DataBase
         public string SearchCriteria { get; set; }
         
     }
+    public class SAGEResponse
+    {
+        [Key]
+        public Int64 EvaluationID { get; set; }
+        [JsonIgnore]
+        public string AIPrompt { get; set; }
+        public string ResponseJSON { get; set; }
+
+    }
 
     public class Choice
     {

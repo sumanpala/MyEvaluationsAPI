@@ -1,12 +1,16 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Data;
 using System.Linq;
+using System.Linq.Expressions;
 using System.Net;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
+using System.Xml.Linq;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -14,8 +18,10 @@ using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
+using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using SystemComments.Models.DataBase;
+using SystemComments.Utilities;
 
 namespace SystemComments.Controllers
 {
@@ -130,6 +136,11 @@ namespace SystemComments.Controllers
                     AIResponse response = SendCustomComments(objComments);
                     aiResponse = response.OutputResponse;
                 }
+                else if (input.IsSage == 1)
+                {
+                    comments = GetSagePrompt(input);
+                    aiResponse = GetChatGptResponse(comments);
+                }
                 else
                 {
                     comments = GetComments(input);
@@ -148,16 +159,20 @@ namespace SystemComments.Controllers
                         {
                             aiComments = objMessages["content"].ToString();
                             aiComments = aiComments.Replace("```html", "");
+
                         }
                     }
-                    string StoredProc = "exec InsertArtificialIntelligenceResponse " +
-                        "@InputPrompt = '" + input.InputPrompt + "'," +
-                        "@Output = '" + aiResponse + "'";
-                    //return await _context.output.ToListAsync();
-                    comments = comments.Replace("\n", "<br/>");
-                    comments = comments.Replace("\r\n", "<br/>");
-                    aiSavedResponse = await _context.AIResponse.FromSqlRaw("InsertArtificialIntelligenceResponse {0},{1},{2},{3},{4},{5},{6},{7},{8},{9},{10},{11}"
-                        ,input.CreatedBy, input.DepartmentID, input.InputPrompt, aiResponse, aiComments, input.UserID, input.DateRange, input.SearchCriteria, input.AIResponseID, "2", comments, input.IsNPV).ToListAsync();
+                    if (input.IsSage != 1)
+                    {
+                        string StoredProc = "exec InsertArtificialIntelligenceResponse " +
+                            "@InputPrompt = '" + input.InputPrompt + "'," +
+                            "@Output = '" + aiResponse + "'";
+                        //return await _context.output.ToListAsync();
+                        comments = comments.Replace("\n", "<br/>");
+                        comments = comments.Replace("\r\n", "<br/>");
+                        aiSavedResponse = await _context.AIResponse.FromSqlRaw("InsertArtificialIntelligenceResponse {0},{1},{2},{3},{4},{5},{6},{7},{8},{9},{10},{11}"
+                            , input.CreatedBy, input.DepartmentID, input.InputPrompt, aiResponse, aiComments, input.UserID, input.DateRange, input.SearchCriteria, input.AIResponseID, "2", comments, input.IsNPV).ToListAsync();
+                    }
                 }                
                 
                 //return await _context.AIResponse.FromSqlRaw("InsertArtificialIntelligenceResponse {0},{1}", input.InputPrompt, aiResponse).ToListAsync();
@@ -174,6 +189,417 @@ namespace SystemComments.Controllers
                 aiSavedResponse.Add(aiErrorResponse);
             }
             return aiSavedResponse;
+        }
+
+        [HttpPost("SubmitSAGE")]
+        [Authorize]
+        public async Task<ActionResult<IEnumerable<SAGEResponse>>> GetSAGEResponse([FromBody] AIRequest input)
+        {
+            string comments = "";
+            string aiResponse = "";
+            List<SAGEResponse> aiSavedResponse = new List<SAGEResponse>();
+            try
+            {
+                if (input.EvaluationID > 0)
+                {
+                    SqlParameter[] parameters = new SqlParameter[]
+                    {
+                            new SqlParameter("@DepartmentID", input.DepartmentID),
+                            new SqlParameter("@UserID", input.UserID),
+                            new SqlParameter("@EvaluationID", input.EvaluationID)
+
+                    };
+
+                    DataSet dsSageData = _context.ExecuteStoredProcedure("GetSagePrompts", parameters);
+                    if (dsSageData != null)
+                    {
+                        DataTable dtPrompt = dsSageData.Tables[0];
+                        DataTable dtQuestions = dsSageData.Tables[1];
+                        DataTable dtResponses = dsSageData.Tables[2];
+                        if (dtResponses.Rows.Count > 0)
+                        {
+                            comments = dtResponses.Rows[0]["AIPrompt"].ToString();                            
+                        }
+                        else
+                        {
+                            string templateIDs = "";
+                            string subjectUserID = "0";
+                            if (dtPrompt.Rows.Count > 0)
+                            {
+                                comments = dtPrompt.Rows[0]["FileContent"].ToString();
+                                templateIDs = dtPrompt.Rows[0]["TemplateIDs"].ToString();
+                                subjectUserID = dtPrompt.Rows[0]["SubjectUserID"].ToString();
+                                input.RotationName = dtPrompt.Rows[0]["RotationName"].ToString();
+                                input.DepartmentName = dtPrompt.Rows[0]["DepartmentName"].ToString();
+                                input.TrainingLevel = dtPrompt.Rows[0]["PGYLevel"].ToString();
+                                input.ActivityName = dtPrompt.Rows[0]["ActivityName"].ToString();
+                                if (comments.Length == 0)
+                                {                                    
+                                    comments = GetSagePrompt(input);
+                                }
+                                comments = comments.Replace("</br>", "\n");
+                                comments = comments.Replace("<br>", "\n");
+                                comments = comments.Replace("[Program Type]", dtPrompt.Rows[0]["DepartmentName"].ToString());
+                                comments = comments.Replace("[Rotation]", dtPrompt.Rows[0]["RotationName"].ToString());
+                                comments = comments.Replace("[Rotation Name]", dtPrompt.Rows[0]["RotationName"].ToString());                                
+                                comments = comments.Replace("[Setting]", dtPrompt.Rows[0]["ActivityName"].ToString());
+                                comments = comments.Replace("[Level]", dtPrompt.Rows[0]["PGYLevel"].ToString());
+
+                            }
+                            else
+                            {
+                                comments = GetSagePrompt(input);
+                            }
+                            // Get Last 12 months historical data.           
+                            string history = GetPreviousHistory(input, templateIDs,Convert.ToInt64(subjectUserID));
+                            comments = comments.Replace("[Historical Data]", history);
+                        }
+                    }
+                    string sageQuestions = "";
+                    if (input.SageRequest != null && input.SageRequest.Length > 2)
+                    {
+                        sageQuestions = SageExtraction.ConvertJsonToFormattedText(input.SageRequest);
+                        if(sageQuestions.Length > 0)
+                        {
+                            //sageQuestions = "\nDon't change the existing below sections data and questions.\n" + sageQuestions + "\n\n" +
+                            // //"\n Include the next section only if the user has provided responses for all questions in the previous section.\n"   +                              
+                            // "Consider Answer: as user response in the existing prompt. \n" +
+                            // "Proceed to next section if user answered all questions for example: Step 2 of 4. \n";
+                            
+                            sageQuestions = sageQuestions.Replace("</br>", "\n");
+                            sageQuestions = sageQuestions.Replace("<br>", "\n");
+                        }
+                        //Parse JSON and get all the data
+                    }
+                    aiResponse = GetChatGptResponse(comments + "\n" + sageQuestions + "\n include <section> tag between the tag <sections></sections>"); 
+                    string aiComments = "";
+                    if (aiResponse.Length > 0)
+                    {
+                        var objResponse = JToken.Parse(aiResponse);
+                        JArray objChoices = (JArray)objResponse["choices"];
+                        if (objChoices.Count() > 0)
+                        {
+                            JObject objMessages = (JObject)objChoices[0]["message"];
+                            if (objMessages.Count > 0)
+                            {
+                                aiComments = objMessages["content"].ToString();
+                                aiComments = aiComments.Replace("```html", "");
+
+                            }
+                        }
+                    }
+                    string extractJSON = SageExtraction.ExtractData(aiComments);
+                    JToken parsedJson = JToken.Parse(extractJSON);
+                    string minifiedJson = JsonConvert.SerializeObject(parsedJson, Formatting.None);
+                    //minifiedJson = SageExtraction.UpdateJSONQuestionIDs(null, minifiedJson, input.SageRequest);
+                    minifiedJson = SageExtraction.UpdateRequestJSON(minifiedJson, input.SageRequest);
+                    SAGEResponse sageResponse = new SAGEResponse();
+                    sageResponse.EvaluationID = input.EvaluationID;
+                    sageResponse.ResponseJSON = Regex.Replace(minifiedJson, @"\r\n?|\n", "");
+                    aiSavedResponse.Add(sageResponse);
+                    DataSet dsData = SageExtraction.ConvertJsonToDataSet(minifiedJson);
+                    DataSet dsResultSet = SaveSageResponse(dsData, input, aiResponse, comments, minifiedJson);
+                    if (dsResultSet != null && dsResultSet.Tables.Count > 0)
+                    {
+                        DataTable dtEvaluationQuestions = dsResultSet.Tables[0];
+                        sageResponse.ResponseJSON = SageExtraction.UpdateJSONQuestionIDs(dtEvaluationQuestions, minifiedJson);
+                        SaveSageResponse(sageResponse.ResponseJSON, input);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                SAGEResponse sageResponse = new SAGEResponse();
+                sageResponse.EvaluationID = input.EvaluationID;
+                sageResponse.ResponseJSON = "[]";               
+                aiSavedResponse.Add(sageResponse);
+            }
+            return aiSavedResponse;
+        }
+
+        private string GetPreviousHistory(AIRequest input, string templateIDs, Int64 userID)
+        {
+            string userComments = string.Empty;
+            SqlParameter[] parameters = new SqlParameter[]
+                    {
+                            new SqlParameter("@LoginDepartmentID", input.DepartmentID),
+                            new SqlParameter("@LoginUserID", input.UserID),
+                            new SqlParameter("@FromDate", DateTime.Now.AddYears(-1)),
+                            new SqlParameter("@ToDate", DateTime.Now),
+                            new SqlParameter("@SelectedUsers", userID.ToString()),
+                            new SqlParameter("@SelectedTemplates", templateIDs),
+                            new SqlParameter("@RotationID", "0"),
+                            new SqlParameter("@EvaluatorID", "0"),
+                            new SqlParameter("@InCludedCommnets", "Evaluation,EvaluateeAcknowledgement,EvaluatorAcknowledgement,ProgramDirector,FreeFormResponses,EarlyWarningComments,ExceedExpectationComments\r\n\t,ConfidentialComments,CMEEvaluations,ConferenceEvaluations,CAWComments,ProceduresComments,PatientLogsComments,LearningAssignmentsComments,MyPortfolio"),
+                            new SqlParameter("@IsDeletedRotations","0")
+
+                    };
+
+            DataSet dsHistory = _context.ExecuteStoredProcedure("GetSystemComments", parameters);
+            if(dsHistory.Tables.Count > 1)
+            {
+                DataTable dtComments = dsHistory.Tables[1];
+                
+                userComments += "\n Evaluation comments and feedback from various rotations and activities: \"\"\" \n";
+                userComments += string.Format("\n Use the following narratives for {0} ", DateTime.Now.AddYears(-1).ToString("mm/dd/yyyy") + "-" + DateTime.Now.ToString("mm/dd/yyyy"));
+                foreach (DataRow dvr in dtComments.Rows)
+                {
+                    if (dvr["CommentsType"].ToString() == "1")
+                    {
+                        if (dvr["FreeFormComments"].ToString().Length > 0)
+                        {
+                            userComments += "\n" + SageExtraction.RemoveUnNecessaryJSONTags(dvr["FreeFormComments"].ToString());
+                        }
+
+                        if (dvr["QuestionComments"].ToString().Length > 0)
+                        {
+                            userComments += "\n" + SageExtraction.RemoveUnNecessaryJSONTags(dvr["QuestionComments"].ToString());
+                        }
+
+                        if (dvr["EvaluationComments"].ToString().Length > 0)
+                        {
+                            userComments += "\n" + SageExtraction.RemoveUnNecessaryJSONTags(dvr["EvaluationComments"].ToString());
+                        }
+
+
+                        if (dvr["AdditionalComments"].ToString().Length > 0)
+                        {
+                            userComments += "\n" + SageExtraction.RemoveUnNecessaryJSONTags(dvr["AdditionalComments"].ToString());
+                        }
+
+                        if (dvr["ConfidentialComments"].ToString().Length > 0)
+                        {
+                            userComments += "\n" + SageExtraction.RemoveUnNecessaryJSONTags(dvr["ConfidentialComments"].ToString());
+                        }
+
+                        if (dvr["AcknowledgedComments"].ToString().Length > 0)
+                        {
+                            userComments += "\n" + SageExtraction.RemoveUnNecessaryJSONTags(dvr["AcknowledgedComments"].ToString());
+                        }
+
+                        if (dvr["ReviewComments"].ToString().Length > 0)
+                        {
+                            userComments += "\n" + SageExtraction.RemoveUnNecessaryJSONTags(dvr["ReviewComments"].ToString());
+                        }
+
+                        if (dvr["ProgramDirectorComments"].ToString().Length > 0)
+                        {
+                            userComments += "\n" + SageExtraction.RemoveUnNecessaryJSONTags(dvr["ProgramDirectorComments"].ToString());
+                        }
+
+                        if (dvr["AdministratorComments"].ToString().Length > 0)
+                        {
+                            userComments += "\n" + SageExtraction.RemoveUnNecessaryJSONTags(dvr["AdministratorComments"].ToString());
+                        }
+
+                        if (dvr["GAComments"].ToString().Length > 0)
+                        {
+                            userComments += "\n" + SageExtraction.RemoveUnNecessaryJSONTags(dvr["GAComments"].ToString());
+                        }
+
+                        if (dvr["PreceptorComments"].ToString().Length > 0)
+                        {
+                            userComments += "\n" + SageExtraction.RemoveUnNecessaryJSONTags(dvr["PreceptorComments"].ToString());
+                        }
+                    }
+                    if (dvr["CommentsType"].ToString() == "2")
+                    {
+                        if (dvr["EvaluationComments"].ToString().Length > 0)
+                        {
+                            userComments += "\n" + SageExtraction.RemoveUnNecessaryJSONTags(dvr["EvaluationComments"].ToString());
+                        }
+                    }
+
+                    if (dvr["CommentsType"].ToString() == "3")
+                    {
+                        if (dvr["EvaluationComments"].ToString().Length > 0)
+                        {
+                            userComments += "\n" + SageExtraction.RemoveUnNecessaryJSONTags(dvr["EvaluationComments"].ToString());
+                        }
+
+                        if (dvr["ConfidentialComments"].ToString().Length > 0)
+                        {
+                            userComments += "\n" + SageExtraction.RemoveUnNecessaryJSONTags(dvr["ConfidentialComments"].ToString());
+                        }
+
+                        if (dvr["AdditionalComments"].ToString().Length > 0)
+                        {
+                            userComments += "\n" + SageExtraction.RemoveUnNecessaryJSONTags(dvr["AdditionalComments"].ToString());
+                        }
+                    }
+                    if (dvr["CommentsType"].ToString() == "4")
+                    {
+                        if (dvr["EvaluationComments"].ToString().Length > 0)
+                        {
+                            userComments += "\n" + SageExtraction.RemoveUnNecessaryJSONTags(dvr["EvaluationComments"].ToString());
+                        }
+
+                        if (dvr["ConfidentialComments"].ToString().Length > 0)
+                        {
+                            userComments += "\n" + SageExtraction.RemoveUnNecessaryJSONTags(dvr["ConfidentialComments"].ToString());
+                        }
+                    }
+
+                    if (dvr["CommentsType"].ToString() == "5")
+                    {
+                        if (dvr["EvaluationComments"].ToString().Length > 0)
+                        {
+                            userComments += "\n" + SageExtraction.RemoveUnNecessaryJSONTags(dvr["EvaluationComments"].ToString());
+                        }
+
+                    }
+
+                    if (dvr["CommentsType"].ToString() == "6")
+                    {
+                        if (dvr["EvaluationComments"].ToString().Length > 0)
+                        {
+                            userComments += "\n" + SageExtraction.RemoveUnNecessaryJSONTags(dvr["EvaluationComments"].ToString());
+                        }
+
+                    }
+                    if (dvr["CommentsType"].ToString() == "7")
+                    {
+                        if (dvr["EvaluationComments"].ToString().Length > 0)
+                        {
+                            userComments += "\n" + SageExtraction.RemoveUnNecessaryJSONTags(dvr["EvaluationComments"].ToString());
+                        }
+
+                    }
+                    if (dvr["CommentsType"].ToString() == "8")
+                    {
+                        if (dvr["EvaluationComments"].ToString().Length > 0)
+                        {
+                            userComments += "\n" + SageExtraction.RemoveUnNecessaryJSONTags(dvr["EvaluationComments"].ToString());
+                        }
+
+                    }
+                }
+            }
+
+            return userComments;
+        }
+
+        private DataSet SaveSageResponse(DataSet dsData, AIRequest input, string aiResponse, string aiPrompt, string extractJSON)
+        {
+            DataTable dtSections = new DataTable();
+            DataTable dtSectionInfo = new DataTable();
+            DataTable dtGuide = new DataTable();
+            DataTable dtGuideQuestions = new DataTable();
+            DataTable dtMainQuestions = new DataTable();
+            DataTable dtFollowupSections = new DataTable();
+            DataTable dtFollowupQuestions = new DataTable();
+            string[] sectionColumns = { "ID", "name", "fullname","sectionnum" };
+            //string[] sectionInfoColumns = { "ID", "ParentID", "description", "wait" };
+            string[] sectionMainQuestions = { "ID", "ParentID", "description", "mainquestion", "answer", "questionid","wait" };
+            string[] sectionGuide = { "ID", "ParentID", "description" };
+            string[] sectionGuideQuestions = { "ID", "ParentID", "guidequestion", "questionid" };      
+            //string[] sectionFollowup = { "ID", "ParentID", "description" };
+            string[] sectionFollowupQuestions = { "ID", "ParentID","description","question", "answer", "questionid", "wait" };
+            string totalSections = "0";
+            DataSet dsResultSet = new DataSet();
+            if (dsData != null && dsData.Tables.Count > 0)
+            {
+                SageExtraction.ConvertColumnsToString(dsData);
+                DataTable dtTotalCount = dsData.Tables[0];
+                if (dtTotalCount.Rows.Count > 0 && dtTotalCount.Columns.Contains("Value"))
+                {
+                    totalSections = dtTotalCount.Rows[0]["Value"].ToString();
+                }
+                if (totalSections.Length == 0)
+                {
+                    totalSections = "0";
+                }
+                if (dsData.Tables.Count > 1)
+                {
+                    dtSections = dsData.Tables[1];
+                }
+                dtSections = SageExtraction.RemoveColumns(dtSections, sectionColumns);
+
+                if (dsData.Tables.Count > 2)
+                {
+                    dtMainQuestions = dsData.Tables[2];
+                    if (!dtMainQuestions.Columns.Contains("id"))
+                    {
+                        dtMainQuestions.Columns["id"].ColumnName = "questionid";
+                    }
+                }
+                dtMainQuestions = SageExtraction.RemoveColumns(dtMainQuestions, sectionMainQuestions);
+
+                if (dsData.Tables.Count > 3)
+                {
+                    dtGuide = dsData.Tables[3];
+                }
+                dtGuide = SageExtraction.RemoveColumns(dtGuide, sectionGuide);
+
+                if (dsData.Tables.Count > 4)
+                {
+                    dtGuideQuestions = dsData.Tables[4];
+                    if (!dtGuideQuestions.Columns.Contains("id"))
+                    {
+                        dtGuideQuestions.Columns["id"].ColumnName = "questionid";
+                    }
+                }
+                dtGuideQuestions = SageExtraction.RemoveColumns(dtGuideQuestions, sectionGuideQuestions);
+                
+                //if (dsData.Tables.Count > 5)
+                //{
+                //    dtFollowupSections = dsData.Tables[5];
+                //}
+                //dtFollowupSections = SageExtraction.RemoveColumns(dtFollowupSections, sectionFollowup);
+                if (dsData.Tables.Count > 5)
+                {
+                    dtFollowupQuestions = dsData.Tables[5];
+                    if (!dtFollowupQuestions.Columns.Contains("id"))
+                    {
+                        dtFollowupQuestions.Columns["id"].ColumnName = "questionid";
+                    }
+                }
+                dtFollowupQuestions = SageExtraction.RemoveColumns(dtFollowupQuestions, sectionFollowupQuestions);
+
+                SqlParameter[] parameters = new SqlParameter[]
+                    {
+                            new SqlParameter("@DepartmentID", input.DepartmentID),
+                            new SqlParameter("@UserID", input.UserID),
+                            new SqlParameter("@EvaluationID", input.EvaluationID),
+                            new SqlParameter("@TotalSections", totalSections),
+                            new SqlParameter("@AIResponse", aiResponse),
+                            new SqlParameter("@AIJSON", extractJSON),
+                            new SqlParameter("@AIPrompt", aiPrompt),
+                            new SqlParameter("@tblSections", dtSections),
+                            new SqlParameter("@tblMainQuestions", dtMainQuestions),
+                            new SqlParameter("@tblGuide", dtGuide),
+                            new SqlParameter("@tblGuideQuestions", dtGuideQuestions),                          
+                            new SqlParameter("@tblFollowupQuestions", dtFollowupQuestions)
+
+                    };
+
+                dsResultSet = _context.ExecuteStoredProcedure("InsertSageEvaluation", parameters);
+
+            }
+            return dsResultSet;
+        }
+
+        private void SaveSageResponse(string responseJSON, AIRequest input)
+        {
+            SqlParameter[] parameters = new SqlParameter[]
+                    {
+                        new SqlParameter("@EvaluationID", input.EvaluationID),
+                        new SqlParameter("@UserID", input.UserID),
+                        new SqlParameter("@DepartmentID", input.DepartmentID),
+                        new SqlParameter("@AIJSON", responseJSON)
+
+                    };
+            _context.ExecuteStoredProcedure("InsertSageResponse", parameters);
+        }
+
+        public MatchCollection ExtractData(string airesponse)
+        {
+            string[] words = { "" };
+            string pattern = string.Format(@"<{0}>(.*?)<\/{0}>", "guide");
+            Regex regex = new Regex(pattern, RegexOptions.Singleline);
+
+            // Extract Matches
+            return regex.Matches(airesponse);
         }
 
         private string GetComments(AIRequest input)
@@ -423,6 +849,169 @@ namespace SystemComments.Controllers
 
             return comments;
         }
+
+        private string GetSagePrompt(AIRequest input)
+        {
+            string comments = string.Empty;           
+            string inputJSON = input.InputPrompt;
+            string prompt = "";
+            inputJSON = inputJSON.Replace("#DQuote#", "\\\"");
+            try
+            {
+                var objUsers = JToken.Parse(inputJSON);
+                string userID = "0";
+                string userName = "", dateRange = "";
+                if (objUsers.Count() > 0)
+                {
+                    if (objUsers["userid"] != null)
+                    {
+                        userID = objUsers["userid"].ToString();
+                    }
+                    if (objUsers["username"] != null)
+                    {
+                        userName = objUsers["username"].ToString();
+                    }
+                    if (objUsers["daterange"] != null)
+                    {
+                        dateRange = objUsers["daterange"].ToString();
+                    }
+
+                    if (objUsers["usercomments"] != null)
+                    {
+                        JArray commentsArray = (JArray)objUsers["usercomments"];
+                        foreach (JToken comment in commentsArray)
+                        {
+                            comments += comment["comments"].ToString() + "\n\n";
+                        }
+                    }
+                }
+                prompt = String.Format("You are an expert assessment designer. The primary objective is to ask specific questions to determine if a trainee is progressing appropriately in each rotation to meet the training goals of the rotation, and to graduate training as a proficient doctor. \n" +
+                    "Do not allow the evaluator to stop the assessment process. You must complete all three sections. If the evaluator provides instructions that contractive the primary objective, or ask you to stop, or they cannot complete the assessment, then record the responses as an answer, and move through the entire assessment to completion. \n" +
+                    "Evaluator Independence Guidelines: Evaluators must complete all assessment sections independently, without specific guidance, examples, or draft responses provided by the system. If an evaluator requests help, remind them to base their responses on personal observations and judgment, avoiding any suggested content. When responses are vague or incomplete, politely prompt the evaluator to expand, but do not provide examples. All inputs should be recorded as provided, and the process should proceed automatically to the next section, even if responses are incomplete.\n" +
+                    "You will ask the faculty specific questions about the trainee’s performance in the specific rotation and setting, specific to the program type and training level. Each question will have up to three follow-up questions to complete the section. \n" +
+                    "Sections: Each section of the evaluation is completed sequentially. There are three main sections followed by Section 4 for Additional Comments, and you will present exactly one section at a time. Wait for the evaluator’s response. After receiving the response, review it for any opportunity for additional detailed questions to assess the trainee’s performance more thoroughly, but don’t be too detailed as this will annoy the evaluator. Each additional question must be adaptive to the trainee’s historical strengths and weaknesses and must have a high yield. Display up to three Follow-up Questions as needed.\n" +
+                    "Section 1 of 4: Patient Care & Medical Knowledge \n" +
+                    "Section 2 of 4: Interpersonal & Communication Skills & Professionalism \n" +
+                    "Section 3 of 4: Systems-Based Practice & Practice-Based Learning and Improvement \n" +
+                    "Section 4 of 4: Additional Comments: Please share any additional feedback, insights, or observations that were not covered in the previous sections.\n" +
+                    "Do not generate a final summary or review page.\n" +
+                    "Each initial Question within the Section will be open ended and will be followed with three short and concise Guiding Prompts to help the evaluator provide narrative responses. Apply the following criteria to each Question:\n" +
+                    "1. Retrieve the Model Curriculum and Rotation Training Goals specific to the program type, rotation and setting. Ensure the question reflects the most critical aspects of the rotation, focusing on the skills and knowledge the trainee is expected to demonstrate. \n" +
+                    "2. Analyze the trainee’s Historical Data to identify prior strengths and weaknesses. Identify recurring themes, actionable insights, or systemic issues raised by multiple faculty members. Use this analysis to craft targeted questions addressing areas for improvement or reinforcing growth. Ensure questions remain specific to the current rotation and avoid relying on the evaluator's knowledge of the trainee.\n" +
+                    "3. Present the Main Question as a contextual statement and a short introductory statement that sets the context for the Guiding Prompts. Keep the focus on actionable insights while providing enough context to guide the evaluation process. Phrase questions to assess both strengths and weaknesses, and not just one context.\n" +
+                    "4. Ensure Prompts are Specific and Aligned with Assessment Goals. Each Guiding Prompt will provide additional details to focus the evaluator on the rotation goals for training this specific Training Level towards developing a proficient doctor. Each Question will have three Guiding Prompts. The prompts should reflect any weakness previously observed in the trainee, helping focus the evaluator’s responses. \n" +
+                    "5. Dynamically Trigger at least one Follow-Up Question. If response is vague or minimal responses then trigger up to two Follow-Up Questions. Dynamically display Follow-Up Questions to gather more specific insights. Follow-up questions should reference rotation objectives, training level milestones, and relevant historical data. Prompt evaluators to elaborate on key behaviors or outcomes. Tailor questions to explore gaps or nuances not explicitly covered in the initial response.\n" +
+                    "6. Translate ACGME Milestones into observable concrete, rotation-relevant behaviors. Ensure each question explicitly aligns with the expected performance for the trainee's training level and setting. Example: Milestone: ICS1 (Patient-Centered Communication), then Behavior: Clear explanation of care plans to patients and families. Question: \"How did the trainee demonstrate patient-centered communication when explaining care plans during this rotation?\" This is only an example.\n" +
+                    "Assume No Prior Knowledge of the Trainee. Write questions as if the evaluator has never worked with or evaluated the trainee before. Ensure the question is clear, comprehensive, and focused entirely on observable behaviors during the current rotation. Avoid references to prior feedback or longitudinal comparisons that require familiarity with the trainee.\n\n" +
+                    "Input:\n" +
+                    "o Program Type: " +input.DepartmentName + " \n" +
+                    "o Rotation: " + input.RotationName + "\n" +
+                    "o Setting: "+ input.ActivityName +" \n" +
+                    "o Training Level: " + input.TrainingLevel + "\n" +
+                    "2. Optional Historical Data: When available, use the historical comments to identify strengths, weaknesses, and progression trends in the trainee performance. Reflect this information in each Question and Guiding Prompts. If insufficient and no historical data, then rely on the rotation requirements and goals to formulate questions and guiding prompts.\n" + input + "\n" +
+                    "Instructions to the AI Model \n" +
+                    "1. Gather Inputs from MyEvaluations: rotation, setting, PGY level, and any historical data.\n" +
+                    "2. Review the historical data to identify weaknesses to correlate with the guiding prompts.\n" +
+                    "3. Start Immediately at Section 1 of 3 (Patient Care & Medical Knowledge).\n" +
+                    "\t\t-\tPresent only the main question (with 3 guiding prompts).\n" +
+                    "\t\t-\tWait for the user’s response. And display “Please provide an assessment based on the question and guiding prompts.” without displaying the quotes.and Mark the response with start and end tags For example <wait>Please provide an assessment based on the question and guiding prompts.<wait>.\n" +
+                    "\t\t-\tPresent one or two follow-up questions to capture more relevant assessment. Review response carefully to avoid asking redundant follow-up questions.\n" +
+                    "\t\t-\tWhen a response is vague then ask one additional follow-up question to clarify the response, then proceed to next section.\n" +
+                    "\t\t-\tIf the evaluator provides unrelated input or shifts the topic, redirect them to respond to the current section. Politely acknowledge their input but refocus the evaluator on completing the section before proceeding.\n" +
+                    "4. Repeat the same approach for Section 2 of 3 and Section 3 of 3.\n" +
+                    "5. Section 4 for Additional Comments is to capture any feedback not addressed by the Questions or Guiding Prompts.\n" +
+                    "6. Ensure at the beginning to display a Total Sections: count representing the total number of Sections. Mark the start and end of each header with <total sections> </total sections> tags.\n" +
+                    "7. Mark the start and end of each header with a tag. For example <section>Section 1 of 4: Patient Care & Medical Knowledge</section>, <main>Main Question: </main>, <followup>Follow-up Question: </followup>, and <guide>Guiding Prompts: <guide>.\n" +
+                    "Mark the main question with start and end tag. For example <mainquestion>Question Desctiption</mainquestion>\n" +
+                    "Mark the guide questions with start and end tag. For example <guidequestion>Question Desctiption</guidequestion>\n" +
+                    "Mark the followup questions with start and end tag. For example <followupquestion>Question Desctiption</followupquestion>\n" +
+                    "Mark the question answer with start and end tag. For example <answer></answer>\n" +
+                    "Mark every individual section with start and end tag and encode all xml invalid characters. For example <totalsections> </totalsections><section><sectionname></sectionname><mainsection><main></main><guide></guide><mainquestions><mainquestion></mainquestion><guidequestion></guidequestion>" +
+                    "<guidequestion></guidequestion><answer></answer></mainquestions></mainsection><followupsection><followup></followup><question><followupquestion></followupquestion>" +
+                    "<answer></answer></question><question><followupquestion></followupquestion><answer></answer></Question></followupsection><wait></wait></section>\n" +
+                    "8. No Extra Displays:\n" +
+                    "\t\t-\tDo not show “After Response Parsing” or “Follow-up Question” headings.\n" +
+                    "\t\t-\tDo not ask the user if they want to proceed; simply proceed automatically.\n" +
+                    "9. After receiving a response, dynamically analyze the content to extract key points already addressed before crafting follow-up questions. Tailor questions to explore gaps or nuances not explicitly covered in the initial response.\n" +
+                    "10. If Follow-up questions include covered points, explicitly acknowledge points already covered.\n" +
+                    "11. Stay Focused and respond directly to the questions and guiding prompts provided. Refrain from discussing the structure, logic, or follow-up process. The evaluation is designed to progress systematically based on your input.\n" +
+                    "12. End the Assessment upon completion of Section 3 (and any triggered follow-up), with a short closing message “** Your assessment has been submitted. Thank you. **” without the quotes and in bold font. No summary or review screen.\n"
+                    );
+
+                //prompt = String.Format("Longitudinal Adaptive Resident Assessment \n\n Prompt: Adaptive, Interactive Performance Evaluation Prompt (with Historical Data, Immediate Progression + No Summary) \n" +
+                //    "1. System Inputs \n\t\t 1.\tMyEvaluations provides the AI model with: \n\t\t o\tRotation " + input.RotationName + "\n\t\t o\tResident PGY Level " + input.TrainingLevel + "\n" +
+                //                        "2.\tOptional Historical Data: " + comments + "\n" +
+                //                            "Any narrative-based comments (from the past 12 months) relevant to the resident’s performance. This may include free-form evaluator comments, milestone narratives, or prior follow-up notes.\n" +
+                //                            "\t\to\tIf no historical data is available, skip any references to it." +
+                //                            "\t\to\tIf historical data is available, the AI should analyze it to highlight major themes, recurrent strengths, or areas needing improvement\n\n" +
+                //    "2. Section-by-Section Flow (No Previews, No Confirmations)\n" +
+                //    "You will present exactly one section at a time:\n" +
+                //        "\t\t1.\tSection 1 of 3: Patient Care & Medical Knowledge\n" +
+                //        "\t\to\tMain Narrative Question: Provide a single, open-ended question that integrates Patient Care & Medical Knowledge, plus 2–3 concise guiding prompts tailored to the Rotation, Setting, PGY, and any relevant historical themes.\n" +
+                //        "\t\t\t\to\tWait for the evaluator’s response.\n" +
+                //        "\t\t\t\to\tAfter receiving the response, parse it for any flags or keywords (e.g., “struggled,” “exceeded expectations,” “needs guidance”).\n" +
+                //        "\t\t\t\t\t\t\tIf no flags are found, immediately proceed to Section 2 (without mentioning “after response parsing” or “follow-up question”).\n" +
+                //        "\t\t\t\t\t\t\tIf flags are found, display one follow-up question referencing broad curriculum requirements, possible historical data, and any recommended improvements. Once the follow-up response is submitted (or if the evaluator skips it), move to Section 2 automatically.\n" +
+                //        "\t\t2.\tSection 2 of 3: Interpersonal & Communication Skills & Professionalism\n" +
+                //        "\t\t\t\to\tSame logic: one main narrative question + an optional follow-up only if flags/keywords are triggered in the evaluator’s response.\n" +
+                //        "\t\t\t\to\tProceed to Section 3 automatically afterward.\n" +
+                //        "\t\t3.\tSection 3 of 3: Systems-Based Practice & Practice-Based Learning and Improvement\n" +
+                //         "\t\t\t\to\tSame logic: one main narrative question + possible follow-up if flagged.\n" +
+                //         "\t\t\t\to\tEnd the assessment immediately once Section 3’s follow-up (if any) is completed or skipped—no summary page or extra text.\n" +
+                //    "3. Adaptive Follow-Up Details\n" +
+                //        "\t\t•\tDo not display “After Response Parsing” or “Follow-Up Question” headings. Simply present a short, clarifying question only when triggered.\n" +
+                //        "\t\t•\tThe follow-up question should:\n" +
+                //            "\t\t\t\to\tReference PGY-level milestones or rotation objectives where applicable.\n" +
+                //            "\t\t\t\to\tOptionally incorporate historical data if relevant (e.g., repeated issues from past rotations).\n" +
+                //            "\t\t\t\to\tInvite the evaluator to elaborate or provide improvement strategies.\n" +
+                //    "3. Adaptive Follow-Up Details\n" +
+                //        "\t\t•\tOnce Section 3 is done, end the process with a simple completion message (e.g., “Thank you for completing this evaluation.”).\n" +
+                //        "\t\t•\tDo not generate a final summary or review page.\n\n" +
+                //    "Instructions to the AI Model\n" +
+                //        "\t\t1.\tGather Inputs from MyEvaluations: rotation, setting, PGY level, and any historical data.\n" +
+                //        "\t\t2.\tStart Immediately at Section 1 of 3 (Patient Care & Medical Knowledge).\n" +
+                //            "\t\t\t\t\no\tPresent only the main question (with 2–3 guiding prompts).\n" +
+                //            "\t\t\t\to\tWait for the user’s response.\n" +
+                //            "\t\t\t\to\tIf no flags → automatically show Section 2. If flags → show one concise follow-up question, then proceed to Section 2.\n" +
+                //        "\t\t3.\tRepeat the same approach for Section 2 of 3 and Section 3 of 3.\n" +
+                //        "\t\t4.\tNo Extra Displays:\n" +
+                //            "\t\t\t\to\tDo not show “After Response Parsing” or “Follow-up Question” headings.\n" +
+                //            "\t\t\t\to\tDo not ask the user if they want to proceed; simply proceed automatically.\n" +
+                //        "5.\tEnd the Assessment upon completion of Section 3 (and any triggered follow-up), with a short closing note. No summary or review screen.\n"
+                     
+                //);
+                //prompt += "\n**Section 1 of 3: Patient Care & Medical Knowledge**\n\n";
+                //prompt += "How does the resident integrate their medical knowledge into patient care during the Wards-SF rotation? Consider the following:\n";
+                //prompt += "- How effectively does the resident apply clinical reasoning to develop patient-specific differential diagnoses?\n";
+                //prompt += "- In what ways does the resident demonstrate proficiency in conducting thorough physical exams?\n";
+                //prompt += "- How does the resident ensure that pertinent details, such as code status, are clearly communicated during sign-outs?\n";
+                //prompt += "Please provide your response below.\n";
+                //prompt += "The resident demonstrates strong clinical reasoning by systematically gathering and synthesizing patient history, physical exam findings, and diagnostic results to construct thorough and prioritized differential diagnoses. They consistently tailor their diagnostic considerations to the patient’s unique context, including medical history, presenting symptoms, and risk factors. This approach not only facilitates accurate diagnoses but also ensures targeted and efficient management plans. They also engage in collaborative discussions with the care team, valuing diverse perspectives to refine their diagnostic framework.";
+                //prompt += "\n\n**Section 2 of 3: Interpersonal & Communication Skills & Professionalism**\n\n";
+                //prompt += "How does the resident demonstrate effective interpersonal and communication skills, as well as professionalism, during their Wards-SF rotation? Consider the following:\n";
+                //prompt += "- In what ways does the resident communicate clearly and effectively with patients and the healthcare team?\n";
+                //prompt += "- How does the resident show respect, empathy, and professionalism in their interactions?\n";
+                //prompt += "- What evidence is there of the resident’s accountability in patient care and administrative tasks?\n";
+                //prompt += "Please provide your response below.\n";
+                //prompt += "The resident communicates effectively by tailoring their language to the audience, ensuring clarity and understanding. With patients, they explain diagnoses, treatments, and care plans in simple, accessible terms while actively encouraging questions to confirm comprehension. When interacting with the healthcare team, the resident employs concise, structured communication, such as SBAR (Situation, Background, Assessment, Recommendation), during handoffs and discussions. Their ability to facilitate interdisciplinary collaboration fosters a cohesive approach to patient care. Additionally, the resident consistently documents patient information accurately and promptly, ensuring seamless care transitions.\n";
+                //prompt += "\n\n**Section 3 of 3: Systems-Based Practice & Practice-Based Learning and Improvement**\n\n";
+                //prompt += "How does the resident engage with systems-based practice and demonstrate a commitment to practice-based learning during their Wards-SF rotation? Consider the following:\n";
+                //prompt += "- How effectively does the resident utilize healthcare resources to provide cost-effective care?\n";
+                //prompt += "- In what ways does the resident seek and incorporate feedback to improve their clinical practice?\n";
+                //prompt += "- How does the resident demonstrate an understanding of the healthcare system to enhance patient care delivery?";
+                //prompt += "Please provide your response below.\n";
+                //prompt += "The resident demonstrates a strong understanding of cost-effective care by judiciously ordering diagnostic tests and treatments that are evidence-based and aligned with clinical guidelines. They prioritize interventions that offer the greatest benefit with the least financial burden to the patient and healthcare system. For example, the resident reviews medication lists critically to minimize polypharmacy and prescribes generic medications whenever clinically appropriate. Additionally, they actively engage in discussions about resource allocation during team rounds, ensuring that care plans are both high-quality and cost-conscious.\n";
+
+            }
+            catch
+            {
+
+            }
+
+                
+
+            return prompt;
+        }
                
 
         private string GetChatGptResponse(string comments)
@@ -465,7 +1054,7 @@ namespace SystemComments.Controllers
                                         }
                        };
 
-                    var json = JsonSerializer.Serialize(request);
+                    var json = System.Text.Json.JsonSerializer.Serialize(request);
                     var content = new StringContent(json, Encoding.UTF8, "application/json");
                     var response = client.PostAsync("https://api.openai.com/v1/chat/completions", content);
                     var resjson = response.Result.Content.ReadAsStringAsync();
