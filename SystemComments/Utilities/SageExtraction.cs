@@ -9,6 +9,7 @@ using System.Text;
 using System.Text.RegularExpressions;
 using System.Web;
 using System.Xml.Linq;
+using SystemComments.Models.DataBase;
 
 namespace SystemComments.Utilities
 {
@@ -53,8 +54,9 @@ namespace SystemComments.Utilities
                     }                    
                     if (objInputObject != null)
                     {
-                        sectionsArray = objInputObject["sections"] as JArray;                        
-                    }
+                        sectionsArray = objInputObject["sections"] as JArray;
+                    }                    
+
                     Int32 sectionIndex = 0;
                     foreach (var section in jsonObject["sections"])
                     {                        
@@ -112,6 +114,13 @@ namespace SystemComments.Utilities
                         }
                         sectionIndex++;
                     }
+
+                    var endMessage = jsonObject["endmessage"];
+                    if (endMessage != null)
+                    {
+                        objInputObject["endmessage"] = endMessage;
+                    }
+
                     if (objInputObject != null)
                     {
                         updatedJSON = JsonConvert.SerializeObject(objInputObject, Formatting.None);
@@ -351,7 +360,29 @@ namespace SystemComments.Utilities
             }
             //allSections["allsections"] = lstAllSections;
              if (root.Elements("sections") != null && root.Elements("sections").Count() > 0)
-            {                
+            {
+                if (root.Elements("endmessage") != null)
+                {
+                    XElement endmessageElement = root.Elements("endmessage")
+                                      .FirstOrDefault();
+                    if (endmessageElement != null)
+                    {
+                        jsonData["endmessage"] = endmessageElement != null ? (object)endmessageElement.Value : null;
+                    }
+                }
+                else if (root.Elements("sections").Elements("endmessage") != null)
+                {
+                   XElement endmessageElement = root.Elements("sections")
+                                     .Elements("endmessage")
+                                     .FirstOrDefault();
+                    if (endmessageElement != null)
+                    {
+                        jsonData["endmessage"] = endmessageElement != null ? (object)endmessageElement.Value : null;
+                    }
+                }
+               
+                
+                
                 foreach (XElement section in root.Elements("sections").Elements("section"))
                 {
                     lstMainQuestions = new List<Dictionary<string, object>>();
@@ -402,9 +433,12 @@ namespace SystemComments.Utilities
                                 var questionData = new Dictionary<string, object>
                                 {
                                     { "description", HttpUtility.HtmlDecode(mainElement?.Value ?? "") },
-                                    { "mainquestion", HttpUtility.HtmlDecode(mainQuestion?.Value ?? "") }, {"answer", HttpUtility.HtmlDecode(mainQuestionAnswer?.Value ?? "")},{"id", "0" }
+                                    { "mainquestion", HttpUtility.HtmlDecode(mainQuestion?.Value ?? "") }
+                                    //,{"answer", HttpUtility.HtmlDecode(mainQuestionAnswer?.Value ?? "")}
+                                    ,{"answer", "" }
+                                    ,{"id", "0" }
                                     ,{"wait", HttpUtility.HtmlDecode(mainQuestionWait?.Value ?? "Please provide an assessment based on the question and guiding prompts.")}
-                                    ,{"guide", new { description = HttpUtility.HtmlDecode(guideElement.Value), guidequestions = guideQuestions }}
+                                    ,{"guide", new { description = HttpUtility.HtmlDecode(guideElement?.Value??""), guidequestions = guideQuestions }}
                                 };
                                 lstMainQuestions.Add(questionData);
                             }
@@ -488,7 +522,7 @@ namespace SystemComments.Utilities
                     sections.Add(sectionData);
                     sectionNumber++;
                 }
-            }           
+            }            
             jsonData["sections"] = sections;
             jsonData["allsections"] = lstAllSections;
             return JsonConvert.SerializeObject(jsonData, Newtonsoft.Json.Formatting.Indented);
@@ -684,7 +718,14 @@ namespace SystemComments.Utilities
                         sectionNum++;
                         if (isCompletedSection)
                         {
-                            includedSteps += $" and Include Step {sectionNum} of {totalSections.ToString()}";
+                            if (sectionNum <= totalSections)
+                            {
+                                includedSteps += $" and Step {sectionNum} of {totalSections.ToString()}";
+                            }
+                            if(sectionNum == totalSections)
+                            {
+                                includedSteps += $" and <endmessage></endmessage>";
+                            }
                         }
                         
                         //sb.AppendLine("\n"); // Add spacing between sections
