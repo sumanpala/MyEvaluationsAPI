@@ -717,7 +717,7 @@ namespace SystemComments.Utilities
                         {
                             if (sectionNum <= totalSections)
                             {
-                                includedSteps += $" and Section {sectionNum} of {totalSections.ToString()}";
+                                includedSteps += $" and Include Section {sectionNum} of {totalSections.ToString()}";
                             }
                             if(sectionNum >= 2 && sectionNum <= totalSections && isCompleteOneAnswer)
                             {
