@@ -187,28 +187,32 @@ namespace SystemComments.Utilities
                 
                 // Get all question fields
                 foreach (var section in json["sections"])
-                {                    
+                {
                     // Update Main Questions
+                    Int32 mainIndex = 1;
                     foreach (var mainSection in section["mainsection"])
                     {
-                        UpdateID(mainSection, "mainquestion", dt);
+                        UpdateID(mainSection, "mainquestion", dt, 3, mainIndex, (sectionIndex + 1));
 
                         if (mainSection?["guide"]?["guidequestions"] is JArray guideQuestions && guideQuestions.Count > 0)
                         {
-                            Int16 questionIndex = 0;
+                            Int32 questionIndex = 0;
                             foreach (var guideQuestion in guideQuestions)
-                            {                             
-                                UpdateID(guideQuestion, "guidequestion", dt);
+                            {
+                                UpdateID(guideQuestion, "guidequestion", dt, 2, questionIndex + 1, (sectionIndex + 1));
                                 questionIndex++;
                             }
-                        }                       
+                        }
+                        mainIndex++;
                     }                   
                     // Update Follow-up Questions
                     if (section["followupsections"] != null)
                     {
                         foreach (var followSection in section["followupsections"])
-                        {                                                     
-                            UpdateID(followSection, "question", dt);                            
+                        {
+                            Int32 followupIndex = 1;
+                            UpdateID(followSection, "question", dt, 1, followupIndex, (sectionIndex + 1));
+                            followupIndex++;
                         }
                     }
                     //foreach (var followSection in section["followupsections"])
@@ -256,8 +260,9 @@ namespace SystemComments.Utilities
             return json;
         }
 
-        static void UpdateID(JToken question, string fieldName, DataTable dt)
+        static void UpdateID(JToken question, string fieldName, DataTable dt, Int16 headerType, Int32 questionIndex, Int32 sectionNum)
         {
+            //headerType 1 => followup; 2 => guide; 3 => main; 4 => wait
             if (question.SelectToken(fieldName) != null)
             {                
                 if(dt != null)
@@ -268,6 +273,14 @@ namespace SystemComments.Utilities
                     if (foundRows.Length > 0)
                     {
                         question["id"] = foundRows[0]["QuestionID"].ToString();
+                    }
+                    else if (question["id"] != null && question["id"].ToString() == "0")
+                    {
+                        foundRows = dt.Select("HeaderTypeID = " + headerType + " AND QuestionIndex=" + questionIndex + " AND SectionNumber=" + sectionNum);
+                        if (foundRows.Length > 0)
+                        {
+                            question["id"] = foundRows[0]["QuestionID"].ToString();
+                        }
                     }
                 }
             }
