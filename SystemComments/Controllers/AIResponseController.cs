@@ -216,7 +216,7 @@ namespace SystemComments.Controllers
                         DataTable dtPrompt = dsSageData.Tables[0];
                         DataTable dtQuestions = dsSageData.Tables[1];
                         DataTable dtResponses = dsSageData.Tables[2];
-                        if (dtResponses.Rows.Count > 0)
+                        if (dtResponses.Rows.Count > 0 && input.SageRequest.Length > 2)
                         {
                             comments = dtResponses.Rows[0]["AIPrompt"].ToString();                            
                         }

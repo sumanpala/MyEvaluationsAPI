@@ -483,15 +483,17 @@ namespace SystemComments.Utilities
                                     XElement followupQuestion = question.Element("followupquestion");
                                     XElement answer = question.Element("answer");
                                     XElement followupWait = question.Element("wait");
-
-                                    var questionData = new Dictionary<string, object>
+                                    if (followupQuestion != null && followupQuestion.Value.Length > 0)
+                                    {
+                                        var questionData = new Dictionary<string, object>
                                     {
                                         { "description", HttpUtility.HtmlDecode((followupElement != null) ? followupElement.Value : "Follow-up Question:") },
                                         { "question", HttpUtility.HtmlDecode(followupQuestion != null ? followupQuestion.Value : "") },
                                         { "answer", HttpUtility.HtmlDecode(answer != null ? answer.Value : "") },{"id", "0" },
                                         { "wait", HttpUtility.HtmlDecode(followupWait?.Value ?? "Please provide additional details.") }
                                     };
-                                    questions.Add(questionData);
+                                        questions.Add(questionData);
+                                    }
                                 }
                                 //followUpSections["question"] = questions;
                                 //lstfollowUps.Add(followUpSections);
