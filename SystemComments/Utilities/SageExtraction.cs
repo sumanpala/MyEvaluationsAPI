@@ -28,6 +28,25 @@ namespace SystemComments.Utilities
             return ConvertXmlToJson(xmlDoc);
         }
 
+        public static Int32 GetSectionsCount(string aiJSON)
+        {
+            Int32 count = 0;
+            try
+            {
+                JObject jsonObject = JObject.Parse(aiJSON);
+                JArray? sectionsArray = jsonObject["sections"] as JArray;
+                if(sectionsArray != null)
+                {
+                    count = sectionsArray.Count;
+                }
+            }
+            catch(Exception ex)
+            {
+                count = 0;
+            }
+            return count;
+        }
+
         public static string UpdateRequestJSON(string aiJSON, string inputJSON)
         {
             string updatedJSON = "";
@@ -66,8 +85,14 @@ namespace SystemComments.Utilities
                             Int32 mainSectionIndex = 0;
                             foreach (var mainSection in section["mainsection"])
                             {
-                               JArray mainSectionArray = tempSectionArray?["mainsection"] as JArray;
-                               if(mainSectionArray == null)
+                                JArray mainSectionArray = tempSectionArray?["mainsection"] as JArray;
+                                if (mainSectionArray == null)
+                                {
+                                    var mainSectionToken = new JArray();
+                                    mainSectionToken.Add(mainSection);
+                                    tempSectionArray["mainsection"] = mainSectionToken;
+                                }
+                                else if (mainSectionArray.Count == 0)
                                 {
                                     var mainSectionToken = new JArray();
                                     mainSectionToken.Add(mainSection);
@@ -559,6 +584,40 @@ namespace SystemComments.Utilities
             return dataSet;
         }
 
+        public static string ChangeJSONOrder(string json)
+        {
+            try
+            {
+                // Deserialize the JSON to a JObject
+                JObject jsonObject = JObject.Parse(json);
+
+                // Get the "endmessage" value                
+
+                JToken allSections = jsonObject["allsections"];
+                if (allSections != null)
+                {
+                    // Remove "endmessage" from its current position
+                    jsonObject.Remove("allsections");
+                    jsonObject["allsections"] = allSections;
+                }
+                JToken endMessage = jsonObject["endmessage"];
+                if (endMessage != null)
+                {
+                    // Remove "endmessage" from its current position
+                    jsonObject.Remove("endmessage");
+                    jsonObject["endmessage"] = endMessage;
+                }
+
+                // Serialize the modified object back to JSON
+                string modifiedJson = JsonConvert.SerializeObject(jsonObject, Formatting.Indented);
+                return modifiedJson;
+            }
+            catch(Exception ex)
+            {
+                return json;
+            }
+        }
+
         public static DataSet ConvertJsonToDataSet1(string json)
         {
             DataSet dataSet = new DataSet();
@@ -644,7 +703,7 @@ namespace SystemComments.Utilities
                 {
                     totalSections = int.Parse(jsonObject["totalsections"].ToString());
                 }
-                string includedSteps = "Include Section 1 of " + totalSections.ToString();
+                string includedSteps = "Include below steps with out fail\n\t\t 1. Section 1 of " + totalSections.ToString();
                 string followupInstructions = "";
                 sb.Append($"Total Sections: {totalSections} \n");
                 if (jsonObject["sections"] is JArray sections)
@@ -732,7 +791,7 @@ namespace SystemComments.Utilities
                         {
                             if (sectionNum <= totalSections)
                             {
-                                includedSteps += $" and Include Section {sectionNum} of {totalSections.ToString()}";
+                                includedSteps += $"\n\t\t {sectionNum}. Section {sectionNum} of {totalSections.ToString()}";
                             }
                             if(sectionNum >= 2 && sectionNum <= totalSections && isCompleteOneAnswer)
                             {
@@ -740,7 +799,7 @@ namespace SystemComments.Utilities
                             }
                             if(sectionNum == totalSections)
                             {
-                                includedSteps += $" and <endmessage></endmessage>";
+                                includedSteps += $"\nInclude <endmessage></endmessage>";
                             }
                         }
                         

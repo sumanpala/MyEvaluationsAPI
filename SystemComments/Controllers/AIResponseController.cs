@@ -271,24 +271,14 @@ namespace SystemComments.Controllers
                         }
                         //Parse JSON and get all the data
                     }
-                    aiResponse = GetChatGptResponse(comments + "\n" + sageQuestions + "\n include <section> tag between the tag <sections></sections>"); 
-                    string aiComments = "";
-                    if (aiResponse.Length > 0)
-                    {
-                        var objResponse = JToken.Parse(aiResponse);
-                        JArray objChoices = (JArray)objResponse["choices"];
-                        if (objChoices.Count() > 0)
-                        {
-                            JObject objMessages = (JObject)objChoices[0]["message"];
-                            if (objMessages.Count > 0)
-                            {
-                                aiComments = objMessages["content"].ToString();
-                                aiComments = aiComments.Replace("```html", "");
-
-                            }
-                        }
-                    }
+                    string aiComments = GetSAGEChatGPTResponse(comments + "\n" + sageQuestions + "\n include <section> tag between the tag <sections></sections>");
                     string extractJSON = SageExtraction.ExtractData(aiComments);
+                    Int32 sectionCount = SageExtraction.GetSectionsCount(extractJSON);
+                    if(sectionCount == 0)
+                    {
+                        aiComments = GetSAGEChatGPTResponse(comments + "\n" + sageQuestions + "\n include <section> tag between the tag <sections></sections>");
+                        extractJSON = SageExtraction.ExtractData(aiComments);
+                    }
                     JToken parsedJson = JToken.Parse(extractJSON);
                     string minifiedJson = JsonConvert.SerializeObject(parsedJson, Formatting.None);
                     //minifiedJson = SageExtraction.UpdateJSONQuestionIDs(null, minifiedJson, input.SageRequest);
@@ -297,6 +287,7 @@ namespace SystemComments.Controllers
                     sageResponse.EvaluationID = input.EvaluationID;
                     sageResponse.ResponseJSON = Regex.Replace(minifiedJson, @"\r\n?|\n", "");
                     aiSavedResponse.Add(sageResponse);
+                    minifiedJson = SageExtraction.ChangeJSONOrder(minifiedJson);
                     DataSet dsData = SageExtraction.ConvertJsonToDataSet(minifiedJson);
                     DataSet dsResultSet = SaveSageResponse(dsData, input, aiResponse, comments, minifiedJson);
                     if (dsResultSet != null && dsResultSet.Tables.Count > 0)
@@ -315,6 +306,28 @@ namespace SystemComments.Controllers
                 aiSavedResponse.Add(sageResponse);
             }
             return aiSavedResponse;
+        }
+
+        private string GetSAGEChatGPTResponse(string comments)
+        {
+            string aiResponse = GetChatGptResponse(comments);
+            string aiComments = "";
+            if (aiResponse.Length > 0)
+            {
+                var objResponse = JToken.Parse(aiResponse);
+                JArray objChoices = (JArray)objResponse["choices"];
+                if (objChoices.Count() > 0)
+                {
+                    JObject objMessages = (JObject)objChoices[0]["message"];
+                    if (objMessages.Count > 0)
+                    {
+                        aiComments = objMessages["content"].ToString();
+                        aiComments = aiComments.Replace("```html", "");
+
+                    }
+                }
+            }
+            return aiComments;
         }
 
         private string GetPreviousHistory(AIRequest input, string templateIDs, Int64 userID)
