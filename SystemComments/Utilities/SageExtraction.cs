@@ -721,40 +721,47 @@ namespace SystemComments.Utilities
                         {
                             foreach (var mainSection in section["mainsection"])
                             {
-                                if (mainSection["description"] != null)
+                                if (mainSection?["mainquestion"] != null && mainSection["mainquestion"].ToString().Length > 0)
                                 {
-                                    sb.Append(mainSection["description"].ToString() + "\n");
-                                }
-
-                                if (mainSection?["mainquestion"] != null)
-                                {
-                                    sb.Append(mainSection["mainquestion"].ToString() + "\n");
-                                }
-
-                                if (mainSection?["guide"]?["description"] != null)
-                                {
-                                    sb.Append(mainSection["guide"]["description"].ToString() + "\n");
-                                }
-
-                                if (mainSection?["guide"]?["guidequestions"] is JArray guideQuestions && guideQuestions.Count > 0)
-                                {
-                                    foreach (var guideQuestion in guideQuestions)
+                                    if (mainSection["description"] != null)
                                     {
-                                        sb.Append("• " + guideQuestion["guidequestion"]?.ToString() + "\n");
+                                        sb.Append(mainSection["description"].ToString() + "\n");
                                     }
-                                }
-                                if (mainSection?["wait"] != null)
-                                {
-                                    sb.Append(mainSection["wait"].ToString() + "\n");
-                                }
-                                if (mainSection?["answer"] != null && mainSection["answer"].ToString().Length > 0)
-                                {
-                                    sb.Append("Answer: " + mainSection["answer"].ToString() + "\n");
-                                    isCompleteOneAnswer = true;
+
+                                    if (mainSection?["mainquestion"] != null)
+                                    {
+                                        sb.Append(mainSection["mainquestion"].ToString() + "\n");
+                                    }
+
+                                    if (mainSection?["guide"]?["description"] != null)
+                                    {
+                                        sb.Append(mainSection["guide"]["description"].ToString() + "\n");
+                                    }
+
+                                    if (mainSection?["guide"]?["guidequestions"] is JArray guideQuestions && guideQuestions.Count > 0)
+                                    {
+                                        foreach (var guideQuestion in guideQuestions)
+                                        {
+                                            sb.Append("• " + guideQuestion["guidequestion"]?.ToString() + "\n");
+                                        }
+                                    }
+                                    if (mainSection?["wait"] != null)
+                                    {
+                                        sb.Append(mainSection["wait"].ToString() + "\n");
+                                    }
+                                    if (mainSection?["answer"] != null && mainSection["answer"].ToString().Length > 0)
+                                    {
+                                        sb.Append("Answer: " + mainSection["answer"].ToString() + "\n");
+                                        isCompleteOneAnswer = true;
+                                    }
+                                    else
+                                    {
+                                        isCompletedSection = false;
+                                    }
                                 }
                                 else
                                 {
-                                    isCompletedSection = false;
+                                    isCompletedSection = true;
                                 }
                             }
                         }
@@ -762,13 +769,14 @@ namespace SystemComments.Utilities
                         if (section["followupsections"] is JArray followupSections && followupSections.Count > 0)
                         {
                             foreach (var followup in followupSections)
-                            {
-                                if (followup["description"] != null)
-                                {
-                                    sb.Append(followup["description"].ToString() + "\n");
-                                }
+                            {                                
                                 if (followup["question"]?.ToString().Length > 0)
                                 {
+                                    if (followup["description"] != null)
+                                    {
+                                        sb.Append(followup["description"].ToString() + "\n");
+                                    }
+
                                     sb.Append("• " + followup["question"]?.ToString() + "\n");
                                     if (followup["wait"] != null)
                                     {
@@ -782,6 +790,10 @@ namespace SystemComments.Utilities
                                     {
                                         isCompletedSection = false;
                                     }
+                                }
+                                else
+                                {
+                                    isCompletedSection = true;
                                 }
 
                             }
