@@ -703,7 +703,7 @@ namespace SystemComments.Utilities
                 {
                     totalSections = int.Parse(jsonObject["totalsections"].ToString());
                 }
-                string includedSteps = "Include below steps with out fail\n\t\t 1. Section 1 of " + totalSections.ToString();
+                string includedSteps = "This is a structured request consisting of sections. Ensure that all sections are included.\n\n Include below steps with out fail\n\t\t 1. Section 1 of " + totalSections.ToString();
                 string followupInstructions = "";
                 sb.Append($"Total Sections: {totalSections} \n");
                 if (jsonObject["sections"] is JArray sections)
@@ -817,7 +817,7 @@ namespace SystemComments.Utilities
                         
                         sb.Append("\n"); // Add spacing between sections
                     }
-                    sb.Append(followupInstructions + "\n" + includedSteps);
+                    sb.Append(followupInstructions + "\n\n" + includedSteps);
                     //sb.AppendLine(((followupInstructions.Length > 0) ? followupInstructions + "\n" : "") +  includedSteps + "\n Don't include next section if new followup questions are included into the current section. \n");
                 }
             }
