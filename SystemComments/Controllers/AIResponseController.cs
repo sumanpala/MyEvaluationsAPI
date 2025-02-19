@@ -197,6 +197,7 @@ namespace SystemComments.Controllers
         {
             string comments = "";
             string aiResponse = "";
+            string minifiedJson = "[]";
             List<SAGEResponse> aiSavedResponse = new List<SAGEResponse>();
             try
             {
@@ -209,13 +210,18 @@ namespace SystemComments.Controllers
                             new SqlParameter("@EvaluationID", input.EvaluationID)
 
                     };
-
+                    string defaultJSON = "";
                     DataSet dsSageData = _context.ExecuteStoredProcedure("GetSagePrompts", parameters);
                     if (dsSageData != null)
                     {
                         DataTable dtPrompt = dsSageData.Tables[0];
                         DataTable dtQuestions = dsSageData.Tables[1];
                         DataTable dtResponses = dsSageData.Tables[2];
+                        DataTable dtDefaultJSON = dsSageData.Tables[3];
+                        if(dtDefaultJSON.Rows.Count > 0)
+                        {
+                            defaultJSON = dtDefaultJSON.Rows[0]["DefaultJSON"].ToString();
+                        }
                         if (dtResponses.Rows.Count > 0 && input.SageRequest.Length > 2)
                         {
                             comments = dtResponses.Rows[0]["AIPrompt"].ToString();                            
@@ -256,32 +262,52 @@ namespace SystemComments.Controllers
                         }
                     }
                     string sageQuestions = "";
+                    Int32 lastSection = 1;
+                    Int32 totalSections = 1;
                     if (input.SageRequest != null && input.SageRequest.Length > 2)
-                    {
-                        sageQuestions = SageExtraction.ConvertJsonToFormattedText(input.SageRequest);
+                    {                        
+                        sageQuestions = SageExtraction.ConvertJsonToFormattedText(input.SageRequest, ref lastSection, ref totalSections);
                         if(sageQuestions.Length > 0)
-                        {
-                            //sageQuestions = "\nDon't change the existing below sections data and questions.\n" + sageQuestions + "\n\n" +
-                            // //"\n Include the next section only if the user has provided responses for all questions in the previous section.\n"   +                              
-                            // "Consider Answer: as user response in the existing prompt. \n" +
-                            // "Proceed to next section if user answered all questions for example: Step 2 of 4. \n";
+                        {                           
                             
                             sageQuestions = sageQuestions.Replace("</br>", "\n");
                             sageQuestions = sageQuestions.Replace("<br>", "\n");
-                        }
-                        //Parse JSON and get all the data
+                        }                       
                     }
                     string aiComments = GetSAGEChatGPTResponse(comments + "\n" + sageQuestions + "\n include <section> tag between the tag <sections></sections>");
                     string extractJSON = SageExtraction.ExtractData(aiComments);
+                    JToken parsedJson = JToken.Parse(extractJSON);
+                    minifiedJson = JsonConvert.SerializeObject(parsedJson, Formatting.None);
+                    minifiedJson = SageExtraction.UpdateRequestJSON(minifiedJson, input.SageRequest);
+
                     Int32 sectionCount = SageExtraction.GetSectionsCount(extractJSON);
-                    if(sectionCount == 0)
+                    Int32 allSectionsCount = SageExtraction.GetAllSectionsCount(extractJSON);
+                    string allSectionsPrompt = "";
+                    if(allSectionsCount == 0)
                     {
-                        aiComments = GetSAGEChatGPTResponse(comments + "\n" + sageQuestions + "\n include <section> tag between the tag <sections></sections>");
+                        allSectionsPrompt = "\nSections are missed in the tag <allsections></allsections>, Please include.";
+                    }
+                    if (sectionCount == 0)
+                    {
+                        aiComments = GetSAGEChatGPTResponse(comments + "\n" + sageQuestions + "\nSections are missed in the tag <sections></sections>, Please include." + allSectionsPrompt +  "\n include <section> tag between the tag <sections></sections>");
                         extractJSON = SageExtraction.ExtractData(aiComments);
                     }
-                    JToken parsedJson = JToken.Parse(extractJSON);
-                    string minifiedJson = JsonConvert.SerializeObject(parsedJson, Formatting.None);
-                    //minifiedJson = SageExtraction.UpdateJSONQuestionIDs(null, minifiedJson, input.SageRequest);
+                    else if(lastSection > sectionCount && lastSection <= totalSections)
+                    {
+                        string updatedPrompt = $"{comments} \n{sageQuestions} \n Section {lastSection} of {totalSections} is missed, please include. {allSectionsPrompt}\n include <section> tag between the tag <sections></sections>";
+                        aiComments = GetSAGEChatGPTResponse(updatedPrompt);    
+                        extractJSON = SageExtraction.ExtractData(aiComments);
+                    }                   
+                    
+                    sectionCount = SageExtraction.GetSectionsCount(extractJSON);                   
+                    if (lastSection > sectionCount && lastSection <= totalSections)
+                    {
+                        // Include sections manually if API returns invalid data
+                        extractJSON =  SageExtraction.InsertSection(extractJSON, defaultJSON, (lastSection - 1));
+                    }
+
+                    parsedJson = JToken.Parse(extractJSON);
+                    minifiedJson = JsonConvert.SerializeObject(parsedJson, Formatting.None);                   
                     minifiedJson = SageExtraction.UpdateRequestJSON(minifiedJson, input.SageRequest);
                     SAGEResponse sageResponse = new SAGEResponse();
                     sageResponse.EvaluationID = input.EvaluationID;
@@ -302,7 +328,7 @@ namespace SystemComments.Controllers
             {
                 SAGEResponse sageResponse = new SAGEResponse();
                 sageResponse.EvaluationID = input.EvaluationID;
-                sageResponse.ResponseJSON = "[]";               
+                sageResponse.ResponseJSON = minifiedJson;
                 aiSavedResponse.Add(sageResponse);
             }
             return aiSavedResponse;
@@ -310,7 +336,7 @@ namespace SystemComments.Controllers
 
         private string GetSAGEChatGPTResponse(string comments)
         {
-            string aiResponse = GetChatGptResponse(comments);
+            string aiResponse = GetAISAGEChatGptResponse(comments);
             string aiComments = "";
             if (aiResponse.Length > 0)
             {
@@ -355,138 +381,163 @@ namespace SystemComments.Controllers
                 
                 userComments += "\n Evaluation comments and feedback from various rotations and activities: \"\"\" \n";
                 userComments += string.Format("\n Use the following narratives for {0} ", DateTime.Now.AddYears(-1).ToString("mm/dd/yyyy") + "-" + DateTime.Now.ToString("mm/dd/yyyy"));
-                foreach (DataRow dvr in dtComments.Rows)
+
+                // Dictionary to map each CommentsType to relevant fields
+                var commentsTypeFields = new Dictionary<string, List<string>>()
                 {
-                    if (dvr["CommentsType"].ToString() == "1")
-                    {
-                        if (dvr["FreeFormComments"].ToString().Length > 0)
-                        {
-                            userComments += "\n" + SageExtraction.RemoveUnNecessaryJSONTags(dvr["FreeFormComments"].ToString());
-                        }
+                    { "1", new List<string> { "FreeFormComments", "QuestionComments", "EvaluationComments", "AdditionalComments", "ConfidentialComments", "AcknowledgedComments", "ReviewComments", "ProgramDirectorComments", "AdministratorComments", "GAComments", "PreceptorComments" } },
+                    { "2", new List<string> { "EvaluationComments" } },
+                    { "3", new List<string> { "EvaluationComments", "ConfidentialComments", "AdditionalComments" } },
+                    { "4", new List<string> { "EvaluationComments", "ConfidentialComments" } },
+                    { "5", new List<string> { "EvaluationComments" } },
+                    { "6", new List<string> { "EvaluationComments" } },
+                    { "7", new List<string> { "EvaluationComments" } },
+                    { "8", new List<string> { "EvaluationComments" } }
+                };
 
-                        if (dvr["QuestionComments"].ToString().Length > 0)
-                        {
-                            userComments += "\n" + SageExtraction.RemoveUnNecessaryJSONTags(dvr["QuestionComments"].ToString());
-                        }
+                // Use LINQ to filter rows and concatenate comments
+                userComments += string.Join("\n",
+                    dtComments.AsEnumerable()
+                        .Where(dvr => commentsTypeFields.ContainsKey(dvr["CommentsType"].ToString()))
+                        .SelectMany(dvr =>
+                            commentsTypeFields[dvr["CommentsType"].ToString()]
+                                .Where(field => dvr[field].ToString().Length > 0)
+                                .Select(field => SageExtraction.RemoveUnNecessaryJSONTags(dvr[field].ToString()))
+                        )
+                );
 
-                        if (dvr["EvaluationComments"].ToString().Length > 0)
-                        {
-                            userComments += "\n" + SageExtraction.RemoveUnNecessaryJSONTags(dvr["EvaluationComments"].ToString());
-                        }
+                //foreach (DataRow dvr in dtComments.Rows)
+                //{
+                //    if (dvr["CommentsType"].ToString() == "1")
+                //    {
+                //        if (dvr["FreeFormComments"].ToString().Length > 0)
+                //        {
+                //            userComments += "\n" + SageExtraction.RemoveUnNecessaryJSONTags(dvr["FreeFormComments"].ToString());
+                //        }
+
+                //        if (dvr["QuestionComments"].ToString().Length > 0)
+                //        {
+                //            userComments += "\n" + SageExtraction.RemoveUnNecessaryJSONTags(dvr["QuestionComments"].ToString());
+                //        }
+
+                //        if (dvr["EvaluationComments"].ToString().Length > 0)
+                //        {
+                //            userComments += "\n" + SageExtraction.RemoveUnNecessaryJSONTags(dvr["EvaluationComments"].ToString());
+                //        }
 
 
-                        if (dvr["AdditionalComments"].ToString().Length > 0)
-                        {
-                            userComments += "\n" + SageExtraction.RemoveUnNecessaryJSONTags(dvr["AdditionalComments"].ToString());
-                        }
+                //        if (dvr["AdditionalComments"].ToString().Length > 0)
+                //        {
+                //            userComments += "\n" + SageExtraction.RemoveUnNecessaryJSONTags(dvr["AdditionalComments"].ToString());
+                //        }
 
-                        if (dvr["ConfidentialComments"].ToString().Length > 0)
-                        {
-                            userComments += "\n" + SageExtraction.RemoveUnNecessaryJSONTags(dvr["ConfidentialComments"].ToString());
-                        }
+                //        if (dvr["ConfidentialComments"].ToString().Length > 0)
+                //        {
+                //            userComments += "\n" + SageExtraction.RemoveUnNecessaryJSONTags(dvr["ConfidentialComments"].ToString());
+                //        }
 
-                        if (dvr["AcknowledgedComments"].ToString().Length > 0)
-                        {
-                            userComments += "\n" + SageExtraction.RemoveUnNecessaryJSONTags(dvr["AcknowledgedComments"].ToString());
-                        }
+                //        if (dvr["AcknowledgedComments"].ToString().Length > 0)
+                //        {
+                //            userComments += "\n" + SageExtraction.RemoveUnNecessaryJSONTags(dvr["AcknowledgedComments"].ToString());
+                //        }
 
-                        if (dvr["ReviewComments"].ToString().Length > 0)
-                        {
-                            userComments += "\n" + SageExtraction.RemoveUnNecessaryJSONTags(dvr["ReviewComments"].ToString());
-                        }
+                //        if (dvr["ReviewComments"].ToString().Length > 0)
+                //        {
+                //            userComments += "\n" + SageExtraction.RemoveUnNecessaryJSONTags(dvr["ReviewComments"].ToString());
+                //        }
 
-                        if (dvr["ProgramDirectorComments"].ToString().Length > 0)
-                        {
-                            userComments += "\n" + SageExtraction.RemoveUnNecessaryJSONTags(dvr["ProgramDirectorComments"].ToString());
-                        }
+                //        if (dvr["ProgramDirectorComments"].ToString().Length > 0)
+                //        {
+                //            userComments += "\n" + SageExtraction.RemoveUnNecessaryJSONTags(dvr["ProgramDirectorComments"].ToString());
+                //        }
 
-                        if (dvr["AdministratorComments"].ToString().Length > 0)
-                        {
-                            userComments += "\n" + SageExtraction.RemoveUnNecessaryJSONTags(dvr["AdministratorComments"].ToString());
-                        }
+                //        if (dvr["AdministratorComments"].ToString().Length > 0)
+                //        {
+                //            userComments += "\n" + SageExtraction.RemoveUnNecessaryJSONTags(dvr["AdministratorComments"].ToString());
+                //        }
 
-                        if (dvr["GAComments"].ToString().Length > 0)
-                        {
-                            userComments += "\n" + SageExtraction.RemoveUnNecessaryJSONTags(dvr["GAComments"].ToString());
-                        }
+                //        if (dvr["GAComments"].ToString().Length > 0)
+                //        {
+                //            userComments += "\n" + SageExtraction.RemoveUnNecessaryJSONTags(dvr["GAComments"].ToString());
+                //        }
 
-                        if (dvr["PreceptorComments"].ToString().Length > 0)
-                        {
-                            userComments += "\n" + SageExtraction.RemoveUnNecessaryJSONTags(dvr["PreceptorComments"].ToString());
-                        }
-                    }
-                    if (dvr["CommentsType"].ToString() == "2")
-                    {
-                        if (dvr["EvaluationComments"].ToString().Length > 0)
-                        {
-                            userComments += "\n" + SageExtraction.RemoveUnNecessaryJSONTags(dvr["EvaluationComments"].ToString());
-                        }
-                    }
+                //        if (dvr["PreceptorComments"].ToString().Length > 0)
+                //        {
+                //            userComments += "\n" + SageExtraction.RemoveUnNecessaryJSONTags(dvr["PreceptorComments"].ToString());
+                //        }
+                //    }
+                //    if (dvr["CommentsType"].ToString() == "2")
+                //    {
+                //        if (dvr["EvaluationComments"].ToString().Length > 0)
+                //        {
+                //            userComments += "\n" + SageExtraction.RemoveUnNecessaryJSONTags(dvr["EvaluationComments"].ToString());
+                //        }
+                //    }
 
-                    if (dvr["CommentsType"].ToString() == "3")
-                    {
-                        if (dvr["EvaluationComments"].ToString().Length > 0)
-                        {
-                            userComments += "\n" + SageExtraction.RemoveUnNecessaryJSONTags(dvr["EvaluationComments"].ToString());
-                        }
+                //    if (dvr["CommentsType"].ToString() == "3")
+                //    {
+                //        if (dvr["EvaluationComments"].ToString().Length > 0)
+                //        {
+                //            userComments += "\n" + SageExtraction.RemoveUnNecessaryJSONTags(dvr["EvaluationComments"].ToString());
+                //        }
 
-                        if (dvr["ConfidentialComments"].ToString().Length > 0)
-                        {
-                            userComments += "\n" + SageExtraction.RemoveUnNecessaryJSONTags(dvr["ConfidentialComments"].ToString());
-                        }
+                //        if (dvr["ConfidentialComments"].ToString().Length > 0)
+                //        {
+                //            userComments += "\n" + SageExtraction.RemoveUnNecessaryJSONTags(dvr["ConfidentialComments"].ToString());
+                //        }
 
-                        if (dvr["AdditionalComments"].ToString().Length > 0)
-                        {
-                            userComments += "\n" + SageExtraction.RemoveUnNecessaryJSONTags(dvr["AdditionalComments"].ToString());
-                        }
-                    }
-                    if (dvr["CommentsType"].ToString() == "4")
-                    {
-                        if (dvr["EvaluationComments"].ToString().Length > 0)
-                        {
-                            userComments += "\n" + SageExtraction.RemoveUnNecessaryJSONTags(dvr["EvaluationComments"].ToString());
-                        }
+                //        if (dvr["AdditionalComments"].ToString().Length > 0)
+                //        {
+                //            userComments += "\n" + SageExtraction.RemoveUnNecessaryJSONTags(dvr["AdditionalComments"].ToString());
+                //        }
+                //    }
+                //    if (dvr["CommentsType"].ToString() == "4")
+                //    {
+                //        if (dvr["EvaluationComments"].ToString().Length > 0)
+                //        {
+                //            userComments += "\n" + SageExtraction.RemoveUnNecessaryJSONTags(dvr["EvaluationComments"].ToString());
+                //        }
 
-                        if (dvr["ConfidentialComments"].ToString().Length > 0)
-                        {
-                            userComments += "\n" + SageExtraction.RemoveUnNecessaryJSONTags(dvr["ConfidentialComments"].ToString());
-                        }
-                    }
+                //        if (dvr["ConfidentialComments"].ToString().Length > 0)
+                //        {
+                //            userComments += "\n" + SageExtraction.RemoveUnNecessaryJSONTags(dvr["ConfidentialComments"].ToString());
+                //        }
+                //    }
 
-                    if (dvr["CommentsType"].ToString() == "5")
-                    {
-                        if (dvr["EvaluationComments"].ToString().Length > 0)
-                        {
-                            userComments += "\n" + SageExtraction.RemoveUnNecessaryJSONTags(dvr["EvaluationComments"].ToString());
-                        }
+                //    if (dvr["CommentsType"].ToString() == "5")
+                //    {
+                //        if (dvr["EvaluationComments"].ToString().Length > 0)
+                //        {
+                //            userComments += "\n" + SageExtraction.RemoveUnNecessaryJSONTags(dvr["EvaluationComments"].ToString());
+                //        }
 
-                    }
+                //    }
 
-                    if (dvr["CommentsType"].ToString() == "6")
-                    {
-                        if (dvr["EvaluationComments"].ToString().Length > 0)
-                        {
-                            userComments += "\n" + SageExtraction.RemoveUnNecessaryJSONTags(dvr["EvaluationComments"].ToString());
-                        }
+                //    if (dvr["CommentsType"].ToString() == "6")
+                //    {
+                //        if (dvr["EvaluationComments"].ToString().Length > 0)
+                //        {
+                //            userComments += "\n" + SageExtraction.RemoveUnNecessaryJSONTags(dvr["EvaluationComments"].ToString());
+                //        }
 
-                    }
-                    if (dvr["CommentsType"].ToString() == "7")
-                    {
-                        if (dvr["EvaluationComments"].ToString().Length > 0)
-                        {
-                            userComments += "\n" + SageExtraction.RemoveUnNecessaryJSONTags(dvr["EvaluationComments"].ToString());
-                        }
+                //    }
+                //    if (dvr["CommentsType"].ToString() == "7")
+                //    {
+                //        if (dvr["EvaluationComments"].ToString().Length > 0)
+                //        {
+                //            userComments += "\n" + SageExtraction.RemoveUnNecessaryJSONTags(dvr["EvaluationComments"].ToString());
+                //        }
 
-                    }
-                    if (dvr["CommentsType"].ToString() == "8")
-                    {
-                        if (dvr["EvaluationComments"].ToString().Length > 0)
-                        {
-                            userComments += "\n" + SageExtraction.RemoveUnNecessaryJSONTags(dvr["EvaluationComments"].ToString());
-                        }
+                //    }
+                //    if (dvr["CommentsType"].ToString() == "8")
+                //    {
+                //        if (dvr["EvaluationComments"].ToString().Length > 0)
+                //        {
+                //            userComments += "\n" + SageExtraction.RemoveUnNecessaryJSONTags(dvr["EvaluationComments"].ToString());
+                //        }
 
-                    }
-                }
+                //    }
+                //}
             }
 
             return userComments;
@@ -1095,6 +1146,119 @@ namespace SystemComments.Controllers
                 return "An error occurred:";
             }
 
+        }
+
+        private string GetAISAGEChatGptResponse(string comments)
+        {
+            try
+            {
+                string aiKey = _config.GetSection("AppSettings:AIToken").Value;
+                HttpClient client = new HttpClient();
+                client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", aiKey);
+                string aiResponse = "";
+                client.Timeout = TimeSpan.FromMinutes(3);
+                if (comments.Length > 0)
+                {
+                    var request = new OpenAIRequest
+                    {
+                        //Model = "text-davinci-002",
+                        //Model = "gpt-3.5-turbo",
+                        Model = "gpt-4o",
+                        //Model = "GTP-4o mini",
+                        Temperature = 0.7f,
+                        //MaxTokens = 4000                        
+                    };
+
+                    request.Messages = new RequestMessage[]
+                       {
+                                        new RequestMessage()
+                                        {
+                                             Role = "system",
+                                             Content = "You are a helpful assistant designed to conduct a structured trainee assessment. Follow the provided guidelines strictly."
+                                        },
+                                        new RequestMessage()
+                                        {
+                                             Role = "user",
+                                             Content = "Important Notes: \n1. Ensure all sections are included in <sections></sections> and <allsections></allsections> tags.\n2. Section 1 of 4 must be included and completed before proceeding to the next sections.\n3. Do not generate extra displays or summaries. Proceed automatically to the next section.\n4. Mark the start and end of each header with appropriate XML tags.\n5. Encode all XML-invalid characters.\n\nPlease follow the trainee assessment structure as outlined below:"
+                                        },
+                                        new RequestMessage()
+                                        {
+                                             Role = "user",
+                                             Content = comments
+                                        }
+                       };
+
+                    var json = System.Text.Json.JsonSerializer.Serialize(request);
+                    var content = new StringContent(json, Encoding.UTF8, "application/json");
+                    var response = client.PostAsync("https://api.openai.com/v1/chat/completions", content);
+                    var resjson = response.Result.Content.ReadAsStringAsync();
+                    aiResponse = resjson.Result;
+                }
+                else
+                {
+                    throw new System.Exception("Comments are not available.");
+                }
+
+
+                //if (!response.IsCompletedSuccessfully)
+                //{
+                //    //var errorResponse = JsonSerializer.Deserialize<OpenAIErrorResponse>(resjson);
+                //    //throw new System.Exception(errorResponse.Error.Message);
+                //}
+                //var data = JsonSerializer.Deserialize<OpenAIResponse>(resjson);
+                //var data = JsonSerializer.Deserialize<Root>(resjson);
+                //var data = JsonSerializer.Deserialize(resjson, typeof(object));
+                return aiResponse;
+            }
+            catch (System.Exception ex)
+            {
+                _logger.LogError(ex, "An error occurred while making the OpenAI API request");
+                return "An error occurred:";
+            }
+
+        }
+
+        public async Task<string> GetAIResponseAsync(string comments)
+        {
+            if (string.IsNullOrEmpty(comments))
+            {
+                return string.Empty;
+            }
+
+            string aiKey = _config.GetSection("AppSettings:AIToken").Value;
+            using HttpClient client = new HttpClient
+            {
+                Timeout = TimeSpan.FromMinutes(3)
+            };
+            client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", aiKey);
+
+            var request = new OpenAIRequest
+            {
+                Model = "gpt-4",
+                Temperature = 0.7f,
+                Messages = new RequestMessage[]
+                {
+            new RequestMessage { Role = "system", Content = "You are a helpful assistant." },
+            new RequestMessage { Role = "user", Content = "You will never use people names and only use the word 'Resident' instead." },
+            new RequestMessage { Role = "user", Content = comments }
+                }
+            };
+
+            var json = System.Text.Json.JsonSerializer.Serialize(request);
+            var content = new StringContent(json, Encoding.UTF8, "application/json");
+
+            try
+            {
+                var response = await client.PostAsync("https://api.openai.com/v1/chat/completions", content);
+                response.EnsureSuccessStatusCode(); // Throws exception if status code is not successful
+                var resJson = await response.Content.ReadAsStringAsync();
+                return resJson;
+            }
+            catch (Exception ex)
+            {
+                // Log the error or handle it appropriately
+                return $"Error: {ex.Message}";
+            }
         }
 
         // DELETE: api/AIResponse/5

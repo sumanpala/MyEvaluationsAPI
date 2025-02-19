@@ -47,6 +47,55 @@ namespace SystemComments.Utilities
             return count;
         }
 
+        public static Int32 GetAllSectionsCount(string aiJSON)
+        {
+            Int32 count = 0;
+            try
+            {
+                JObject jsonObject = JObject.Parse(aiJSON);
+                JArray? sectionsArray = jsonObject["allsections"] as JArray;
+                if (sectionsArray != null)
+                {
+                    count = sectionsArray.Count;
+                }
+            }
+            catch (Exception ex)
+            {
+                count = 0;
+            }
+            return count;
+        }
+
+        public static string InsertSection(string aiJSON, string defaultJSON, Int32 sectionNum)
+        {
+            try
+            {
+                string updatedJSON = "";
+                if (aiJSON.Length > 2 && defaultJSON.Length > 2)
+                {
+                    JObject jsonObject = JObject.Parse(aiJSON);
+                    JObject objDefaultJSON = JObject.Parse(defaultJSON);
+                    JArray sectionsArray = (JArray)jsonObject["sections"];
+                    JArray defaultSectionsArray = (JArray)objDefaultJSON["sections"];
+                    if (defaultSectionsArray != null && defaultSectionsArray.Count >= sectionNum)
+                    {
+                        JObject selectedSection = (JObject)defaultSectionsArray[sectionNum];
+                        if (selectedSection != null && (sectionsArray.Count < sectionNum + 1))
+                        {
+                            sectionsArray.Add(selectedSection);
+                        }
+                        updatedJSON = JsonConvert.SerializeObject(jsonObject, Formatting.None);
+                    }
+                }
+
+                return updatedJSON;
+            }
+            catch(Exception ex)
+            {
+                return aiJSON;
+            }
+        }
+
         public static string UpdateRequestJSON(string aiJSON, string inputJSON)
         {
             string updatedJSON = "";
@@ -691,14 +740,14 @@ namespace SystemComments.Utilities
             table.Rows.Add(row);
         }
 
-        public static string ConvertJsonToFormattedText(string json)
+        public static string ConvertJsonToFormattedText(string json, ref Int32 lastSection, ref Int32 noOfSections)
         {
             StringBuilder sb = new StringBuilder();
             try
             {                
                 JObject jsonObject = JObject.Parse(json);
                 
-                int totalSections = 1;
+                Int32 totalSections = 1;
                 if (jsonObject["totalsections"] != null && jsonObject["totalsections"].ToString().Length > 0)
                 {
                     totalSections = int.Parse(jsonObject["totalsections"].ToString());
@@ -817,6 +866,8 @@ namespace SystemComments.Utilities
                         
                         sb.Append("\n"); // Add spacing between sections
                     }
+                    lastSection = sectionNum;
+                    noOfSections = totalSections;
                     sb.Append(followupInstructions + "\n\n" + includedSteps);
                     //sb.AppendLine(((followupInstructions.Length > 0) ? followupInstructions + "\n" : "") +  includedSteps + "\n Don't include next section if new followup questions are included into the current section. \n");
                 }
