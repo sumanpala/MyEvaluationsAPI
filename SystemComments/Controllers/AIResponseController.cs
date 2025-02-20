@@ -33,7 +33,7 @@ namespace SystemComments.Controllers
         private readonly APIDataBaseContext _context;
         private readonly IJwtAuth jwtAuth;
         private readonly IConfiguration _config;
-        private readonly ILogger<AIResponseController> _logger;        
+        private readonly ILogger<AIResponseController> _logger;
         public AIResponseController(APIDataBaseContext context,IJwtAuth jwtAuth, IConfiguration config, ILogger<AIResponseController> logger)
         {
             _context = context;
@@ -273,7 +273,7 @@ namespace SystemComments.Controllers
                             sageQuestions = sageQuestions.Replace("</br>", "\n");
                             sageQuestions = sageQuestions.Replace("<br>", "\n");
                         }                       
-                    }
+                    }                   
                     string aiComments = GetSAGEChatGPTResponse(comments + "\n" + sageQuestions + "\n include <section> tag between the tag <sections></sections>");
                     string extractJSON = SageExtraction.ExtractData(aiComments);
                     JToken parsedJson = JToken.Parse(extractJSON);
@@ -291,12 +291,22 @@ namespace SystemComments.Controllers
                     {
                         aiComments = GetSAGEChatGPTResponse(comments + "\n" + sageQuestions + "\nSections are missed in the tag <sections></sections>, Please include." + allSectionsPrompt +  "\n include <section> tag between the tag <sections></sections>");
                         extractJSON = SageExtraction.ExtractData(aiComments);
+                        sectionCount = SageExtraction.GetSectionsCount(extractJSON);
+                        if(sectionCount == 0)
+                        {
+                            extractJSON = minifiedJson;
+                        }
                     }
                     else if(lastSection > sectionCount && lastSection <= totalSections)
                     {
                         string updatedPrompt = $"{comments} \n{sageQuestions} \n Section {lastSection} of {totalSections} is missed, please include. {allSectionsPrompt}\n include <section> tag between the tag <sections></sections>";
                         aiComments = GetSAGEChatGPTResponse(updatedPrompt);    
                         extractJSON = SageExtraction.ExtractData(aiComments);
+                        sectionCount = SageExtraction.GetSectionsCount(extractJSON);
+                        if (sectionCount == 0)
+                        {
+                            extractJSON = minifiedJson;
+                        }
                     }                   
                     
                     sectionCount = SageExtraction.GetSectionsCount(extractJSON);                   
@@ -1096,6 +1106,7 @@ namespace SystemComments.Controllers
                         Model = "gpt-4o",
                         //Model = "GTP-4o mini",
                         Temperature = 0.7f,
+                        MaxTokens = 4000
                         //MaxTokens = 4000                        
                     };
 
@@ -1148,6 +1159,87 @@ namespace SystemComments.Controllers
 
         }
 
+        public static async Task<string> SummarizeChunk(string chunk, string apiKey)
+        {
+            using (HttpClient client = new HttpClient())
+            {
+                client.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", apiKey);
+
+                var request = new OpenAIRequest
+                {
+                    Model = "gpt-4o",  // Replace with the appropriate model
+                    Temperature = 0.7f,                   
+                    MaxTokens = 500  // Adjust based on your model's limit
+                };
+
+                request.Messages = new RequestMessage[]
+                       {
+                                        new RequestMessage()
+                                        {
+                                             Role = "system",
+                                             Content = $"Summarize the following text:\n{chunk}"
+                                        }
+                                        
+                       };
+
+                var jsonRequest = Newtonsoft.Json.JsonConvert.SerializeObject(request);
+                var content = new StringContent(jsonRequest, Encoding.UTF8, "application/json");
+
+                HttpResponseMessage response = await client.PostAsync("https://api.openai.com/v1/completions", content);
+
+                if (response.IsSuccessStatusCode)
+                {
+                    var result = await response.Content.ReadAsStringAsync();
+                    dynamic jsonResponse = Newtonsoft.Json.JsonConvert.DeserializeObject(result);
+                    return jsonResponse.choices[0].text.ToString();
+                }
+                else
+                {
+                    throw new Exception("Failed to summarize the chunk.");
+                }
+            }
+        }
+
+        public static async Task<string> CombineSummaries(List<string> summaries, string apiKey)
+        {
+            string combinedText = string.Join("\n", summaries);
+            return await SummarizeChunk(combinedText, apiKey);  // Reuse the SummarizeChunk function
+        }
+
+        public static async Task<string> SummarizeLargeText(string inputText, string apiKey)
+        {
+            // Step 1: Chunk the input text
+            List<string> textChunks = ChunkText(inputText, 1000);  // You can adjust chunk size
+
+            // Step 2: Summarize each chunk
+            List<string> summaries = new List<string>();
+            foreach (string chunk in textChunks)
+            {
+                string summary = await SummarizeChunk(chunk, apiKey);
+                summaries.Add(summary);
+            }
+
+            // Step 3: Combine the chunk summaries
+            string finalSummary = await CombineSummaries(summaries, apiKey);
+
+            return finalSummary;
+        }
+
+        public static List<string> ChunkText(string input, int chunkSize = 1000)
+        {
+            List<string> chunks = new List<string>();
+            int inputLength = input.Length;
+
+            for (int i = 0; i < inputLength; i += chunkSize)
+            {
+                // Get a substring of chunkSize or the remaining length
+                int length = Math.Min(chunkSize, inputLength - i);
+                chunks.Add(input.Substring(i, length));
+            }
+
+            return chunks;
+        }    
+
         private string GetAISAGEChatGptResponse(string comments)
         {
             try
@@ -1165,7 +1257,8 @@ namespace SystemComments.Controllers
                         //Model = "gpt-3.5-turbo",
                         Model = "gpt-4o",
                         //Model = "GTP-4o mini",
-                        Temperature = 0.7f,
+                        Temperature = 0.5f,
+                        MaxTokens = 4000
                         //MaxTokens = 4000                        
                     };
 
@@ -1236,6 +1329,7 @@ namespace SystemComments.Controllers
             {
                 Model = "gpt-4",
                 Temperature = 0.7f,
+                MaxTokens = 4000,
                 Messages = new RequestMessage[]
                 {
             new RequestMessage { Role = "system", Content = "You are a helpful assistant." },

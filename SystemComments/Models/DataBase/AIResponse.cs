@@ -77,8 +77,8 @@ namespace SystemComments.Models.DataBase
         [JsonPropertyName("temperature")]
         public float Temperature { get; set; }
 
-        //[JsonPropertyName("max_tokens")]
-        //public int MaxTokens { get; set; }
+        [JsonPropertyName("max_tokens")]
+        public int MaxTokens { get; set; }
 
         [JsonPropertyName("messages")]
         public RequestMessage[] Messages { get; set; }
