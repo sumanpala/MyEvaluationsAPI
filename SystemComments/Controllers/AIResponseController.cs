@@ -1314,11 +1314,21 @@ namespace SystemComments.Controllers
                     using var stream = response.Content.ReadAsStream();
                     using var reader = new StreamReader(stream, Encoding.UTF8, bufferSize: 8192);
 
-                    string fullResponse = reader.ReadToEnd();
+                    var stringBuilder = new StringBuilder();
+                    char[] buffer = new char[4096]; // Read in chunks of 4KB
+                    int bytesRead;
 
-                    // Split the full response by newline and process each line
+                    // Read the stream in chunks
+                    while ((bytesRead = reader.Read(buffer, 0, buffer.Length)) > 0)
+                    {
+                        stringBuilder.Append(buffer, 0, bytesRead);
+                    }
+
+                    // Get the full response as a string
+                    string fullResponse = stringBuilder.ToString();
+
+                    // Process the response line by line
                     var lines = fullResponse.Split(new[] { "\n" }, StringSplitOptions.RemoveEmptyEntries);
-
                     foreach (var line in lines)
                     {
                         if (line.StartsWith("data: "))
@@ -1352,6 +1362,45 @@ namespace SystemComments.Controllers
                             Console.WriteLine(data);
                         }
                     }
+
+                    //string fullResponse = reader.ReadToEnd();
+
+                    //// Split the full response by newline and process each line
+                    //var lines = fullResponse.Split(new[] { "\n" }, StringSplitOptions.RemoveEmptyEntries);
+
+                    //foreach (var line in lines)
+                    //{
+                    //    if (line.StartsWith("data: "))
+                    //    {
+                    //        data = line.Substring(6); // Remove "data: " prefix
+
+                    //        if (data == "[DONE]")
+                    //        {
+                    //            // End of the stream
+                    //            break;
+                    //        }
+
+                    //        try
+                    //        {
+                    //            var jsonDoc = JsonDocument.Parse(data);
+                    //            var choices = jsonDoc.RootElement.GetProperty("choices");
+                    //            foreach (var choice in choices.EnumerateArray())
+                    //            {
+                    //                if (choice.TryGetProperty("delta", out var delta) &&
+                    //                    delta.TryGetProperty("content", out var content1))
+                    //                {
+                    //                    content += content1.GetString();
+                    //                }
+                    //            }
+                    //        }
+                    //        catch (Exception ex)
+                    //        {
+                    //            //Console.WriteLine("Failed to parse JSON: " + ex.Message);
+                    //        }
+
+                    //        //Console.WriteLine(data);
+                    //    }
+                    //}
 
                     //string fullResponse = reader.ReadToEnd();
                     //string? line;
@@ -1392,15 +1441,15 @@ namespace SystemComments.Controllers
                 }
                 else
                 {
-                    Console.WriteLine($"Failed to call OpenAI API. Status Code: {response.StatusCode}");
-                    Console.WriteLine($"Reason: {response.ReasonPhrase}");
+                    //Console.WriteLine($"Failed to call OpenAI API. Status Code: {response.StatusCode}");
+                    //Console.WriteLine($"Reason: {response.ReasonPhrase}");
                 }
                 return content;
             }
             catch (Exception ex)
             {
-                Console.WriteLine("An error occurred:");
-                Console.WriteLine(ex.Message);
+                //Console.WriteLine("An error occurred:");
+                //Console.WriteLine(ex.Message);
                 return "[]";
             }
         }
