@@ -75,6 +75,7 @@ namespace SystemComments.Utilities
                 {
                     JObject jsonObject = JObject.Parse(aiJSON);
                     JObject objDefaultJSON = JObject.Parse(defaultJSON);
+                    UpdateProperties(objDefaultJSON);
                     JArray sectionsArray = (JArray)jsonObject["sections"];
                     JArray defaultSectionsArray = (JArray)objDefaultJSON["sections"];
                     if (defaultSectionsArray != null && defaultSectionsArray.Count >= sectionNum)
@@ -93,6 +94,27 @@ namespace SystemComments.Utilities
             catch(Exception ex)
             {
                 return aiJSON;
+            }
+        }
+
+        private static void UpdateProperties(JToken token)
+        {
+            if (token is JProperty property)
+            {
+                if (property.Name == "id")
+                {
+                    property.Value = "0";
+                }
+                else if (property.Name == "answer")
+                {
+                    property.Value = string.Empty;
+                }
+            }
+
+            // Recursively iterate through all children
+            foreach (var child in token.Children())
+            {
+                UpdateProperties(child);
             }
         }
 
