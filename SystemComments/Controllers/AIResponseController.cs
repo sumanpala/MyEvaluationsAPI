@@ -10,6 +10,7 @@ using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Xml.Linq;
 using Microsoft.AspNetCore.Authorization;
@@ -36,6 +37,10 @@ namespace SystemComments.Controllers
         private readonly IJwtAuth jwtAuth;
         private readonly IConfiguration _config;
         private readonly ILogger<AIResponseController> _logger;
+        private static readonly HttpClient client = new HttpClient(new HttpClientHandler { AllowAutoRedirect = true })
+        {
+            DefaultRequestVersion = HttpVersion.Version20
+        };
         public AIResponseController(APIDataBaseContext context,IJwtAuth jwtAuth, IConfiguration config, ILogger<AIResponseController> logger)
         {
             _context = context;
@@ -219,10 +224,11 @@ namespace SystemComments.Controllers
                         DataTable dtPrompt = dsSageData.Tables[0];
                         DataTable dtQuestions = dsSageData.Tables[1];
                         DataTable dtResponses = dsSageData.Tables[2];
-                        DataTable dtDefaultJSON = dsSageData.Tables[3];
-                        if(dtDefaultJSON.Rows.Count > 0)
+                        //DataTable dtDefaultJSON = dsSageData.Tables[3];
+                        if(dtPrompt.Rows.Count > 0)
                         {
-                            defaultJSON = dtDefaultJSON.Rows[0]["DefaultJSON"].ToString();
+                            defaultJSON = dtPrompt.Rows[0]["DefaultJSON"].ToString();
+                            input.SageRequest = dtPrompt.Rows[0]["AIJSON"].ToString();
                         }
                         if (dtResponses.Rows.Count > 0 && input.SageRequest.Length > 2)
                         {
@@ -276,8 +282,8 @@ namespace SystemComments.Controllers
                             sageQuestions = sageQuestions.Replace("<br>", "\n");
                         }                       
                     }
-                    string aiComments = GetAISAGEWithStreaming(comments + "\n" + sageQuestions + "\n include <section> tag between the tag <sections></sections>");
-                    //string aiComments = GetSAGEChatGPTResponse(comments + "\n" + sageQuestions + "\n include <section> tag between the tag <sections></sections>");
+                    //string aiComments = GetAISAGEWithStreaming(comments + "\n" + sageQuestions + "\n include <section> tag between the tag <sections></sections>");
+                    string aiComments = await GetAISAGEChatGptResponse1(comments + "\n" + sageQuestions + "\n include <section> tag between the tag <sections></sections>");
                     string extractJSON = SageExtraction.ExtractData(aiComments);
                     JToken parsedJson = JToken.Parse(extractJSON);
                     minifiedJson = JsonConvert.SerializeObject(parsedJson, Formatting.None);
@@ -292,7 +298,7 @@ namespace SystemComments.Controllers
                     }
                     if (sectionCount == 0)
                     {
-                        aiComments = GetAISAGEWithStreaming(comments + "\n" + sageQuestions + "\nSections are missed in the tag <sections></sections>, Please include." + allSectionsPrompt +  "\n include <section> tag between the tag <sections></sections>");
+                        aiComments = await GetAISAGEChatGptResponse1(comments + "\n" + sageQuestions + "\nSections are missed in the tag <sections></sections>, Please include." + allSectionsPrompt +  "\n include <section> tag between the tag <sections></sections>");
                         extractJSON = SageExtraction.ExtractData(aiComments);
                         sectionCount = SageExtraction.GetSectionsCount(extractJSON);
                         if(sectionCount == 0)
@@ -303,7 +309,7 @@ namespace SystemComments.Controllers
                     else if(lastSection > sectionCount && lastSection <= totalSections)
                     {
                         string updatedPrompt = $"{comments} \n{sageQuestions} \n Section {lastSection} of {totalSections} is missed, please include. {allSectionsPrompt}\n include <section> tag between the tag <sections></sections>";
-                        aiComments = GetAISAGEWithStreaming(updatedPrompt);    
+                        aiComments = await GetAISAGEChatGptResponse1(updatedPrompt);    
                         extractJSON = SageExtraction.ExtractData(aiComments);
                         sectionCount = SageExtraction.GetSectionsCount(extractJSON);
                         if (sectionCount == 0)
@@ -1161,7 +1167,88 @@ namespace SystemComments.Controllers
             }
 
         }
-               
+
+        private static int EstimateTokens(string text)
+        {
+            return (int)(text.Length * 0.25); // Simple heuristic (1 char ≈ 0.25 tokens)
+        }
+
+        private static int CalculateMaxTokens(string prompt, int modelLimit = 128000)
+        {
+            int promptTokens = EstimateTokens(prompt);
+            return Math.Max(100, modelLimit - promptTokens - 100); // Ensure at least 100 tokens
+        }
+
+        private async Task<string> GetAISAGEChatGptResponse1(string comments)
+        {
+            comments = RemoveNewLinesBetweenTags(comments);
+            string prompt = comments;
+            string aiKey = _config.GetSection("AppSettings:AIToken").Value;
+            var requestPayload = new
+            {
+                model = "gpt-4o", // Use the fastest available model
+                messages = new[]
+                {
+                new { role = "system", content = "SAGE: Trainee Assessment\nYou are an expert assessment designer..." },
+                new { role = "user", content = prompt }
+            },
+                max_tokens = CalculateMaxTokens(prompt), // Adjust based on expected response length
+                temperature = 0.5,
+                top_p = 0.9,
+                stream = true // Enables real-time streaming
+            };
+
+            using (var cts = new CancellationTokenSource(TimeSpan.FromSeconds(15))) // Ensure 5s timeout
+            {
+                var request = new HttpRequestMessage(HttpMethod.Post, "https://api.openai.com/v1/chat/completions")
+                {
+                    Content = new StringContent(JsonConvert.SerializeObject(requestPayload), Encoding.UTF8, "application/json")
+                };
+                request.Headers.Add("Authorization", $"Bearer {aiKey}");
+
+                try
+                {
+                    using (var response = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cts.Token))
+                    {
+                        response.EnsureSuccessStatusCode();
+
+                        using (var stream = await response.Content.ReadAsStreamAsync(cts.Token))
+                        using (var reader = new StreamReader(stream))
+                        {
+                            var sb = new StringBuilder();
+                            string line;
+
+                            while ((line = await reader.ReadLineAsync()) != null)
+                            {
+                                if (line.StartsWith("data: "))
+                                {
+                                    string jsonLine = line.Substring(6); // Remove "data: "
+                                    if (jsonLine.Trim() != "[DONE]") // End of stream
+                                    {
+                                        var jsonObject = JsonConvert.DeserializeObject<JObject>(jsonLine);
+                                        if (jsonObject?["choices"]?[0]?["delta"]?["content"] != null)
+                                        {
+                                            sb.Append(jsonObject["choices"][0]["delta"]["content"].ToString());
+                                        }
+                                    }
+                                }
+                            }
+
+                            return sb.ToString().Trim(); // Return the collected response
+                        }
+                    }
+                }
+                catch (TaskCanceledException)
+                {
+                    return "[]"; // Handle timeout scenario
+                }
+                catch (Exception ex)
+                {
+                    return $"[]"; // Handle errors
+                }
+            }
+        }
+
         private string GetAISAGEChatGptResponse(string comments)
         {
             try
@@ -1181,7 +1268,7 @@ namespace SystemComments.Controllers
                         Model = "gpt-4o",
                         //Model = "GTP-4o mini",
                         Temperature = 0.5f,
-                        MaxTokens = 4000
+                        MaxTokens = 4096
                         //MaxTokens = 4000                        
                     };
 
@@ -1214,16 +1301,7 @@ namespace SystemComments.Controllers
                 {
                     throw new System.Exception("Comments are not available.");
                 }
-
-
-                //if (!response.IsCompletedSuccessfully)
-                //{
-                //    //var errorResponse = JsonSerializer.Deserialize<OpenAIErrorResponse>(resjson);
-                //    //throw new System.Exception(errorResponse.Error.Message);
-                //}
-                //var data = JsonSerializer.Deserialize<OpenAIResponse>(resjson);
-                //var data = JsonSerializer.Deserialize<Root>(resjson);
-                //var data = JsonSerializer.Deserialize(resjson, typeof(object));
+                
                 return aiResponse;
             }
             catch (System.Exception ex)
@@ -1260,10 +1338,11 @@ namespace SystemComments.Controllers
             {
                 model = "gpt-4o",
                 messages = new[]
-                {                   
+                {
+                    new { role = "system", content = "You are an expert in medical trainee assessments." },
                     new { role = "user", content = prompt.Replace("\n\n\n","\n") + "\nRemove new line characters \n in the response." }
                 },
-                max_tokens = 4000,
+                max_tokens = 4096,
                 temperature = 0.7,
                 stream = true // Enable streaming
             };
@@ -1289,7 +1368,7 @@ namespace SystemComments.Controllers
 
                 if (response.IsSuccessStatusCode)
                 {
-                    Console.WriteLine("Streaming response from OpenAI:");
+                    //Console.WriteLine("Streaming response from OpenAI:");
 
                     //using var stream = response.Content.ReadAsStream();
                     //using var reader = new StreamReader(stream, Encoding.UTF8, detectEncodingFromByteOrderMarks: false, bufferSize: 16384);
@@ -1314,21 +1393,11 @@ namespace SystemComments.Controllers
                     using var stream = response.Content.ReadAsStream();
                     using var reader = new StreamReader(stream, Encoding.UTF8, bufferSize: 8192);
 
-                    var stringBuilder = new StringBuilder();
-                    char[] buffer = new char[4096]; // Read in chunks of 4KB
-                    int bytesRead;
+                    string fullResponse = reader.ReadToEnd();
 
-                    // Read the stream in chunks
-                    while ((bytesRead = reader.Read(buffer, 0, buffer.Length)) > 0)
-                    {
-                        stringBuilder.Append(buffer, 0, bytesRead);
-                    }
-
-                    // Get the full response as a string
-                    string fullResponse = stringBuilder.ToString();
-
-                    // Process the response line by line
+                    // Split the full response by newline and process each line
                     var lines = fullResponse.Split(new[] { "\n" }, StringSplitOptions.RemoveEmptyEntries);
+
                     foreach (var line in lines)
                     {
                         if (line.StartsWith("data: "))
@@ -1362,45 +1431,6 @@ namespace SystemComments.Controllers
                             Console.WriteLine(data);
                         }
                     }
-
-                    //string fullResponse = reader.ReadToEnd();
-
-                    //// Split the full response by newline and process each line
-                    //var lines = fullResponse.Split(new[] { "\n" }, StringSplitOptions.RemoveEmptyEntries);
-
-                    //foreach (var line in lines)
-                    //{
-                    //    if (line.StartsWith("data: "))
-                    //    {
-                    //        data = line.Substring(6); // Remove "data: " prefix
-
-                    //        if (data == "[DONE]")
-                    //        {
-                    //            // End of the stream
-                    //            break;
-                    //        }
-
-                    //        try
-                    //        {
-                    //            var jsonDoc = JsonDocument.Parse(data);
-                    //            var choices = jsonDoc.RootElement.GetProperty("choices");
-                    //            foreach (var choice in choices.EnumerateArray())
-                    //            {
-                    //                if (choice.TryGetProperty("delta", out var delta) &&
-                    //                    delta.TryGetProperty("content", out var content1))
-                    //                {
-                    //                    content += content1.GetString();
-                    //                }
-                    //            }
-                    //        }
-                    //        catch (Exception ex)
-                    //        {
-                    //            //Console.WriteLine("Failed to parse JSON: " + ex.Message);
-                    //        }
-
-                    //        //Console.WriteLine(data);
-                    //    }
-                    //}
 
                     //string fullResponse = reader.ReadToEnd();
                     //string? line;
@@ -1439,17 +1469,17 @@ namespace SystemComments.Controllers
                     //    }
                     //}
                 }
-                else
-                {
+                //else
+                //{
                     //Console.WriteLine($"Failed to call OpenAI API. Status Code: {response.StatusCode}");
                     //Console.WriteLine($"Reason: {response.ReasonPhrase}");
-                }
+               // }
                 return content;
             }
             catch (Exception ex)
             {
-                //Console.WriteLine("An error occurred:");
-                //Console.WriteLine(ex.Message);
+                Console.WriteLine("An error occurred:");
+                Console.WriteLine(ex.Message);
                 return "[]";
             }
         }

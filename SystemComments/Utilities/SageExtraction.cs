@@ -85,6 +85,20 @@ namespace SystemComments.Utilities
                         {
                             sectionsArray.Add(selectedSection);
                         }
+                        if (jsonObject["totalsections"] != null && objDefaultJSON["totalsections"] != null)
+                        {
+                            jsonObject["totalsections"] = objDefaultJSON["totalsections"];
+                        }
+                        if (jsonObject["allsections"] != null && objDefaultJSON["allsections"] != null)
+                        {
+                            JArray allSectionsArray = (JArray)jsonObject["allsections"];
+                            if(allSectionsArray.Count == 0)
+                            {
+                                allSectionsArray = (JArray)objDefaultJSON["allsections"];
+                                jsonObject["allsections"] = allSectionsArray;
+                            }
+                            
+                        }
                         updatedJSON = JsonConvert.SerializeObject(jsonObject, Formatting.None);
                     }
                 }
@@ -822,7 +836,8 @@ namespace SystemComments.Utilities
                                     }
                                     if (mainSection?["answer"] != null && mainSection["answer"].ToString().Length > 0)
                                     {
-                                        sb.Append("Answer: " + mainSection["answer"].ToString() + "\n");
+                                        //sb.Append("Answer: " + mainSection["answer"].ToString() + "\n");
+                                        sb.Append("Answer: User Completed this question.\n");
                                         isCompleteOneAnswer = true;
                                     }
                                     else
@@ -855,7 +870,8 @@ namespace SystemComments.Utilities
                                     }
                                     if (followup["answer"] != null && followup["answer"]?.ToString().Length > 0)
                                     {
-                                        sb.Append("Answer: " + followup["answer"]?.ToString() + "\n");
+                                        sb.Append("Answer: User Completed this question.\n");
+                                        //sb.Append("Answer: " + followup["answer"]?.ToString() + "\n");
                                     }
                                     else
                                     {
