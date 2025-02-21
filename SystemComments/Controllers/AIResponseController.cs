@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Data;
+using System.IO;
 using System.Linq;
 using System.Linq.Expressions;
 using System.Net;
@@ -22,6 +23,7 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using SystemComments.Models.DataBase;
 using SystemComments.Utilities;
+
 
 namespace SystemComments.Controllers
 {
@@ -273,8 +275,9 @@ namespace SystemComments.Controllers
                             sageQuestions = sageQuestions.Replace("</br>", "\n");
                             sageQuestions = sageQuestions.Replace("<br>", "\n");
                         }                       
-                    }                   
-                    string aiComments = GetSAGEChatGPTResponse(comments + "\n" + sageQuestions + "\n include <section> tag between the tag <sections></sections>");
+                    }
+                    string aiComments = GetAISAGEWithStreaming(comments + "\n" + sageQuestions + "\n include <section> tag between the tag <sections></sections>");
+                    //string aiComments = GetSAGEChatGPTResponse(comments + "\n" + sageQuestions + "\n include <section> tag between the tag <sections></sections>");
                     string extractJSON = SageExtraction.ExtractData(aiComments);
                     JToken parsedJson = JToken.Parse(extractJSON);
                     minifiedJson = JsonConvert.SerializeObject(parsedJson, Formatting.None);
@@ -289,7 +292,7 @@ namespace SystemComments.Controllers
                     }
                     if (sectionCount == 0)
                     {
-                        aiComments = GetSAGEChatGPTResponse(comments + "\n" + sageQuestions + "\nSections are missed in the tag <sections></sections>, Please include." + allSectionsPrompt +  "\n include <section> tag between the tag <sections></sections>");
+                        aiComments = GetAISAGEWithStreaming(comments + "\n" + sageQuestions + "\nSections are missed in the tag <sections></sections>, Please include." + allSectionsPrompt +  "\n include <section> tag between the tag <sections></sections>");
                         extractJSON = SageExtraction.ExtractData(aiComments);
                         sectionCount = SageExtraction.GetSectionsCount(extractJSON);
                         if(sectionCount == 0)
@@ -300,14 +303,14 @@ namespace SystemComments.Controllers
                     else if(lastSection > sectionCount && lastSection <= totalSections)
                     {
                         string updatedPrompt = $"{comments} \n{sageQuestions} \n Section {lastSection} of {totalSections} is missed, please include. {allSectionsPrompt}\n include <section> tag between the tag <sections></sections>";
-                        aiComments = GetSAGEChatGPTResponse(updatedPrompt);    
+                        aiComments = GetAISAGEWithStreaming(updatedPrompt);    
                         extractJSON = SageExtraction.ExtractData(aiComments);
                         sectionCount = SageExtraction.GetSectionsCount(extractJSON);
                         if (sectionCount == 0)
                         {
                             extractJSON = minifiedJson;
                         }
-                    }                   
+                    }
                     
                     sectionCount = SageExtraction.GetSectionsCount(extractJSON);                   
                     if (lastSection > sectionCount && lastSection <= totalSections)
@@ -1158,92 +1161,12 @@ namespace SystemComments.Controllers
             }
 
         }
-
-        public static async Task<string> SummarizeChunk(string chunk, string apiKey)
-        {
-            using (HttpClient client = new HttpClient())
-            {
-                client.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", apiKey);
-
-                var request = new OpenAIRequest
-                {
-                    Model = "gpt-4o",  // Replace with the appropriate model
-                    Temperature = 0.7f,                   
-                    MaxTokens = 500  // Adjust based on your model's limit
-                };
-
-                request.Messages = new RequestMessage[]
-                       {
-                                        new RequestMessage()
-                                        {
-                                             Role = "system",
-                                             Content = $"Summarize the following text:\n{chunk}"
-                                        }
-                                        
-                       };
-
-                var jsonRequest = Newtonsoft.Json.JsonConvert.SerializeObject(request);
-                var content = new StringContent(jsonRequest, Encoding.UTF8, "application/json");
-
-                HttpResponseMessage response = await client.PostAsync("https://api.openai.com/v1/completions", content);
-
-                if (response.IsSuccessStatusCode)
-                {
-                    var result = await response.Content.ReadAsStringAsync();
-                    dynamic jsonResponse = Newtonsoft.Json.JsonConvert.DeserializeObject(result);
-                    return jsonResponse.choices[0].text.ToString();
-                }
-                else
-                {
-                    throw new Exception("Failed to summarize the chunk.");
-                }
-            }
-        }
-
-        public static async Task<string> CombineSummaries(List<string> summaries, string apiKey)
-        {
-            string combinedText = string.Join("\n", summaries);
-            return await SummarizeChunk(combinedText, apiKey);  // Reuse the SummarizeChunk function
-        }
-
-        public static async Task<string> SummarizeLargeText(string inputText, string apiKey)
-        {
-            // Step 1: Chunk the input text
-            List<string> textChunks = ChunkText(inputText, 1000);  // You can adjust chunk size
-
-            // Step 2: Summarize each chunk
-            List<string> summaries = new List<string>();
-            foreach (string chunk in textChunks)
-            {
-                string summary = await SummarizeChunk(chunk, apiKey);
-                summaries.Add(summary);
-            }
-
-            // Step 3: Combine the chunk summaries
-            string finalSummary = await CombineSummaries(summaries, apiKey);
-
-            return finalSummary;
-        }
-
-        public static List<string> ChunkText(string input, int chunkSize = 1000)
-        {
-            List<string> chunks = new List<string>();
-            int inputLength = input.Length;
-
-            for (int i = 0; i < inputLength; i += chunkSize)
-            {
-                // Get a substring of chunkSize or the remaining length
-                int length = Math.Min(chunkSize, inputLength - i);
-                chunks.Add(input.Substring(i, length));
-            }
-
-            return chunks;
-        }    
-
+               
         private string GetAISAGEChatGptResponse(string comments)
         {
             try
             {
+                comments = RemoveNewLinesBetweenTags(comments);
                 string aiKey = _config.GetSection("AppSettings:AIToken").Value;
                 HttpClient client = new HttpClient();
                 client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", aiKey);
@@ -1309,6 +1232,177 @@ namespace SystemComments.Controllers
                 return "An error occurred:";
             }
 
+        }
+
+        public static string RemoveNewLinesBetweenTags(string xmlContent)
+        {
+            // Step 1: Remove new line characters between XML tags
+            string cleanedXml = Regex.Replace(xmlContent, @">\s+<", "><");
+
+            // Step 2: Optional - Remove leading or trailing whitespace
+            cleanedXml = cleanedXml.Trim();
+
+            return cleanedXml;
+        }
+
+        private string GetAISAGEWithStreaming(string prompt)
+        {
+            prompt = RemoveNewLinesBetweenTags(prompt);
+            string aiKey = _config.GetSection("AppSettings:AIToken").Value;
+            // Set up the HTTP client
+            using var httpClient = new HttpClient();
+
+            // OpenAI Chat Completion API endpoint
+            string url = "https://api.openai.com/v1/chat/completions";
+
+            // Create the request payload
+            var requestBody = new
+            {
+                model = "gpt-4o",
+                messages = new[]
+                {                   
+                    new { role = "user", content = prompt.Replace("\n\n\n","\n") + "\nRemove new line characters \n in the response." }
+                },
+                max_tokens = 4000,
+                temperature = 0.7,
+                stream = true // Enable streaming
+            };
+
+            // Serialize the payload to JSON
+            string jsonPayload = System.Text.Json.JsonSerializer.Serialize(requestBody);
+
+            // Set up the request message
+            var requestMessage = new HttpRequestMessage(HttpMethod.Post, url)
+            {
+                Content = new StringContent(jsonPayload, Encoding.UTF8, "application/json")
+            };
+
+            // Add authorization and headers
+            requestMessage.Headers.Authorization = new AuthenticationHeaderValue("Bearer", aiKey);
+            string data = "";
+            string content = "";
+            StringBuilder xmlBuilder = new StringBuilder();
+            try
+            {
+                // Send the request synchronously
+                HttpResponseMessage response = httpClient.Send(requestMessage, HttpCompletionOption.ResponseHeadersRead);
+
+                if (response.IsSuccessStatusCode)
+                {
+                    Console.WriteLine("Streaming response from OpenAI:");
+
+                    //using var stream = response.Content.ReadAsStream();
+                    //using var reader = new StreamReader(stream, Encoding.UTF8, detectEncodingFromByteOrderMarks: false, bufferSize: 16384);
+
+                    //// Use StringBuilder for efficient concatenation
+                    //StringBuilder sb = new StringBuilder();
+                    //char[] buffer = new char[16384];  // Read in 16 KB chunks
+                    //int bytesRead;
+
+                    //// Read chunks and append to StringBuilder
+                    //while ((bytesRead = reader.Read(buffer, 0, buffer.Length)) > 0)
+                    //{
+                    //    xmlBuilder.Append(buffer, 0, bytesRead);
+                    //}
+
+                    //// Convert to string
+                    //string fullContent = sb.ToString();
+
+                    //// Process and output the response
+                    //Console.WriteLine(fullContent);
+
+                    using var stream = response.Content.ReadAsStream();
+                    using var reader = new StreamReader(stream, Encoding.UTF8, bufferSize: 8192);
+
+                    string fullResponse = reader.ReadToEnd();
+
+                    // Split the full response by newline and process each line
+                    var lines = fullResponse.Split(new[] { "\n" }, StringSplitOptions.RemoveEmptyEntries);
+
+                    foreach (var line in lines)
+                    {
+                        if (line.StartsWith("data: "))
+                        {
+                            data = line.Substring(6); // Remove "data: " prefix
+
+                            if (data == "[DONE]")
+                            {
+                                // End of the stream
+                                break;
+                            }
+
+                            try
+                            {
+                                var jsonDoc = JsonDocument.Parse(data);
+                                var choices = jsonDoc.RootElement.GetProperty("choices");
+                                foreach (var choice in choices.EnumerateArray())
+                                {
+                                    if (choice.TryGetProperty("delta", out var delta) &&
+                                        delta.TryGetProperty("content", out var content1))
+                                    {
+                                        content += content1.GetString();
+                                    }
+                                }
+                            }
+                            catch (Exception ex)
+                            {
+                                Console.WriteLine("Failed to parse JSON: " + ex.Message);
+                            }
+
+                            Console.WriteLine(data);
+                        }
+                    }
+
+                    //string fullResponse = reader.ReadToEnd();
+                    //string? line;
+                    //while ((line = reader.ReadLine()) != null)
+                    //{
+                    //    // OpenAI streams partial events prefixed with "data:"
+                    //    if (line.StartsWith("data: "))
+                    //    {
+                    //        data = line.Substring(6); // Remove "data: " prefix
+
+                    //        if (data == "[DONE]")
+                    //        {
+                    //            // End of the stream
+                    //            break;
+                    //        }
+
+                    //        try
+                    //        {
+                    //            var jsonDoc = JsonDocument.Parse(data);
+                    //            var choices = jsonDoc.RootElement.GetProperty("choices");
+                    //            foreach (var choice in choices.EnumerateArray())
+                    //            {
+                    //                if (choice.TryGetProperty("delta", out var delta) &&
+                    //                    delta.TryGetProperty("content", out var content1))
+                    //                {
+                    //                    content += content1.GetString();
+                    //                }
+                    //            }
+                    //        }
+                    //        catch (Exception ex)
+                    //        {
+                    //            Console.WriteLine("Failed to parse JSON: " + ex.Message);
+                    //        }
+
+                    //        Console.WriteLine(data);
+                    //    }
+                    //}
+                }
+                else
+                {
+                    Console.WriteLine($"Failed to call OpenAI API. Status Code: {response.StatusCode}");
+                    Console.WriteLine($"Reason: {response.ReasonPhrase}");
+                }
+                return content;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine("An error occurred:");
+                Console.WriteLine(ex.Message);
+                return "[]";
+            }
         }
 
         public async Task<string> GetAIResponseAsync(string comments)
