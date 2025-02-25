@@ -1170,13 +1170,45 @@ namespace SystemComments.Controllers
 
         private static int EstimateTokens(string text)
         {
-            return (int)(text.Length * 0.25); // Simple heuristic (1 char ≈ 0.25 tokens)
+            //return (int)(text.Length * 0.25); // Simple heuristic (1 char ≈ 0.25 tokens)
+            return (int)(text.Length / 4);
         }
 
         private static int CalculateMaxTokens(string prompt, int modelLimit = 128000)
         {
             int promptTokens = EstimateTokens(prompt);
-            return Math.Max(100, modelLimit - promptTokens - 100); // Ensure at least 100 tokens
+            return Math.Max(100, modelLimit - promptTokens - 1500); // Ensure at least 100 tokens
+        }
+
+        public static int GetMaxTokens(string prompt, int modelLimit = 128000, int minResponse = 100, int maxResponse = 4000, int safetyBuffer = 100)
+        {
+            int promptTokens = EstimateTokens(prompt);
+
+            if (promptTokens >= modelLimit)
+                return minResponse; // If prompt is too long, return minimal response tokens
+
+            // Adjust response length based on prompt size
+            int remainingTokens = modelLimit - promptTokens - safetyBuffer;
+
+            if (promptTokens < 1000)
+                return Math.Min(maxResponse, remainingTokens); // Allow full response
+            else if (promptTokens < 5000)
+                return Math.Min(2000, remainingTokens); // Medium response
+            else if (promptTokens < 8000)
+                return Math.Min(1000, remainingTokens); // Short response
+            else
+                return minResponse; // Very short response for huge prompts
+        }
+
+        public static int GetTokenLimit(string prompt, int modelLimit = 128000, int maxResponseLimit = 4000)
+        {
+            int promptTokens = EstimateTokens(prompt);
+
+            // Ensure we don't exceed the model's max token limit
+            int availableTokens = modelLimit - promptTokens;
+
+            // Ensure max_tokens does not exceed a safe response size
+            return Math.Max(100, Math.Min(availableTokens, maxResponseLimit));
         }
 
         private async Task<string> GetAISAGEChatGptResponse1(string comments)
@@ -1192,7 +1224,7 @@ namespace SystemComments.Controllers
                 new { role = "system", content = "SAGE: Trainee Assessment\nYou are an expert assessment designer..." },
                 new { role = "user", content = prompt }
             },
-                max_tokens = CalculateMaxTokens(prompt), // Adjust based on expected response length
+                max_tokens = GetMaxTokens(prompt), // Adjust based on expected response length
                 temperature = 0.5,
                 top_p = 0.9,
                 stream = true // Enables real-time streaming
