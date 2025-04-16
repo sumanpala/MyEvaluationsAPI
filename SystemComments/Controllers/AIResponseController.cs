@@ -287,10 +287,14 @@ namespace SystemComments.Controllers
                     }
                     //string aiComments = GetAISAGEWithStreaming(comments + "\n" + sageQuestions + "\n include <section> tag between the tag <sections></sections>");
                     //string aiComments = await GetAISAGEChatGptResponse1(comments + "\n" + sageQuestions + "\n include <section> tag between the tag <sections></sections>");
-                    string aiComments = await GetFastOpenAIResponse(comments + "\n" + ((sageQuestions.Length == 0) ? "Include Section 1 only." : sageQuestions) + "\n include <section> tag between the tag <sections></sections>");
+                    string aiComments = await GetFastOpenAIResponse(comments + "\n" + sageQuestions);
                     string extractJSON = SageExtraction.ExtractData(aiComments);
                     JToken parsedJson = JToken.Parse(extractJSON);
                     minifiedJson = JsonConvert.SerializeObject(parsedJson, Formatting.None);
+                    //if (input.SageRequest.Length > 0 && minifiedJson.Length > 0)
+                    //{
+                    //    minifiedJson = SageExtraction.MergeJson(input.SageRequest, minifiedJson);
+                    //}
                     minifiedJson = SageExtraction.UpdateRequestJSON(minifiedJson, input.SageRequest);
 
                     Int32 sectionCount = SageExtraction.GetSectionsCount(extractJSON);
@@ -302,7 +306,7 @@ namespace SystemComments.Controllers
                     }
                     if (sectionCount == 0)
                     {
-                        aiComments = await GetAISAGEChatGptResponse1(comments + "\n" + sageQuestions + "\nSections are missed in the tag <sections></sections>, Please include." + allSectionsPrompt + "\n include <section> tag between the tag <sections></sections>");
+                        aiComments = await GetFastOpenAIResponse(comments + "\n" + sageQuestions + "\nSections are missed in the tag <sections></sections>, Please include." + allSectionsPrompt + "\n include <section> tag between the tag <sections></sections>");
                         extractJSON = SageExtraction.ExtractData(aiComments);
                         sectionCount = SageExtraction.GetSectionsCount(extractJSON);
                         if (sectionCount == 0)

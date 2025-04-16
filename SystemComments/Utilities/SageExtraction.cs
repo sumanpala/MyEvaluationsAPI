@@ -6,6 +6,8 @@ using System.Data;
 using System.Linq;
 using System.Security;
 using System.Text;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
 using System.Web;
 using System.Xml.Linq;
@@ -204,6 +206,10 @@ namespace SystemComments.Utilities
                                                 {
                                                     newItems.Add(followSection);
                                                 }
+                                            }
+                                            else if(followSectionArray != null && followSectionArray.Count == 0)
+                                            {
+                                                newItems.Add(followSection);
                                             }
                                         }
                                         foreach (var newItem in newItems)
@@ -836,8 +842,8 @@ namespace SystemComments.Utilities
                                     }
                                     if (mainSection?["answer"] != null && mainSection["answer"].ToString().Length > 0)
                                     {
-                                        //sb.Append("Answer: " + mainSection["answer"].ToString() + "\n");
-                                        sb.Append("Answer: User Completed this question.\n");
+                                        sb.Append("Answer: " + mainSection["answer"].ToString() + "\n");
+                                        //sb.Append("Answer: User Completed this question.\n");
                                         isCompleteOneAnswer = true;
                                     }
                                     else
@@ -870,8 +876,8 @@ namespace SystemComments.Utilities
                                     }
                                     if (followup["answer"] != null && followup["answer"]?.ToString().Length > 0)
                                     {
-                                        sb.Append("Answer: User Completed this question.\n");
-                                        //sb.Append("Answer: " + followup["answer"]?.ToString() + "\n");
+                                        //sb.Append("Answer: User Completed this question.\n");
+                                        sb.Append("Answer: " + followup["answer"]?.ToString() + "\n");
                                     }
                                     else
                                     {
@@ -892,14 +898,14 @@ namespace SystemComments.Utilities
                             {
                                 includedSteps += $"\n\t\t {sectionNum}. Section {sectionNum} of {totalSections.ToString()}";
                             }
-                            if(sectionNum >= 2 && sectionNum <= totalSections && isCompleteOneAnswer)
-                            {
-                                followupInstructions += ((followupInstructions.Length == 0) ? $"Don't include the new followup questions for the sections Section {(sectionNum - 1)} of {totalSections.ToString()}" : $" and {(sectionNum - 1)} of {totalSections.ToString()}");
-                            }
-                            if(sectionNum == totalSections)
-                            {
-                                includedSteps += $"\nInclude <endmessage></endmessage>";
-                            }
+                            //if(sectionNum >= 2 && sectionNum <= totalSections && isCompleteOneAnswer)
+                            //{
+                            //    followupInstructions += ((followupInstructions.Length == 0) ? $"Don't include the new followup questions for the sections Section {(sectionNum - 1)} of {totalSections.ToString()}" : $" and {(sectionNum - 1)} of {totalSections.ToString()}");
+                            //}
+                            //if(sectionNum == totalSections)
+                            //{
+                            //    includedSteps += $"\nInclude <endmessage></endmessage>";
+                            //}
                         }
                         
                         sb.Append("\n"); // Add spacing between sections
@@ -1072,5 +1078,152 @@ namespace SystemComments.Utilities
 
             return tableLookup[tableName];
         }
+        public static string MergeJson(string json1, string json2)
+        {
+            try
+            {
+                // Deserialize JSON 1
+                var json1Object = System.Text.Json.JsonSerializer.Deserialize<JsonRoot>(json1);
+
+                // Deserialize JSON 2
+                var json2Object = System.Text.Json.JsonSerializer.Deserialize<JsonRoot>(json2);
+
+                if (json1Object == null || json2Object == null)
+                    return json1; // If any JSON is invalid, return original JSON 1
+
+                // Convert sections to a dictionary for easy lookup
+                var sectionsMap = json1Object.Sections.ToDictionary(s => s.SectionNum, s => s);
+
+                foreach (var section in json2Object.Sections)
+                {
+                    if (sectionsMap.ContainsKey(section.SectionNum))
+                    {
+                        // Merge existing section
+                        var existingSection = sectionsMap[section.SectionNum];
+
+                        if (existingSection.MainSection == null || existingSection.MainSection.Count == 0)
+                        {
+                            existingSection.MainSection = section.MainSection;
+                        }
+
+                        if (existingSection.FollowupSections == null || existingSection.FollowupSections.Count == 0)
+                        {
+                            existingSection.FollowupSections = section.FollowupSections;
+                        }
+                    }
+                    else
+                    {
+                        // Add new section
+                        json1Object.Sections.Add(section);
+                    }
+                }
+
+                // Serialize back to JSON
+                return System.Text.Json.JsonSerializer.Serialize(json1Object, new JsonSerializerOptions { WriteIndented = true });
+            }
+            catch (Exception ex)
+            {
+                return json1;
+            }
+        }
+    }
+    // JSON Model Classes
+    public class JsonRoot
+    {
+        [JsonPropertyName("totalsections")]
+        public string TotalSections { get; set; }
+
+        [JsonPropertyName("sections")]
+        public List<Section> Sections { get; set; }
+
+        [JsonPropertyName("allsections")]
+        public List<AllSection> AllSections { get; set; }
+    }
+
+    public class Section
+    {
+        [JsonPropertyName("name")]
+        public string Name { get; set; }
+
+        [JsonPropertyName("fullname")]
+        public string Fullname { get; set; }
+
+        [JsonPropertyName("sectionnum")]
+        public int SectionNum { get; set; }
+
+        [JsonPropertyName("iscomplete")]
+        public string IsComplete { get; set; }
+
+        [JsonPropertyName("mainsection")]
+        public List<MainSection> MainSection { get; set; }
+
+        [JsonPropertyName("followupsections")]
+        public List<FollowupSection> FollowupSections { get; set; }
+    }
+
+    public class MainSection
+    {
+        [JsonPropertyName("description")]
+        public string Description { get; set; }
+
+        [JsonPropertyName("mainquestion")]
+        public string MainQuestion { get; set; }
+
+        [JsonPropertyName("answer")]
+        public string Answer { get; set; }
+
+        [JsonPropertyName("id")]
+        public string Id { get; set; }
+
+        [JsonPropertyName("wait")]
+        public string Wait { get; set; }
+
+        [JsonPropertyName("guide")]
+        public Guide Guide { get; set; }
+    }
+
+    public class Guide
+    {
+        [JsonPropertyName("description")]
+        public string Description { get; set; }
+
+        [JsonPropertyName("guidequestions")]
+        public List<GuideQuestion> GuideQuestions { get; set; }
+    }
+
+    public class GuideQuestion
+    {
+        [JsonPropertyName("guidequestion")]
+        public string GuideQuestionText { get; set; }
+
+        [JsonPropertyName("id")]
+        public string Id { get; set; }
+    }
+
+    public class FollowupSection
+    {
+        [JsonPropertyName("description")]
+        public string Description { get; set; }
+
+        [JsonPropertyName("question")]
+        public string Question { get; set; }
+
+        [JsonPropertyName("answer")]
+        public string Answer { get; set; }
+
+        [JsonPropertyName("id")]
+        public string Id { get; set; }
+
+        [JsonPropertyName("wait")]
+        public string Wait { get; set; }
+    }
+
+    public class AllSection
+    {
+        [JsonPropertyName("name")]
+        public string Name { get; set; }
+
+        [JsonPropertyName("fullname")]
+        public string Fullname { get; set; }
     }
 }
