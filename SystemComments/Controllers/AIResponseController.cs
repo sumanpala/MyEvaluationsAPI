@@ -287,7 +287,7 @@ namespace SystemComments.Controllers
                     }
                     //string aiComments = GetAISAGEWithStreaming(comments + "\n" + sageQuestions + "\n include <section> tag between the tag <sections></sections>");
                     //string aiComments = await GetAISAGEChatGptResponse1(comments + "\n" + sageQuestions + "\n include <section> tag between the tag <sections></sections>");
-                    string aiComments = await GetFastOpenAIResponse(comments + "\n" + sageQuestions);
+                    string aiComments = await GetFastOpenAIResponse(comments + "\n include <mainsection></mainsection> without fail. \n Answer is always empty in the response for example <answer></answer> \n" + sageQuestions);
                     string extractJSON = SageExtraction.ExtractData(aiComments);
                     JToken parsedJson = JToken.Parse(extractJSON);
                     minifiedJson = JsonConvert.SerializeObject(parsedJson, Formatting.None);
