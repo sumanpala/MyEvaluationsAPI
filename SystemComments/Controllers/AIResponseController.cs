@@ -693,6 +693,127 @@ namespace SystemComments.Controllers
             return regex.Matches(airesponse);
         }
 
+        private string GetMyInsightPrompt(string dateRange)
+        {
+            string prompt_initial = "";
+            prompt_initial = String.Format("You are an expert medical educator tasked with generating narrative feedback based on evaluations from {0}. " +
+                        "These evaluations reflect the trainee’s performance over time. Follow these steps to ensure personalized, actionable feedback that is clearly formatted for HTML: \n\n" +
+                        "Instructions:\n Performance Comparison: \n\n" +
+
+                        "Compare the trainee’s performance during the initial 3 months to the most recent 3 months within the 6-month range.\n" +
+                        "Highlight performance trends, specifically noting improvements or regressions over time. \n" +
+                        "Clearly differentiate between the two time frames using specific date ranges (e.g., \"Performance from [Start Date] to [Mid Date]\" vs. \"Performance from [Mid Date] to [End Date]\").\n" +
+                        "Actionable, Contextual Feedback: \n\n" +
+
+                        "Tailor feedback to each trainee by referencing specific evaluator comments.\n Provide personalized, varied, and actionable feedback for each competency.\n" +
+                        "Avoid generic responses for competencies like communication or professionalism. For example, one trainee may benefit from \"role-playing critical patient interactions,\" while another may require \"simulating case reviews with attending physicians.\" \n" +
+                        "Core Competency Alignment:\n\n" +
+
+                        "Organize feedback under the following ACGME core competencies:\n Patient Care \n Medical Knowledge \n Systems-Based Practice \n Practice-Based Learning & Improvement \n Professionalism \n Interpersonal & Communication Skills \n" +
+                        "Patient Care\nMedical Knowledge\nSystems-Based Practice\nPractice-Based Learning & Improvement\nProfessionalism\nInterpersonal & Communication Skills" +
+                        "If feedback spans multiple competencies, divide the feedback accordingly. If no competency applies, place it in the Overall MyInsights section. \n" +
+                        "Tone, Personalization, and Gender Neutrality: \n\n" +
+                        "Maintain a professional and constructive tone. \n" +
+                        "Maintain a professional, constructive tone throughout.\n " +
+                        "Use gender-neutral language (e.g., \"the trainee,\" \"the resident,\" or \"they\"). \n " +
+                        "Personalize feedback by referencing specific cases, patient interactions, or behaviors, ensuring distinct feedback for each trainee even when addressing similar areas.\n " +
+                        "Structured Feedback Format:\n\n" +
+                        "Use clear HTML headers and subheaders to organize the feedback, categorizing each section by competency.\n\n" +
+                        "Use bullet points for actionable steps and goal-setting to ensure clarity.\n" +
+                        "Comments:\n" +
+                        "Ensure the feedback is clearly categorized under each core competency with corresponding HTML headers and subheaders.\n" +
+                        "Break down actionable feedback into bullet points, making it clear and easy to understand.\n" +
+                        "Avoid redundancy across trainees and ensure all recommendations are varied, even if the themes are similar." +
+                        "Use gender-neutral language and professional tone throughout the feedback.\n\n"
+                        , dateRange);
+            prompt_initial += String.Format("Expected Output Format:\n\n" +
+                "<h1>Patient Care</h1> \n" +
+                "<h2>Initial 3 Months: (e.g., Performance from [Start Date] to [Mid Date])</h2> \n" +
+                "<p>Summarize the trainee's early performance, highlighting strengths and areas for improvement.</p> \n" +
+                "<h2>Most Recent 3 Months: (e.g., Performance from [Mid Date] to [End Date])</h2> \n" +
+                "<p>Summarize recent performance, noting any improvements or regressions.</p> \n" +
+                "<h3>Actionable Feedback:</h3> \n" +
+                "<ul><li>Provide specific strategies based on evaluator comments. E.g., \"During the ICU rotation, the evaluator noted a significant improvement in time management.\"</li><ul>\n\n" +
+
+                "<h1>Medical Knowledge</h1> \n" +
+                "<h2>Initial 3 Months: (e.g., Performance from [Start Date] to [Mid Date])</h2> \n" +
+                "<p>Summarize the trainee's early medical knowledge performance.</p> \n" +
+                "<h2>Most Recent 3 Months: (e.g., Performance from [Mid Date] to [End Date])</h2> \n" +
+                "<p>Summarize recent medical knowledge performance, noting specific improvements or challenges.</p> \n" +
+                "<h3>Actionable Feedback:</h3> \n" +
+                "<ul><li>Recommend specific strategies such as targeted readings, workshops, or simulation tools.</li><ul>\n\n" +
+
+                "<h1>Systems-Based Practice</h1> \n" +
+                "<h2>Initial 3 Months: (e.g., Performance from [Start Date] to [Mid Date])</h2> \n" +
+                "<p>Summarize the trainee's early systems-based practice performance.</p> \n" +
+                "<h2>Most Recent 3 Months: (e.g., Performance from [Mid Date] to [End Date])</h2> \n" +
+                "<p>Summarize recent systems-based practice performance.</p> \n" +
+                "<h3>Actionable Feedback:</h3> \n" +
+                "<ul><li>Offer specific feedback on resource management, coordination of care transitions, or other system-based practices.</li><ul>\n\n" +
+
+                "<h1>Practice-Based Learning & Improvement</h1> \n" +
+                "<h2>Initial 3 Months: (e.g., Performance from [Start Date] to [Mid Date])</h2> \n" +
+                "<p>Summarize the trainee's early practice-based learning & improvement performance.</p> \n" +
+                "<h2>Most Recent 3 Months: (e.g., Performance from [Mid Date] to [End Date])</h2> \n" +
+                "<p>Summarize recent practice-based learning & improvement performance.</p> \n" +
+                "<h3>Actionable Feedback:</h3> \n" +
+                "<ul><li>Offer specific feedback on resource management, coordination of care transitions, or other practice-based learning & improvement.</li><ul>\n\n" +
+
+                "<h1>Professionalism</h1> \n" +
+                "<h2>Initial 3 Months: (e.g., Performance from [Start Date] to [Mid Date])</h2> \n" +
+                "<p>Summarize the trainee's early professionalism performance.</p> \n" +
+                "<h2>Most Recent 3 Months: (e.g., Performance from [Mid Date] to [End Date])</h2> \n" +
+                "<p>Summarize recent professionalism performance.</p> \n" +
+                "<h3>Actionable Feedback:</h3> \n" +
+                "<ul><li>Offer specific feedback on resource management, coordination of care transitions, or other professionalism.</li><ul>\n" +
+
+                "<h1>Interpersonal & Communication Skills</h1> \n" +
+                "<h2>Initial 3 Months: (e.g., Performance from [Start Date] to [Mid Date])</h2> \n" +
+                "<p>Summarize the trainee's early interpersonal & communication skills performance.</p> \n" +
+                "<h2>Most Recent 3 Months: (e.g., Performance from [Mid Date] to [End Date])</h2> \n" +
+                "<p>Summarize recent interpersonal & communication skills performance performance.</p> \n" +
+                "<h3>Actionable Feedback:</h3> \n" +
+                "<ul><li>Offer specific feedback on resource management, coordination of care transitions, or other interpersonal & communication skills performance.</li><ul>\n" +
+
+                "<h1>Overall MyInsights</h1>\n" +
+                "<h3>Strengths:</h3>\n" +
+                "<ul><li>Summarize key strengths based on evaluations.</li></ul>\n" +
+                "<h3>Areas for Improvement:</h3>\n" +
+                "<ul><li>Highlight areas for improvement based on evaluations.</li></ul>\n" +
+                "<h3>Actionable Steps:</h3>\n" +
+                "<ul><li>Provide concrete steps for improvement. Use varied suggestions for each trainee, ensuring that feedback is distinct across users.</li></ul>\n" +
+                "<h3>Short-Term Goals (Next 3-6 months):</h3>\n" +
+                "<ul><li>Provide specific, measurable goals for the short term. Example: \"Attend two communication workshops and practice concise patient summaries.\"</li></ul>\n" +
+                "<h3>Long-Term Goals (6 months to 1 year):</h3>" +
+                "<ul><li>Offer specific, time-bound long-term goals. Example: \"Lead three interdisciplinary rounds and improve care plan efficiency by 15%.\"</li></ul>\n"
+               );
+            return prompt_initial;
+        }
+        private string GetAttendingMyInsightPrompt(string dateRange)
+        {
+            string prompt_initial = String.Format("You are an expert medical educator tasked with reviewing faculty performance and generating narrative feedback based on evaluations over a six-month period {0}. " +
+                "These evaluations reflect the faculty's performance over time. Follow these steps to ensure personalized, actionable feedback that is clearly formatted for HTML.\n\n Instructions:\nPerformance Comparison:\n\n" +
+                "Compare the faculty’s performance during the initial 3 months to the most recent 3 months within the 6-month range.\r\nHighlight performance trends, specifically noting improvements or regressions over time.\r\nClearly differentiate between the two time frames using specific date ranges (e.g., “Performance from [Start Date] to [Mid Date]” vs. “Performance from [Mid Date] to [End Date]”)." +
+                "\nActionable, Contextual Feedback:\n\nTailor feedback to each faculty by referencing specific evaluator comments.\r\nMaintain 100% anonymity of the evaluators at all times." +
+                "\r\nProvide personalized, varied, and actionable feedback for each competency." +
+                "\r\nAvoid generic responses for competencies like communication or professionalism. For example, one faculty may benefit from a specific recommendation while another may require something else more specific." +
+                "Core Competency Alignment:\n\nOrganize feedback under the following ACGME Clinical Educator Milestones based on the following competencies:\n" +
+                "Universal Pillars for All Clinician Educators\r\nAdministration\r\nDiversity, Equity, and Inclusion in the Learning Environment\r\nEducational Theory and Practice\r\nWell-Being" +
+                "\nIf feedback spans multiple competencies, divide the feedback accordingly. If no competency applies, place it in the Overall MyInsights section." +
+                "\nTone, Personalization, and Gender Neutrality:\n\nMaintain a professional, constructive tone throughout.\r\nUse gender-neutral language (e.g., \"the faculty,\" or \"they\").\r\nPersonalize feedback by referencing specific cases, patient interactions, or behaviors, ensuring distinct feedback for each faculty even when addressing similar areas.\r\n" +
+                "Structured Feedback Format:\n\nUse clear HTML headers and subheaders to organize the feedback, categorizing each section by competency.\r\nUse bullet points for actionable steps and goal-setting to ensure clarity.\n\n" +
+                "Comments:\r\nEnsure the feedback is clearly categorized under each milestone/competency with corresponding HTML headers and subheaders.\r\nBreak down actionable feedback into bullet points, making it clear and easy to understand.\r\nAvoid redundancy across faculty and ensure all recommendations are varied, even if the themes are similar.\r\nUse gender-neutral language and professional tone throughout the feedback.\n\n" +
+                "Expected HTML Output Format:\n\n<h1>Universal Pillars for All Clinician Educators</h1>\r\n<h2>Initial 3 Months: (e.g., Performance from [Start Date] to [Mid Date])</h2>\r\n<p>Summarize the faculty's early performance, highlighting strengths and areas for improvement.</p>\r\n<h2>Most Recent 3 Months: (e.g., Performance from [Mid Date] to [End Date])</h2>\r\n<p>Summarize recent performance, noting any improvements or regressions.</p>\r\n<h3>Actionable Feedback:</h3>\r\n<ul>\r\n  <li>Provide specific strategies based on evaluator comments related to commitment to lifelong learning and enhancing one's own behaviors as a clinician educator.</li>\r\n</ul>" +
+                "\n<h1>Administration</h1>\r\n<h2>Initial 3 Months: (e.g., Performance from [Start Date] to [Mid Date])</h2>\r\n<p>Summarize the faculty's early medical knowledge performance.</p>\r\n<h2>Most Recent 3 Months: (e.g., Performance from [Mid Date] to [End Date])</h2>\r\n<p>Summarize recent administration performance, noting specific improvements or challenges.</p>\r\n<h3>Actionable Feedback:</h3>\r\n<ul>\r\n  <li>Recommend specific strategies related to administrative skills relevant to their professional role, program management, and the learning environment that leads to best health outcomes.</li>\r\n</ul>" +
+                "\n<h1>Diversity, Equity, and Inclusion in the Learning Environment</h1>\r\n<h2>Initial 3 Months: (e.g., Performance from [Start Date] to [Mid Date])</h2>\r\n<p>Summarize the faculty's early systems-based practice performance.</p>\r\n<h2>Most Recent 3 Months: (e.g., Performance from [Mid Date] to [End Date])</h2>\r\n<p>Summarize recent systems-based practice performance.</p>\r\n<h3>Actionable Feedback:</h3>\r\n<ul>\r\n  <li>Offer specific feedback on addressing the complex intrapersonal, interpersonal, and systemic influences of diversity, power, privilege, and inequity in all settings so all educators and learners can thrive and succeed.</li>\r\n</ul>" +
+                "\n<h1>Educational Theory and Practice</h1>\r\n<h2>Initial 3 Months: (e.g., Performance from [Start Date] to [Mid Date])</h2>\r\n<p>Summarize the faculty's early systems-based practice performance.</p>\r\n<h2>Most Recent 3 Months: (e.g., Performance from [Mid Date] to [End Date])</h2>\r\n<p>Summarize recent systems-based practice performance.</p>\r\n<h3>Actionable Feedback:</h3>\r\n<ul>\r\n  <li>Offer specific feedback to ensure the optimal development of competent learners through the application of the science of teaching and learning to practice.</li>\r\n</ul>" +
+                "\n<h1>Well-Being</h1>\r\n<h2>Initial 3 Months: (e.g., Performance from [Start Date] to [Mid Date])</h2>\r\n<p>Summarize the faculty's early systems-based practice performance.</p>\r\n<h2>Most Recent 3 Months: (e.g., Performance from [Mid Date] to [End Date])</h2>\r\n<p>Summarize recent systems-based practice performance.</p>\r\n<h3>Actionable Feedback:</h3>\r\n<ul>\r\n  <li>Offer specific feedback to apply principles of well-being to develop and model a learning environment that supports behaviors which promote personal and learner psychological, emotional, and physical health.</li>\r\n</ul>" +
+                "\n<h1>Overall MyInsights</h1>\r\n<h3>Strengths:</h3>\r\n<ul>\r\n  <li>Summarize key strengths based on evaluations.</li>\r\n</ul>\r\n<h3>Areas for Improvement:</h3>\r\n<ul>\r\n  <li>Highlight areas for improvement based on evaluations.</li>\r\n</ul>\r\n<h3>Actionable Steps:</h3>\r\n<ul>\r\n  <li>Provide concrete steps for improvement. Use varied suggestions for each faculty, ensuring that feedback is distinct across users.</li>\r\n</ul>\r\n<h3>Short-Term Goals (Next 3-6 months):</h3>\r\n<ul>\r\n  <li>Provide specific, measurable goals for the short term. Example: \"Attend two communication workshops and practice concise patient summaries.\"</li>\r\n</ul>\r\n<h3>Long-Term Goals (6 months to 1 year):</h3>\r\n<ul>\r\n  <li>Offer specific, time-bound long-term goals. Example: \"Lead three interdisciplinary rounds and improve care plan efficiency by 15%.\"</li>\r\n</ul>"
+                , dateRange);
+
+            return prompt_initial;
+        }
+
         private string GetComments(AIRequest input)
         {
             string comments = string.Empty;
@@ -750,98 +871,8 @@ namespace SystemComments.Controllers
 
                     string prompt_final = String.Format("You are an expert medical educator. Consider summary comments listed by ACGME core competencies from the period {0}, followed by comments from different evaluators for the period {0} listed in chronological order.\n Consider the summary comments during the initial period and compare to their performance during the latter period.  Provide a comparison of the initial performance to the most recent performance, and detail a trend in the performance.\n Assume the resident has multiple opportunities to improve and grow in that period. Analyze the comments to demonstrate a trend in their performance. Please provide the resident with detailed narrative summaries of their performance.\n Separate each narrative summary by the six core ACGME competencies and provide an 'Overall MyInsights' section to summarize all their strengths and weaknesses.\nPlease sort the competency headings into the following order: Patient Care, Medical Knowledge, System-Based Practices, Practice-Based Learning & Improvement, Professionalism, and Interpersonal & Communication Skills.\n Phrase the responses to the resident but do not use their name. Do not refer to them by name.\n display header in bold. Do not rewrite the comments in your response.", dateRange);
                     string prompt_feedback = "User accepted assistant reply. Consider this as user feedback. display header in bold.";
-
-                    prompt_initial = String.Format("You are an expert medical educator tasked with generating narrative feedback based on evaluations from {0}. " +
-                        "These evaluations reflect the trainee’s performance over time. Follow these steps to ensure personalized, actionable feedback that is clearly formatted for HTML: \n\n" +
-                        "Instructions:\n Performance Comparison: \n\n" +
-
-                        "Compare the trainee’s performance during the initial 3 months to the most recent 3 months within the 6-month range.\n" +
-                        "Highlight performance trends, specifically noting improvements or regressions over time. \n" +
-                        "Clearly differentiate between the two time frames using specific date ranges (e.g., \"Performance from [Start Date] to [Mid Date]\" vs. \"Performance from [Mid Date] to [End Date]\").\n" + 
-                        "Actionable, Contextual Feedback: \n\n" +
-
-                        "Tailor feedback to each trainee by referencing specific evaluator comments.\n Provide personalized, varied, and actionable feedback for each competency.\n" +
-                        "Avoid generic responses for competencies like communication or professionalism. For example, one trainee may benefit from \"role-playing critical patient interactions,\" while another may require \"simulating case reviews with attending physicians.\" \n" +
-                        "Core Competency Alignment:\n\n" +
-
-                        "Organize feedback under the following ACGME core competencies:\n Patient Care \n Medical Knowledge \n Systems-Based Practice \n Practice-Based Learning & Improvement \n Professionalism \n Interpersonal & Communication Skills \n" +
-                        "Patient Care\nMedical Knowledge\nSystems-Based Practice\nPractice-Based Learning & Improvement\nProfessionalism\nInterpersonal & Communication Skills" +
-                        "If feedback spans multiple competencies, divide the feedback accordingly. If no competency applies, place it in the Overall MyInsights section. \n" +
-                        "Tone, Personalization, and Gender Neutrality: \n\n" +
-                        "Maintain a professional and constructive tone. \n" +
-                        "Maintain a professional, constructive tone throughout.\n " +
-                        "Use gender-neutral language (e.g., \"the trainee,\" \"the resident,\" or \"they\"). \n " +
-                        "Personalize feedback by referencing specific cases, patient interactions, or behaviors, ensuring distinct feedback for each trainee even when addressing similar areas.\n " +
-                        "Structured Feedback Format:\n\n" +
-                        "Use clear HTML headers and subheaders to organize the feedback, categorizing each section by competency.\n\n" +
-                        "Use bullet points for actionable steps and goal-setting to ensure clarity.\n" +
-                        "Comments:\n" +
-                        "Ensure the feedback is clearly categorized under each core competency with corresponding HTML headers and subheaders.\n" +
-                        "Break down actionable feedback into bullet points, making it clear and easy to understand.\n" +
-                        "Avoid redundancy across trainees and ensure all recommendations are varied, even if the themes are similar." +
-                        "Use gender-neutral language and professional tone throughout the feedback.\n\n" 
-                        , dateRange);
-                    prompt_initial += String.Format("Expected Output Format:\n\n" +
-                        "<h1>Patient Care</h1> \n" +
-                        "<h2>Initial 3 Months: (e.g., Performance from [Start Date] to [Mid Date])</h2> \n" +
-                        "<p>Summarize the trainee's early performance, highlighting strengths and areas for improvement.</p> \n" +
-                        "<h2>Most Recent 3 Months: (e.g., Performance from [Mid Date] to [End Date])</h2> \n" +
-                        "<p>Summarize recent performance, noting any improvements or regressions.</p> \n" +
-                        "<h3>Actionable Feedback:</h3> \n" +
-                        "<ul><li>Provide specific strategies based on evaluator comments. E.g., \"During the ICU rotation, the evaluator noted a significant improvement in time management.\"</li><ul>\n\n" +
-
-                        "<h1>Medical Knowledge</h1> \n" +
-                        "<h2>Initial 3 Months: (e.g., Performance from [Start Date] to [Mid Date])</h2> \n" +
-                        "<p>Summarize the trainee's early medical knowledge performance.</p> \n" +
-                        "<h2>Most Recent 3 Months: (e.g., Performance from [Mid Date] to [End Date])</h2> \n" +
-                        "<p>Summarize recent medical knowledge performance, noting specific improvements or challenges.</p> \n" +
-                        "<h3>Actionable Feedback:</h3> \n" +
-                        "<ul><li>Recommend specific strategies such as targeted readings, workshops, or simulation tools.</li><ul>\n\n" +
-
-                        "<h1>Systems-Based Practice</h1> \n" +
-                        "<h2>Initial 3 Months: (e.g., Performance from [Start Date] to [Mid Date])</h2> \n" +
-                        "<p>Summarize the trainee's early systems-based practice performance.</p> \n" +
-                        "<h2>Most Recent 3 Months: (e.g., Performance from [Mid Date] to [End Date])</h2> \n" +
-                        "<p>Summarize recent systems-based practice performance.</p> \n" +
-                        "<h3>Actionable Feedback:</h3> \n" +
-                        "<ul><li>Offer specific feedback on resource management, coordination of care transitions, or other system-based practices.</li><ul>\n\n" +
-
-                        "<h1>Practice-Based Learning & Improvement</h1> \n" +
-                        "<h2>Initial 3 Months: (e.g., Performance from [Start Date] to [Mid Date])</h2> \n" +
-                        "<p>Summarize the trainee's early practice-based learning & improvement performance.</p> \n" +
-                        "<h2>Most Recent 3 Months: (e.g., Performance from [Mid Date] to [End Date])</h2> \n" +
-                        "<p>Summarize recent practice-based learning & improvement performance.</p> \n" +
-                        "<h3>Actionable Feedback:</h3> \n" +
-                        "<ul><li>Offer specific feedback on resource management, coordination of care transitions, or other practice-based learning & improvement.</li><ul>\n\n" +
-
-                        "<h1>Professionalism</h1> \n" +
-                        "<h2>Initial 3 Months: (e.g., Performance from [Start Date] to [Mid Date])</h2> \n" +
-                        "<p>Summarize the trainee's early professionalism performance.</p> \n" +
-                        "<h2>Most Recent 3 Months: (e.g., Performance from [Mid Date] to [End Date])</h2> \n" +
-                        "<p>Summarize recent professionalism performance.</p> \n" +
-                        "<h3>Actionable Feedback:</h3> \n" +
-                        "<ul><li>Offer specific feedback on resource management, coordination of care transitions, or other professionalism.</li><ul>\n" +
-
-                        "<h1>Interpersonal & Communication Skills</h1> \n" +
-                        "<h2>Initial 3 Months: (e.g., Performance from [Start Date] to [Mid Date])</h2> \n" +
-                        "<p>Summarize the trainee's early interpersonal & communication skills performance.</p> \n" +
-                        "<h2>Most Recent 3 Months: (e.g., Performance from [Mid Date] to [End Date])</h2> \n" +
-                        "<p>Summarize recent interpersonal & communication skills performance performance.</p> \n" +
-                        "<h3>Actionable Feedback:</h3> \n" +
-                        "<ul><li>Offer specific feedback on resource management, coordination of care transitions, or other interpersonal & communication skills performance.</li><ul>\n" +
-
-                        "<h1>Overall MyInsights</h1>\n" +
-                        "<h3>Strengths:</h3>\n" +
-                        "<ul><li>Summarize key strengths based on evaluations.</li></ul>\n" +
-                        "<h3>Areas for Improvement:</h3>\n" +
-                        "<ul><li>Highlight areas for improvement based on evaluations.</li></ul>\n" +
-                        "<h3>Actionable Steps:</h3>\n" +
-                        "<ul><li>Provide concrete steps for improvement. Use varied suggestions for each trainee, ensuring that feedback is distinct across users.</li></ul>\n" +
-                        "<h3>Short-Term Goals (Next 3-6 months):</h3>\n" +
-                        "<ul><li>Provide specific, measurable goals for the short term. Example: \"Attend two communication workshops and practice concise patient summaries.\"</li></ul>\n" +
-                        "<h3>Long-Term Goals (6 months to 1 year):</h3>" +
-                        "<ul><li>Offer specific, time-bound long-term goals. Example: \"Lead three interdisciplinary rounds and improve care plan efficiency by 15%.\"</li></ul>\n"                         
-                       ) ;
+                    prompt_initial = (input.UserTypeID != 3) ? GetMyInsightPrompt(dateRange) : GetAttendingMyInsightPrompt(dateRange);
+                    
 
                     //prompt_initial += "\n\n Adjustments to Address Deficiencies:";
                     //prompt_initial += "\n Depth and Context:\n\n";

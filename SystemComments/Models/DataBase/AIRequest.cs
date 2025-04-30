@@ -46,5 +46,7 @@ namespace SystemComments.Models.DataBase
 
         public string SageRequest { get; set; }
 
+        public Int32 UserTypeID { get; set; } = 0;
+
     }
 }
