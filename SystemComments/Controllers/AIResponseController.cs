@@ -158,21 +158,37 @@ namespace SystemComments.Controllers
                 }
                
                 string aiComments = "";
+                bool isErrorThrown = false;
                 if(aiResponse.Length > 0)
                 {
                     var objResponse = JToken.Parse(aiResponse);
                     JArray objChoices = (JArray)objResponse["choices"];
-                    if(objChoices.Count() > 0)
+                    try
                     {
-                        JObject objMessages = (JObject)objChoices[0]["message"];
-                        if (objMessages.Count > 0)
+                        if (objChoices.Count() > 0)
                         {
-                            aiComments = objMessages["content"].ToString();
-                            aiComments = aiComments.Replace("```html", "");
+                            JObject objMessages = (JObject)objChoices[0]["message"];
+                            if (objMessages.Count > 0)
+                            {
+                                aiComments = objMessages["content"].ToString();
+                                aiComments = aiComments.Replace("```html", "");
 
+                            }
                         }
                     }
-                    if (input.IsSage != 1)
+                    catch (Exception ex)
+                    {
+                        isErrorThrown = true;
+                        AIResponse aiErrorResponse = new AIResponse();
+                        aiErrorResponse.AIResponseID = "";
+                        aiErrorResponse.UserID = 0;
+                        aiErrorResponse.CreatedDate = DateTime.Now;
+                        aiErrorResponse.InputPrompt = "";
+                        aiErrorResponse.Error = aiResponse;
+                        aiSavedResponse.Add(aiErrorResponse);
+
+                    }
+                    if (input.IsSage != 1 && !isErrorThrown)
                     {
                         string StoredProc = "exec InsertArtificialIntelligenceResponse " +
                             "@InputPrompt = '" + input.InputPrompt + "'," +

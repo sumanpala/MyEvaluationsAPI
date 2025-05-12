@@ -25,7 +25,9 @@ namespace SystemComments.Models.DataBase
         public Int64 DepartmentID { get; set; }
 
         public string SearchCriteria { get; set; }
-        
+
+        public string Error { get; set; }
+
     }
     public class SAGEResponse
     {
