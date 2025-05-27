@@ -143,18 +143,18 @@ namespace SystemComments.Controllers
                     Comments objComments = new Comments();
                     objComments.InputComments = input.InputPrompt;
                     comments = objComments.InputComments;
-                    AIResponse response = SendCustomComments(objComments);
+                    AIResponse response = SendCustomComments(objComments, 2);
                     aiResponse = response.OutputResponse;
                 }
                 else if (input.IsSage == 1)
                 {
                     comments = GetSagePrompt(input);
-                    aiResponse = GetChatGptResponse(comments);
+                    aiResponse = GetChatGptResponse(comments, 3);
                 }
                 else
                 {
                     comments = GetComments(input);
-                    aiResponse = GetChatGptResponse(comments);
+                    aiResponse = GetChatGptResponse(comments, 1);
                 }
                
                 string aiComments = "";
@@ -1150,24 +1150,46 @@ namespace SystemComments.Controllers
 
             return prompt;
         }
-               
-
-        private string GetChatGptResponse(string comments)
+        
+        private string GetChatGptResponse(string comments, Int16 commentsType = 1)
         {
+            // commentsType = 1; // 1 = MyInsights, 2 = NPV, 3 = SAGE
             try
             {                
-                string aiKey = _config.GetSection("AppSettings:AIToken").Value;
+                string aiKey = _config.GetSection("AppSettings:NPVToken").Value;
+                string model = "gpt-4-turbo";
+                switch (commentsType)
+                {
+                    case 2:
+                        model = "gpt-4-turbo";
+                        aiKey = _config.GetSection("AppSettings:NPVToken").Value;
+                        break;
+                    case 1:
+                        model = "gpt-3.5-turbo";
+                        aiKey = _config.GetSection("AppSettings:MyInsightsToken").Value;
+                        break;
+                    case 3:
+                        model = "gpt-4o";
+                        aiKey = _config.GetSection("AppSettings:SAGEToken").Value;
+                        break;
+                    default:
+                        model = "gpt-4-turbo";
+                        aiKey = _config.GetSection("AppSettings:NPVToken").Value;
+                        break;
+                }
+
                 HttpClient client = new HttpClient();
                 client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", aiKey);                
                 string aiResponse = "";
-                client.Timeout = TimeSpan.FromMinutes(3);
+                client.Timeout = TimeSpan.FromMinutes(3);               
+                
                 if (comments.Length > 0)
                 {
                     var request = new OpenAIRequest
                     {
                         //Model = "text-davinci-002",
                         //Model = "gpt-3.5-turbo",
-                        Model = "gpt-4o",
+                        Model = model,
                         //Model = "GTP-4o mini",
                         Temperature = 0.7f,
                         MaxTokens = 4000
@@ -1267,7 +1289,7 @@ namespace SystemComments.Controllers
                 new { role = "system", content = "You are an expert assessment designer. Your job is to conduct a structured faculty assessment. Follow the provided structure strictly." },
                 new { role = "user", content = prompt }
             };
-            string aiKey = _config.GetSection("AppSettings:AIToken").Value;
+            string aiKey = _config.GetSection("AppSettings:SAGEToken").Value;
             using (var client = new HttpClient())
             {
                 client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", aiKey);
@@ -1296,7 +1318,7 @@ namespace SystemComments.Controllers
 
         public async Task<string> GetAssessmentResponseAsync(string prompt)
         {
-            string aiKey = _config.GetSection("AppSettings:AIToken").Value;
+            string aiKey = _config.GetSection("AppSettings:SAGEToken").Value;
             int inputTokens = EstimateTokens(prompt);
             int availableTokens = 9000 - inputTokens - 500; // Reserve space for response
 
@@ -1430,7 +1452,7 @@ namespace SystemComments.Controllers
         {
             comments = RemoveNewLinesBetweenTags(comments);
             string prompt = comments;
-            string aiKey = _config.GetSection("AppSettings:AIToken").Value;
+            string aiKey = _config.GetSection("AppSettings:SAGEToken").Value;
             var requestPayload = new
             {
                 model = "gpt-4o", // Use the fastest available model
@@ -1503,7 +1525,7 @@ namespace SystemComments.Controllers
             try
             {
                 comments = RemoveNewLinesBetweenTags(comments);
-                string aiKey = _config.GetSection("AppSettings:AIToken").Value;
+                string aiKey = _config.GetSection("AppSettings:SAGEToken").Value;
                 HttpClient client = new HttpClient();
                 client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", aiKey);
                 string aiResponse = "";
@@ -1575,7 +1597,7 @@ namespace SystemComments.Controllers
         private string GetAISAGEWithStreaming(string prompt)
         {
             prompt = RemoveNewLinesBetweenTags(prompt);
-            string aiKey = _config.GetSection("AppSettings:AIToken").Value;
+            string aiKey = _config.GetSection("AppSettings:SAGEToken").Value;
             // Set up the HTTP client
             using var httpClient = new HttpClient();
 
@@ -1740,7 +1762,7 @@ namespace SystemComments.Controllers
                 return string.Empty;
             }
 
-            string aiKey = _config.GetSection("AppSettings:AIToken").Value;
+            string aiKey = _config.GetSection("AppSettings:SAGEToken").Value;
             using HttpClient client = new HttpClient
             {
                 Timeout = TimeSpan.FromMinutes(3)
@@ -1806,12 +1828,12 @@ namespace SystemComments.Controllers
 
         [HttpPost("sendcustomcomments")]
         [Authorize]        
-        public AIResponse SendCustomComments(Comments comments)
+        public AIResponse SendCustomComments(Comments comments, Int16 commentsType = 1)
         {
             List<AIResponse> aiSavedResponse = new List<AIResponse>();
             try
             {
-                string response = GetChatGptResponse(comments.InputComments);
+                string response = GetChatGptResponse(comments.InputComments, commentsType);
                 AIResponse aiMessage = new AIResponse();
                 aiMessage.AIResponseID = "";
                 aiMessage.UserID = 0;
