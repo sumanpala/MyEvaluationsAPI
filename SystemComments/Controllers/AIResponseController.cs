@@ -333,7 +333,7 @@ namespace SystemComments.Controllers
                     else if (lastSection > sectionCount && lastSection <= totalSections)
                     {
                         string updatedPrompt = $"{comments} \n{sageQuestions} \n Section {lastSection} of {totalSections} is missed, please include. {allSectionsPrompt}\n include <section> tag between the tag <sections></sections>";
-                        aiComments = await GetAISAGEChatGptResponse1(updatedPrompt);
+                        aiComments = await GetFastOpenAIResponse(updatedPrompt);
                         extractJSON = SageExtraction.ExtractData(aiComments);
                         sectionCount = SageExtraction.GetSectionsCount(extractJSON);
                         if (sectionCount == 0)
@@ -343,7 +343,7 @@ namespace SystemComments.Controllers
                     }
 
                     sectionCount = SageExtraction.GetSectionsCount(extractJSON);                   
-                    if (lastSection > sectionCount && lastSection <= totalSections)
+                    if (lastSection > sectionCount && lastSection <= totalSections && defaultJSON.Length > 0)
                     {
                         // Include sections manually if API returns invalid data
                         extractJSON =  SageExtraction.InsertSection(extractJSON, defaultJSON, (lastSection - 1));
