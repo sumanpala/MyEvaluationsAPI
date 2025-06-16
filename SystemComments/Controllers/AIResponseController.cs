@@ -277,6 +277,7 @@ namespace SystemComments.Controllers
                                 comments = comments.Replace("[Rotation Name]", dtPrompt.Rows[0]["RotationName"].ToString());                                
                                 comments = comments.Replace("[Setting]", dtPrompt.Rows[0]["ActivityName"].ToString());
                                 comments = comments.Replace("[Level]", dtPrompt.Rows[0]["PGYLevel"].ToString());
+                                comments = comments.Replace("[User Type]", dtPrompt.Rows[0]["UserTypeName"].ToString());
 
                             }
                             else
