@@ -1823,7 +1823,7 @@ namespace SystemComments.Controllers
         {
             var token = jwtAuth.Authentication(userCredential.ClientID, userCredential.ClientSecret);
             if (token == null)
-                return Unauthorized();
+                return Unauthorized(new { message = "Invalid client ID or secret." });
             return Ok(token);
         }
 
