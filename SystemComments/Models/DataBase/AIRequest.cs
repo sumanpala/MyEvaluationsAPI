@@ -30,6 +30,8 @@ namespace SystemComments.Models.DataBase
 
         public Int16 IsNPV { get; set; } = 0;
 
+        public Int16 IsAPE { get; set; } = 0;
+
         public Int16 IsSage { get; set; } = 0;
 
         public string RotationName { get; set; }
@@ -47,6 +49,16 @@ namespace SystemComments.Models.DataBase
         public string SageRequest { get; set; }
 
         public Int32 UserTypeID { get; set; } = 0;
+
+        public string StartDate { get; set; }
+        public string EndDate { get; set; }
+
+        public string PromptWord { get; set; }
+
+        public string PITPrompt { get; set; }
+        public string AFIPrompt { get; set; }
+        public string AFIProgramPrompt { get; set; }
+        public Int32 AcademicYear { get; set; } = 0;
 
     }
 }

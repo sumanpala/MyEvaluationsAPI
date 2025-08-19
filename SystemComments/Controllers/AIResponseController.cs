@@ -150,6 +150,11 @@ namespace SystemComments.Controllers
                 {
                     comments = GetSagePrompt(input);
                     aiResponse = GetChatGptResponse(comments, 3);
+                }                
+                else if (input.InputPrompt.Length > 0)
+                {
+                    comments = input.InputPrompt;
+                    aiResponse = GetChatGptResponse(comments, 2);
                 }
                 else
                 {
@@ -215,6 +220,240 @@ namespace SystemComments.Controllers
                 aiSavedResponse.Add(aiErrorResponse);
             }
             return aiSavedResponse;
+        }
+
+        [HttpPost("GetAPEInsights")]
+        [Authorize]
+        public async Task<ActionResult<IEnumerable<APEResponse>>> GetAPEInsights([FromBody] AIRequest input)
+        {
+            List<APEResponse> aiAPEResponse = new List<APEResponse>();
+            try
+            {
+                string prompt = string.Empty;
+                string response = string.Empty;
+                APEResponse apeResponse = new APEResponse();
+                string requiredCompetencies = "\nReturn the results for below competencies without fail and also include if any other competencies are available.\n 1) Interpersonal and Communication Skills\n2) Medical Knowledge" +
+                    "\n3) Patient Care and Procedural Skills\n4) Practice-Based Learning and Improvement\n5) Professionalism\n6) Systems-Based Practice\nReturn atleast 3 to 4 PITs for one competency";
+                prompt = await GetAPEAreaOfImprovementsResponse(input);
+                input.AFIPrompt = prompt;
+                prompt = prompt + requiredCompetencies;
+                response = await GetAPEAIResponse(prompt);
+                response = Regex.Replace(response, @"\r\n?|\n", "").Replace("```json", "").Replace("json{", "{").Replace("```", "");
+                string unescapedJson = System.Text.RegularExpressions.Regex.Unescape(response);
+                var parsed = JToken.Parse(unescapedJson);
+                string compactJson = JsonConvert.SerializeObject(parsed, Formatting.None);
+                apeResponse.AFIJSON = compactJson;
+
+                prompt = await GetAPEAFIProgramResponse(input);
+                input.AFIProgramPrompt = prompt;
+                prompt = prompt + requiredCompetencies;
+                response = await GetAPEAIResponse(prompt);
+                response = Regex.Replace(response, @"\r\n?|\n", "").Replace("```json", "").Replace("json{", "{").Replace("```", "");
+                unescapedJson = System.Text.RegularExpressions.Regex.Unescape(response);
+                parsed = JToken.Parse(unescapedJson);
+                compactJson = JsonConvert.SerializeObject(parsed, Formatting.None);
+                apeResponse.AFIProgramJSON = compactJson;
+
+                if (input.PITPrompt != null && input.PITPrompt.Length > 0)
+                {
+                    string pitPrompt = input.PITPrompt;
+                    //string summary = SummarizePITs(apeResponse.AFIJSON);
+                    //string summary1 = SummarizePITs(apeResponse.AFIProgramJSON);
+                    pitPrompt = pitPrompt.Replace("[Input]", "\nBelow is the AFI Summary JSON.\n" + apeResponse.AFIJSON + "\n\nBelow is the AFI Program Summary JSON\n" + apeResponse.AFIProgramJSON);
+                    input.PITPrompt = pitPrompt;
+                    pitPrompt = pitPrompt + requiredCompetencies;
+                    string pitResponse = await GetAPEAIResponse(pitPrompt);
+                    pitResponse = Regex.Replace(pitResponse, @"\r\n?|\n", "").Replace("```json", "").Replace("json{", "{").Replace("```", "");
+                    unescapedJson = System.Text.RegularExpressions.Regex.Unescape(pitResponse);
+                    parsed = JToken.Parse(unescapedJson);
+                    compactJson = JsonConvert.SerializeObject(parsed, Formatting.None);
+                    apeResponse.PITJSON = compactJson;
+                }
+                else
+                {
+                    apeResponse.PITJSON = "{}";
+                }
+
+                aiAPEResponse.Add(apeResponse);
+            }
+            catch(Exception ex)
+            {
+                APEResponse apeResponse = new APEResponse();
+                apeResponse.PITJSON = $"{{\"error\":\"{ex.Message}\"}}";
+                apeResponse.AFIJSON = "";
+                aiAPEResponse.Add(apeResponse);
+            }
+            await InsertAPEResponses(input, aiAPEResponse[0]);
+            return aiAPEResponse;
+        }
+
+        public static string SummarizePITs(string json)
+        {
+            if (string.IsNullOrWhiteSpace(json)) return "";
+
+            try
+            {
+                var sb = new StringBuilder();
+                var parsed = JsonConvert.DeserializeObject<List<CompetencyCategory>>(json);
+
+                foreach (var category in parsed)
+                {
+                    if (string.IsNullOrWhiteSpace(category.PrimaryACGMECompetencyOrCategory))
+                        continue;
+
+                    sb.AppendLine($"### {category.PrimaryACGMECompetencyOrCategory}");
+
+                    foreach (var pit in category.PITs ?? Enumerable.Empty<PIT>())
+                    {
+                        if (string.IsNullOrWhiteSpace(pit.PITTitle)) continue;
+
+                        sb.Append($"- {pit.PITTitle}");
+
+                        if (!string.IsNullOrWhiteSpace(pit.PITDefinition))
+                            sb.Append($": {pit.PITDefinition.Trim()}");
+
+                        sb.AppendLine();
+                    }
+
+                    sb.AppendLine(); // blank line between categories
+                }
+
+                return sb.ToString();
+            }
+            catch (Exception ex)
+            {
+                return $"[ERROR parsing JSON]: {ex.Message}";
+            }
+        }
+
+
+        private async Task InsertAPEResponses(AIRequest input, APEResponse apeResponse)
+        {
+            SqlParameter[] parameters = new SqlParameter[]
+            {
+                new SqlParameter("@DepartmentID", input.DepartmentID),
+                new SqlParameter("@UserID", input.UserID),
+                new SqlParameter("@APEScheduleHistoryID", input.AIResponseID),
+                new SqlParameter("@StartDate", input.StartDate),
+                new SqlParameter("@EndDate", input.EndDate),
+                new SqlParameter("@AcademicYear", input.AcademicYear),
+                new SqlParameter("@AFIResponse", apeResponse.AFIJSON),
+                new SqlParameter("@AFIProgramResponse", apeResponse.AFIProgramJSON),
+                new SqlParameter("@PITResponse", apeResponse.PITJSON),
+                new SqlParameter("@AFIPrompt", input.AFIPrompt),
+                new SqlParameter("@AFIProgramPrompt", input.AFIProgramPrompt),
+                new SqlParameter("@PITPrompt", input.PITPrompt)
+            };
+            await Task.Run(() => _context.ExecuteStoredProcedure("InsertAPEMyInsightsData", parameters));
+        }
+
+        private async Task<string> GetAPEAreaOfImprovementsResponse(AIRequest input)
+        {
+            string prompt = "";
+            SqlParameter[] parameters = new SqlParameter[]
+            {
+                new SqlParameter("@DepartmentID", input.DepartmentID),
+                new SqlParameter("@UserID", input.UserID),
+                new SqlParameter("@StartDate", input.StartDate),
+                new SqlParameter("@EndDate", input.EndDate),
+                new SqlParameter("@Word", input.PromptWord)
+            };
+
+            // Use Task.Run to ensure the method runs asynchronously
+            await Task.Run(async () =>
+            {
+                DataSet dsInsights = _context.ExecuteStoredProcedure("ExtractMyInsights", parameters);
+                if (dsInsights != null)
+                {
+                    DataTable dtPrompt = dsInsights.Tables[0];
+                    DataTable dtInsights = dsInsights.Tables[1];
+                    if (dtPrompt.Rows.Count > 0)
+                    {
+                        prompt = await FormatHtml(dtPrompt.Rows[0]["FileContent"].ToString());
+                        prompt = prompt.Replace("<br/>", "\n").Replace("</br>", "\n").Replace("<br>", "\n");
+                        prompt = prompt.Replace("[Program Type]", dtPrompt.Rows[0]["ProgramName"].ToString());
+                    }
+                    if (dtInsights.Rows.Count > 0)
+                    {
+                        string result = string.Join(Environment.NewLine,
+                            dtInsights.AsEnumerable()
+                                .Select(row => row["AreasForImprovements"]?.ToString().Trim())
+                                .Where(value => !string.IsNullOrEmpty(value))
+                        );
+                        result = Regex.Replace(result.Replace("\r\n", "\n").Replace("\n\n","\n").Replace("<br/>", "\n"), "<.*?>", string.Empty);
+                        //result = await SummarizeCommentsWithGPT(result);
+                        prompt = prompt.Replace("[From uploaded file]", result);
+                    }
+                }
+            });
+
+            return prompt;
+        }
+
+        private async Task<string> GetAPEAFIProgramResponse(AIRequest input)
+        {
+            string prompt = "", pitPrompt = "";
+            SqlParameter[] parameters = new SqlParameter[]
+            {
+                new SqlParameter("@DepartmentID", input.DepartmentID),                
+                new SqlParameter("@StartDate", input.StartDate),
+                new SqlParameter("@EndDate", input.EndDate)                
+            };
+
+            // Use Task.Run to ensure the method runs asynchronously
+            await Task.Run(async () =>
+            {
+                DataSet dsInsights = _context.ExecuteStoredProcedure("GetEvaluationProgramCommentsForMyInsights", parameters);
+                if (dsInsights != null)
+                {
+                    DataTable dtPrompt = dsInsights.Tables[0];
+                    DataTable dtPITPrompt = dsInsights.Tables[1];
+                    DataTable dtInsights = dsInsights.Tables[2];
+                    if (dtPrompt.Rows.Count > 0)
+                    {
+                        prompt = await FormatHtml(dtPrompt.Rows[0]["FileContent"].ToString());
+                        prompt = prompt.Replace("<br/>", "\n").Replace("</br>", "\n").Replace("<br>", "\n");
+                        prompt = prompt.Replace("[Program Type]", dtPrompt.Rows[0]["ProgramName"].ToString());
+                    }
+                    if(dtPITPrompt.Rows.Count > 0)
+                    {
+                        pitPrompt = await FormatHtml(dtPITPrompt.Rows[0]["FileContent"].ToString());
+                        pitPrompt = pitPrompt.Replace("<br/>", "\n").Replace("</br>", "\n").Replace("<br>", "\n");
+                        pitPrompt = pitPrompt.Replace("[Program Type]", dtPITPrompt.Rows[0]["ProgramName"].ToString());
+                        input.PITPrompt = pitPrompt;
+                    }
+                    if (dtInsights.Rows.Count > 0)
+                    {
+                        string result = string.Join(Environment.NewLine,
+                            dtInsights.AsEnumerable()
+                                .Select(row => row["RotationName"] + "\n" + row["Comments"]?.ToString().Trim())
+                                .Where(value => !string.IsNullOrEmpty(value))
+                        );
+                        result = Regex.Replace(result.Replace("\r\n", "\n").Replace("\n\n", "\n").Replace("<br/>", "\n"), "<.*?>", string.Empty);
+                        //result = await SummarizeCommentsWithGPT(result);
+                        prompt = prompt.Replace("[From uploaded file]", result);
+                    }
+                }
+            });
+
+            return prompt;
+        }
+
+        private async Task<string> FormatHtml(string prompt)
+        {
+            string result = string.Empty;
+            await Task.Run(() => {
+                // Replace opening <ul><li> or <li> with newline + dash
+               result = Regex.Replace(prompt, @"<\s*li\s*>", "\n- ");
+
+                // Remove closing </li>
+                result = Regex.Replace(result, @"<\s*/\s*li\s*>", "");
+
+                // Remove <ul> and </ul>
+                result = Regex.Replace(result, @"<\s*/?\s*ul\s*>", "");
+            });
+           
+            return result;
         }
 
         [HttpPost("SubmitSAGE")]
@@ -987,7 +1226,7 @@ namespace SystemComments.Controllers
             }
 
             return comments;
-        }
+        }        
 
         private string GetSagePrompt(AIRequest input)
         {
@@ -1151,7 +1390,73 @@ namespace SystemComments.Controllers
 
             return prompt;
         }
-        
+
+        private async Task<string> GetAPEAIResponse(string prompt)
+        {
+            string time = "0";
+            List<object> messages = new List<object>
+            {
+                new { role = "system", content = "You are a helpful assistant. Return the result in JSON format as per the prompt." },
+                new { role = "user", content = prompt }
+            };
+            string aiKey = _config.GetSection("AppSettings:MyInsightsToken").Value;
+            using (var client = new HttpClient())
+            {
+                client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", aiKey);
+                client.Timeout = Timeout.InfiniteTimeSpan; // 🔥 Disable timeout for streaming
+                var requestBody = new
+                {
+                    model = "gpt-4o",
+                    messages = messages,
+                    max_tokens = 8000,  // ⚡ Allow high token count                   
+                    temperature = 0.5,   // ⚡ Lower temperature for deterministic responses
+                    top_p = 0.1,
+                    stream = true        // ✅ Enable streaming
+                };
+
+                var content = new StringContent(JsonConvert.SerializeObject(requestBody), Encoding.UTF8, "application/json");
+                Stopwatch sw = Stopwatch.StartNew();
+                using (var response = await client.PostAsync("https://api.openai.com/v1/chat/completions", content))
+                {
+                    sw.Stop();
+                    time = sw.Elapsed.TotalSeconds.ToString();
+                    return await ReadStreamedResponse1(response);
+                }
+
+            }
+        }
+
+        public async Task<string> SummarizeCommentsWithGPT(string comments)
+        {
+            string apiKey = _config.GetSection("AppSettings:MyInsightsToken").Value;
+            string model = "gpt-4o";
+            var messages = new List<object>
+            {
+                new { role = "system", content = "You summarize database field descriptions." },
+                new { role = "user", content = "Summarize the following comments into short bullet points:\n" + comments }
+            };
+
+            using (var client = new HttpClient())
+            {
+                client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
+                var requestBody = new
+                {
+                    model = model,
+                    messages = messages,
+                    max_tokens = 4000,
+                    temperature = 0.3
+                };
+
+                var content = new StringContent(JsonConvert.SerializeObject(requestBody), Encoding.UTF8, "application/json");
+                var response = await client.PostAsync("https://api.openai.com/v1/chat/completions", content);
+                var result = await response.Content.ReadAsStringAsync();
+
+                dynamic json = JsonConvert.DeserializeObject(result);
+                return json?.choices?[0]?.message?.content ?? "";
+            }
+        }
+
+
         private string GetChatGptResponse(string comments, Int16 commentsType = 1)
         {
             // commentsType = 1; // 1 = MyInsights, 2 = NPV, 3 = SAGE
@@ -1374,6 +1679,49 @@ namespace SystemComments.Controllers
                     return $"**❌ API Error: {ex.Message}**"; // Return failure details
                 }
             }            
+        }
+
+        private static async Task<string> ReadStreamedResponse1(HttpResponseMessage response)
+        {
+            if (!response.IsSuccessStatusCode)
+            {
+                var error = await response.Content.ReadAsStringAsync();
+                throw new Exception($"OpenAI API Error: {response.StatusCode}\n{error}");
+            }
+
+            var sb = new StringBuilder();
+
+            using (var stream = await response.Content.ReadAsStreamAsync())
+            using (var reader = new StreamReader(stream))
+            {
+                while (!reader.EndOfStream)
+                {
+                    var line = await reader.ReadLineAsync();
+
+                    // Skip empty lines or keep-alive lines
+                    if (string.IsNullOrWhiteSpace(line) || !line.StartsWith("data:"))
+                        continue;
+
+                    var json = line.Substring("data:".Length).Trim();
+
+                    // Stop when [DONE]
+                    if (json == "[DONE]")
+                        break;
+
+                    try
+                    {
+                        var chunk = JsonConvert.DeserializeObject<StreamChunk>(json);
+                        sb.Append(chunk.choices?[0]?.delta?.content);
+                    }
+                    catch (Exception ex)
+                    {
+                        // Log or throw if needed
+                        throw new Exception("Failed to parse streamed chunk: " + json, ex);
+                    }
+                }
+            }
+
+            return sb.ToString();
         }
 
         private static async Task<string> ReadStreamedResponse(HttpResponseMessage response)

@@ -39,6 +39,14 @@ namespace SystemComments.Models.DataBase
 
     }
 
+    public class APEResponse
+    {       
+        public string PITJSON { get; set; }
+        public string AFIJSON { get; set; }
+        public string AFIProgramJSON { get; set; }
+
+    }
+
     public class Choice
     {
         public string text { get; set; }
@@ -111,5 +119,33 @@ namespace SystemComments.Models.DataBase
 
         [JsonPropertyName("code")]
         public string Code { get; set; }
+    }
+    public class StreamChunk
+    {
+        public List<Choice> choices { get; set; }
+
+        public class Choice
+        {
+            public Delta delta { get; set; }
+        }
+
+        public class Delta
+        {
+            public string content { get; set; }
+        }
+    }
+    public class CompetencyCategory
+    {
+        public string PrimaryACGMECompetencyOrCategory { get; set; }
+        public List<PIT> PITs { get; set; }
+    }
+
+    public class PIT
+    {
+        public string PITTitle { get; set; }
+        public string PITDefinition { get; set; }
+        public int Frequency { get; set; }
+        public string JustificationWithCPRReferences { get; set; }
+        public List<string> CPRReferences { get; set; }
     }
 }
