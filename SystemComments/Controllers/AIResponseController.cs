@@ -232,8 +232,13 @@ namespace SystemComments.Controllers
                 string prompt = string.Empty;
                 string response = string.Empty;
                 APEResponse apeResponse = new APEResponse();
-                string requiredCompetencies = "\nReturn the results for below competencies without fail and also include if any other competencies are available.\n 1) Interpersonal and Communication Skills\n2) Medical Knowledge" +
-                    "\n3) Patient Care and Procedural Skills\n4) Practice-Based Learning and Improvement\n5) Professionalism\n6) Systems-Based Practice\nReturn atleast 3 to 4 PITs for one competency";
+                //string requiredCompetencies = "\n\nReturn the results for below Competency/Category's without fail and also include if any other Competency/Category's are available.\n 1) Interpersonal and Communication Skills\n2) Medical Knowledge" +
+                //"\n3) Patient Care and Procedural Skills\n4) Practice-Based Learning and Improvement\n5) Professionalism\n6) Systems-Based Practice\nReturn atleast 3 to 4 PITs for one PrimaryACGMECompetencyOrCategory";
+                string requiredCompetencies = "\n\nCoverage Rule:\n\r\nThe output must always include all six ACGME Core Competencies:\nInterpersonal and Communication Skills\nMedical Knowledge" +
+                    "\nPatient Care and Procedural Skills\nPractice-Based Learning and Improvement\nProfessionalism\nSystems-Based Practice\n" +
+                    "If there are additional categories identified in the AFIs or program comments (e.g., Well-Being, Supervision, Faculty Development, etc.), include those as well as separate JSON objects with their PITs.\n" +
+                    "This ensures that PEC receives a full framework covering the required six competencies plus any additional program-relevant categories." +
+                    "\n\nPIT Count Rule:\n- For each competency/category, output 3–4 PITs derived from the AFIs.\n- If fewer than 3 PITs exist, include what is available.";
                 prompt = await GetAPEAreaOfImprovementsResponse(input);
                 input.AFIPrompt = prompt;
                 prompt = prompt + requiredCompetencies;
@@ -259,7 +264,7 @@ namespace SystemComments.Controllers
                     string pitPrompt = input.PITPrompt;
                     //string summary = SummarizePITs(apeResponse.AFIJSON);
                     //string summary1 = SummarizePITs(apeResponse.AFIProgramJSON);
-                    pitPrompt = pitPrompt.Replace("[Input]", "\nBelow is the AFI Summary JSON.\n" + apeResponse.AFIJSON + "\n\nBelow is the AFI Program Summary JSON\n" + apeResponse.AFIProgramJSON);
+                    pitPrompt = pitPrompt.Replace("[Input]", "\n**AFI Summary JSON**\n" + apeResponse.AFIJSON + "\n\n**AFI Program Summary JSON**\n" + apeResponse.AFIProgramJSON);
                     input.PITPrompt = pitPrompt;
                     pitPrompt = pitPrompt + requiredCompetencies;
                     string pitResponse = await GetAPEAIResponse(pitPrompt);
@@ -377,7 +382,7 @@ namespace SystemComments.Controllers
                     {
                         string result = string.Join(Environment.NewLine,
                             dtInsights.AsEnumerable()
-                                .Select(row => row["AreasForImprovements"]?.ToString().Trim())
+                                .Select(row => row["AreasForImprovements"]?.ToString().Replace("\n", " ").Trim())
                                 .Where(value => !string.IsNullOrEmpty(value))
                         );
                         result = Regex.Replace(result.Replace("\r\n", "\n").Replace("\n\n","\n").Replace("<br/>", "\n"), "<.*?>", string.Empty);
@@ -426,10 +431,10 @@ namespace SystemComments.Controllers
                     {
                         string result = string.Join(Environment.NewLine,
                             dtInsights.AsEnumerable()
-                                .Select(row => row["RotationName"] + "\n" + row["Comments"]?.ToString().Trim())
+                                .Select(row => row["RotationName"] + "\n\n" + row["Comments"]?.ToString().Trim())
                                 .Where(value => !string.IsNullOrEmpty(value))
                         );
-                        result = Regex.Replace(result.Replace("\r\n", "\n").Replace("\n\n", "\n").Replace("<br/>", "\n"), "<.*?>", string.Empty);
+                        result = Regex.Replace(result.Replace("\r\n", "\n").Replace("<br/>", "\n"), "<.*?>", string.Empty);
                         //result = await SummarizeCommentsWithGPT(result);
                         prompt = prompt.Replace("[From uploaded file]", result);
                     }
@@ -1396,7 +1401,7 @@ namespace SystemComments.Controllers
             string time = "0";
             List<object> messages = new List<object>
             {
-                new { role = "system", content = "You are a helpful assistant. Return the result in JSON format as per the prompt." },
+                new { role = "system", content = "You are a JSON generator. Always output ONLY valid JSON that matches the user prompt. Do not include any explanations, headers, or text outside JSON." },
                 new { role = "user", content = prompt }
             };
             string aiKey = _config.GetSection("AppSettings:MyInsightsToken").Value;
@@ -1409,7 +1414,7 @@ namespace SystemComments.Controllers
                     model = "gpt-4o",
                     messages = messages,
                     max_tokens = 8000,  // ⚡ Allow high token count                   
-                    temperature = 0.5,   // ⚡ Lower temperature for deterministic responses
+                    temperature = 0,   // ⚡ Lower temperature for deterministic responses
                     top_p = 0.1,
                     stream = true        // ✅ Enable streaming
                 };
