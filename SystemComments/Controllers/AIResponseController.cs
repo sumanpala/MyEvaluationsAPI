@@ -538,7 +538,7 @@ namespace SystemComments.Controllers
                     Int32 totalSections = 1;
                     if (input.SageRequest != null && input.SageRequest.Length > 2)
                     {                        
-                        sageQuestions = SageExtraction.ConvertJsonToFormattedText(input.SageRequest, ref lastSection, ref totalSections);
+                        sageQuestions = ConvertJsonToFormattedText(input.SageRequest, ref lastSection, ref totalSections);
                         if(sageQuestions.Length > 0)
                         {                           
                             
@@ -549,17 +549,17 @@ namespace SystemComments.Controllers
                     //string aiComments = GetAISAGEWithStreaming(comments + "\n" + sageQuestions + "\n include <section> tag between the tag <sections></sections>");
                     //string aiComments = await GetAISAGEChatGptResponse1(comments + "\n" + sageQuestions + "\n include <section> tag between the tag <sections></sections>");
                     string aiComments = await GetFastOpenAIResponse(comments + "\n include <mainsection></mainsection> without fail. \n Answer is always empty in the response for example <answer></answer> \n" + sageQuestions);
-                    string extractJSON = SageExtraction.ExtractData(aiComments);
+                    string extractJSON = SageExtractData(aiComments);
                     JToken parsedJson = JToken.Parse(extractJSON);
                     minifiedJson = JsonConvert.SerializeObject(parsedJson, Formatting.None);
                     //if (input.SageRequest.Length > 0 && minifiedJson.Length > 0)
                     //{
                     //    minifiedJson = SageExtraction.MergeJson(input.SageRequest, minifiedJson);
                     //}
-                    minifiedJson = SageExtraction.UpdateRequestJSON(minifiedJson, input.SageRequest);
+                    minifiedJson = UpdateRequestJSON(minifiedJson, input.SageRequest);
 
-                    Int32 sectionCount = SageExtraction.GetSectionsCount(extractJSON);
-                    Int32 allSectionsCount = SageExtraction.GetAllSectionsCount(extractJSON);
+                    Int32 sectionCount = GetSectionsCount(extractJSON);
+                    Int32 allSectionsCount = GetAllSectionsCount(extractJSON);
                     string allSectionsPrompt = "";
                     if(allSectionsCount == 0)
                     {
@@ -568,8 +568,8 @@ namespace SystemComments.Controllers
                     if (sectionCount == 0)
                     {
                         aiComments = await GetFastOpenAIResponse(comments + "\n" + sageQuestions + "\nSections are missed in the tag <sections></sections>, Please include." + allSectionsPrompt + "\n include <section> tag between the tag <sections></sections>");
-                        extractJSON = SageExtraction.ExtractData(aiComments);
-                        sectionCount = SageExtraction.GetSectionsCount(extractJSON);
+                        extractJSON = SageExtractData(aiComments);
+                        sectionCount = GetSectionsCount(extractJSON);
                         if (sectionCount == 0)
                         {
                             extractJSON = minifiedJson;
@@ -579,35 +579,35 @@ namespace SystemComments.Controllers
                     {
                         string updatedPrompt = $"{comments} \n{sageQuestions} \n Section {lastSection} of {totalSections} is missed, please include. {allSectionsPrompt}\n include <section> tag between the tag <sections></sections>";
                         aiComments = await GetFastOpenAIResponse(updatedPrompt);
-                        extractJSON = SageExtraction.ExtractData(aiComments);
-                        sectionCount = SageExtraction.GetSectionsCount(extractJSON);
+                        extractJSON = SageExtractData(aiComments);
+                        sectionCount = GetSectionsCount(extractJSON);
                         if (sectionCount == 0)
                         {
                             extractJSON = minifiedJson;
                         }
                     }
 
-                    sectionCount = SageExtraction.GetSectionsCount(extractJSON);                   
+                    sectionCount = GetSectionsCount(extractJSON);                   
                     if (lastSection > sectionCount && lastSection <= totalSections && defaultJSON.Length > 0)
                     {
                         // Include sections manually if API returns invalid data
-                        extractJSON =  SageExtraction.InsertSection(extractJSON, defaultJSON, (lastSection - 1));
+                        extractJSON = InsertSection(extractJSON, defaultJSON, (lastSection - 1));
                     }
 
                     parsedJson = JToken.Parse(extractJSON);
                     minifiedJson = JsonConvert.SerializeObject(parsedJson, Formatting.None);                   
-                    minifiedJson = SageExtraction.UpdateRequestJSON(minifiedJson, input.SageRequest);
+                    minifiedJson = UpdateRequestJSON(minifiedJson, input.SageRequest);
                     SAGEResponse sageResponse = new SAGEResponse();
                     sageResponse.EvaluationID = input.EvaluationID;
                     sageResponse.ResponseJSON = Regex.Replace(minifiedJson, @"\r\n?|\n", "");
                     aiSavedResponse.Add(sageResponse);
-                    minifiedJson = SageExtraction.ChangeJSONOrder(minifiedJson);
-                    DataSet dsData = SageExtraction.ConvertJsonToDataSet(minifiedJson);
+                    minifiedJson = ChangeJSONOrder(minifiedJson);
+                    DataSet dsData = ConvertJsonToDataSet(minifiedJson);
                     DataSet dsResultSet = SaveSageResponse(dsData, input, aiResponse, comments, minifiedJson);
                     if (dsResultSet != null && dsResultSet.Tables.Count > 0)
                     {
                         DataTable dtEvaluationQuestions = dsResultSet.Tables[0];
-                        sageResponse.ResponseJSON = SageExtraction.UpdateJSONQuestionIDs(dtEvaluationQuestions, minifiedJson);
+                        sageResponse.ResponseJSON = UpdateJSONQuestionIDs(dtEvaluationQuestions, minifiedJson);
                         SaveSageResponse(sageResponse.ResponseJSON, input);
                     }
                 }
@@ -620,6 +620,56 @@ namespace SystemComments.Controllers
                 aiSavedResponse.Add(sageResponse);
             }
             return aiSavedResponse;
+        }
+
+        
+        private Int32 GetSectionsCount(string extractJSON)
+        {
+            return SageExtraction.GetSectionsCount(extractJSON);
+        }
+
+        private string SageExtractData(string aiComments)
+        {
+            return SageExtraction.ExtractData(aiComments);
+        }
+        //SageExtraction.UpdateJSONQuestionIDs(dtEvaluationQuestions, minifiedJson)
+        private string UpdateJSONQuestionIDs(DataTable dtEvaluationQuestions, string minifiedJson)
+        {
+            return SageExtraction.UpdateJSONQuestionIDs(dtEvaluationQuestions, minifiedJson);
+        }
+
+        private DataSet ConvertJsonToDataSet(string json)
+        {
+            return SageExtraction.ConvertJsonToDataSet(json);
+        }
+
+        // SageExtraction.InsertSection(extractJSON, defaultJSON, (lastSection - 1))
+
+        private string InsertSection(string extractJSON, string defaultJSON, Int32 position)
+        {
+            return SageExtraction.InsertSection(extractJSON, defaultJSON, position);
+        }
+
+        // SageExtraction.UpdateRequestJSON(minifiedJson, input.SageRequest);
+        private string UpdateRequestJSON(string minifiedJson, string requestJson)
+        {
+            return SageExtraction.UpdateRequestJSON(minifiedJson, requestJson);
+        }
+        // SageExtraction.ChangeJSONOrder(minifiedJson)
+        private string ChangeJSONOrder(string minifiedJson)
+        {
+            return SageExtraction.ChangeJSONOrder(minifiedJson);
+        }
+
+        //SageExtraction.ConvertJsonToFormattedText(input.SageRequest, ref lastSection, ref totalSections)
+        private string ConvertJsonToFormattedText(string sageRequest, ref Int32 lastSection, ref Int32 totalSections)
+        {
+            return SageExtraction.ConvertJsonToFormattedText(sageRequest, ref lastSection, ref totalSections);
+        }
+        //SageExtraction.GetAllSectionsCount(extractJSON)
+        private Int32 GetAllSectionsCount(string extractJSON)
+        {
+            return SageExtraction.GetAllSectionsCount(extractJSON);
         }
 
         private string GetSAGEChatGPTResponse(string comments)
@@ -693,139 +743,7 @@ namespace SystemComments.Controllers
                                 .Select(field => SageExtraction.RemoveUnNecessaryJSONTags(dvr[field].ToString()))
                         )
                 );
-
-                //foreach (DataRow dvr in dtComments.Rows)
-                //{
-                //    if (dvr["CommentsType"].ToString() == "1")
-                //    {
-                //        if (dvr["FreeFormComments"].ToString().Length > 0)
-                //        {
-                //            userComments += "\n" + SageExtraction.RemoveUnNecessaryJSONTags(dvr["FreeFormComments"].ToString());
-                //        }
-
-                //        if (dvr["QuestionComments"].ToString().Length > 0)
-                //        {
-                //            userComments += "\n" + SageExtraction.RemoveUnNecessaryJSONTags(dvr["QuestionComments"].ToString());
-                //        }
-
-                //        if (dvr["EvaluationComments"].ToString().Length > 0)
-                //        {
-                //            userComments += "\n" + SageExtraction.RemoveUnNecessaryJSONTags(dvr["EvaluationComments"].ToString());
-                //        }
-
-
-                //        if (dvr["AdditionalComments"].ToString().Length > 0)
-                //        {
-                //            userComments += "\n" + SageExtraction.RemoveUnNecessaryJSONTags(dvr["AdditionalComments"].ToString());
-                //        }
-
-                //        if (dvr["ConfidentialComments"].ToString().Length > 0)
-                //        {
-                //            userComments += "\n" + SageExtraction.RemoveUnNecessaryJSONTags(dvr["ConfidentialComments"].ToString());
-                //        }
-
-                //        if (dvr["AcknowledgedComments"].ToString().Length > 0)
-                //        {
-                //            userComments += "\n" + SageExtraction.RemoveUnNecessaryJSONTags(dvr["AcknowledgedComments"].ToString());
-                //        }
-
-                //        if (dvr["ReviewComments"].ToString().Length > 0)
-                //        {
-                //            userComments += "\n" + SageExtraction.RemoveUnNecessaryJSONTags(dvr["ReviewComments"].ToString());
-                //        }
-
-                //        if (dvr["ProgramDirectorComments"].ToString().Length > 0)
-                //        {
-                //            userComments += "\n" + SageExtraction.RemoveUnNecessaryJSONTags(dvr["ProgramDirectorComments"].ToString());
-                //        }
-
-                //        if (dvr["AdministratorComments"].ToString().Length > 0)
-                //        {
-                //            userComments += "\n" + SageExtraction.RemoveUnNecessaryJSONTags(dvr["AdministratorComments"].ToString());
-                //        }
-
-                //        if (dvr["GAComments"].ToString().Length > 0)
-                //        {
-                //            userComments += "\n" + SageExtraction.RemoveUnNecessaryJSONTags(dvr["GAComments"].ToString());
-                //        }
-
-                //        if (dvr["PreceptorComments"].ToString().Length > 0)
-                //        {
-                //            userComments += "\n" + SageExtraction.RemoveUnNecessaryJSONTags(dvr["PreceptorComments"].ToString());
-                //        }
-                //    }
-                //    if (dvr["CommentsType"].ToString() == "2")
-                //    {
-                //        if (dvr["EvaluationComments"].ToString().Length > 0)
-                //        {
-                //            userComments += "\n" + SageExtraction.RemoveUnNecessaryJSONTags(dvr["EvaluationComments"].ToString());
-                //        }
-                //    }
-
-                //    if (dvr["CommentsType"].ToString() == "3")
-                //    {
-                //        if (dvr["EvaluationComments"].ToString().Length > 0)
-                //        {
-                //            userComments += "\n" + SageExtraction.RemoveUnNecessaryJSONTags(dvr["EvaluationComments"].ToString());
-                //        }
-
-                //        if (dvr["ConfidentialComments"].ToString().Length > 0)
-                //        {
-                //            userComments += "\n" + SageExtraction.RemoveUnNecessaryJSONTags(dvr["ConfidentialComments"].ToString());
-                //        }
-
-                //        if (dvr["AdditionalComments"].ToString().Length > 0)
-                //        {
-                //            userComments += "\n" + SageExtraction.RemoveUnNecessaryJSONTags(dvr["AdditionalComments"].ToString());
-                //        }
-                //    }
-                //    if (dvr["CommentsType"].ToString() == "4")
-                //    {
-                //        if (dvr["EvaluationComments"].ToString().Length > 0)
-                //        {
-                //            userComments += "\n" + SageExtraction.RemoveUnNecessaryJSONTags(dvr["EvaluationComments"].ToString());
-                //        }
-
-                //        if (dvr["ConfidentialComments"].ToString().Length > 0)
-                //        {
-                //            userComments += "\n" + SageExtraction.RemoveUnNecessaryJSONTags(dvr["ConfidentialComments"].ToString());
-                //        }
-                //    }
-
-                //    if (dvr["CommentsType"].ToString() == "5")
-                //    {
-                //        if (dvr["EvaluationComments"].ToString().Length > 0)
-                //        {
-                //            userComments += "\n" + SageExtraction.RemoveUnNecessaryJSONTags(dvr["EvaluationComments"].ToString());
-                //        }
-
-                //    }
-
-                //    if (dvr["CommentsType"].ToString() == "6")
-                //    {
-                //        if (dvr["EvaluationComments"].ToString().Length > 0)
-                //        {
-                //            userComments += "\n" + SageExtraction.RemoveUnNecessaryJSONTags(dvr["EvaluationComments"].ToString());
-                //        }
-
-                //    }
-                //    if (dvr["CommentsType"].ToString() == "7")
-                //    {
-                //        if (dvr["EvaluationComments"].ToString().Length > 0)
-                //        {
-                //            userComments += "\n" + SageExtraction.RemoveUnNecessaryJSONTags(dvr["EvaluationComments"].ToString());
-                //        }
-
-                //    }
-                //    if (dvr["CommentsType"].ToString() == "8")
-                //    {
-                //        if (dvr["EvaluationComments"].ToString().Length > 0)
-                //        {
-                //            userComments += "\n" + SageExtraction.RemoveUnNecessaryJSONTags(dvr["EvaluationComments"].ToString());
-                //        }
-
-                //    }
-                //}
+                
             }
 
             return userComments;
@@ -944,7 +862,7 @@ namespace SystemComments.Controllers
             _context.ExecuteStoredProcedure("InsertSageResponse", parameters);
         }
 
-        public MatchCollection ExtractData(string airesponse)
+        private MatchCollection ExtractData(string airesponse)
         {
             string[] words = { "" };
             string pattern = string.Format(@"<{0}>(.*?)<\/{0}>", "guide");
@@ -1431,7 +1349,7 @@ namespace SystemComments.Controllers
             }
         }
 
-        public async Task<string> SummarizeCommentsWithGPT(string comments)
+        private async Task<string> SummarizeCommentsWithGPT(string comments)
         {
             string apiKey = _config.GetSection("AppSettings:MyInsightsToken").Value;
             string model = "gpt-4o";
@@ -1569,7 +1487,7 @@ namespace SystemComments.Controllers
             return Math.Max(100, modelLimit - promptTokens - 1500); // Ensure at least 100 tokens
         }
 
-        public static int GetMaxTokens(string prompt, int modelLimit = 128000, int minResponse = 100, int maxResponse = 4000, int safetyBuffer = 100)
+        private static int GetMaxTokens(string prompt, int modelLimit = 128000, int minResponse = 100, int maxResponse = 4000, int safetyBuffer = 100)
         {
             if (string.IsNullOrWhiteSpace(prompt)) return 0;
 
@@ -1581,7 +1499,7 @@ namespace SystemComments.Controllers
             return totalTokens;
         }
 
-        public static int GetTokenLimit(string prompt, int modelLimit = 128000, int maxResponseLimit = 4000)
+        private static int GetTokenLimit(string prompt, int modelLimit = 128000, int maxResponseLimit = 4000)
         {
             int promptTokens = EstimateTokens(prompt);
 
@@ -1627,7 +1545,7 @@ namespace SystemComments.Controllers
             }
         }
 
-        public async Task<string> GetAssessmentResponseAsync(string prompt)
+        private async Task<string> GetAssessmentResponseAsync(string prompt)
         {
             string aiKey = _config.GetSection("AppSettings:SAGEToken").Value;
             int inputTokens = EstimateTokens(prompt);
@@ -1937,7 +1855,7 @@ namespace SystemComments.Controllers
 
         }
 
-        public static string RemoveNewLinesBetweenTags(string xmlContent)
+        private static string RemoveNewLinesBetweenTags(string xmlContent)
         {
             // Step 1: Remove new line characters between XML tags
             string cleanedXml = Regex.Replace(xmlContent, @">\s+<", "><");
@@ -2109,7 +2027,7 @@ namespace SystemComments.Controllers
             }
         }
 
-        public async Task<string> GetAIResponseAsync(string comments)
+        private async Task<string> GetAIResponseAsync(string comments)
         {
             if (string.IsNullOrEmpty(comments))
             {
