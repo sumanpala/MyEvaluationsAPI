@@ -239,7 +239,7 @@ namespace SystemComments.Controllers
                     "If there are additional categories identified in the AFIs or program comments (e.g., Well-Being, Supervision, Faculty Development, etc.), include those as well as separate JSON objects with their PITs.\n" +
                     "This ensures that PEC receives a full framework covering the required six competencies plus any additional program-relevant categories." +
                     "\n\nPIT Count Rule:\n- For each competency/category, output 3–4 PITs derived from the AFIs.\n- If fewer than 3 PITs exist, include what is available.";
-                prompt = await GetAPEAreaOfImprovementsResponse(input);
+                prompt = await GetAPEAreaOfImprovementsResponse(input);                
                 input.AFIPrompt = prompt;
                 prompt = prompt + requiredCompetencies;
                 response = await GetAPEAIResponse(prompt);
@@ -249,7 +249,7 @@ namespace SystemComments.Controllers
                 string compactJson = JsonConvert.SerializeObject(parsed, Formatting.None);
                 apeResponse.AFIJSON = compactJson;
 
-                prompt = await GetAPEAFIProgramResponse(input);
+                prompt = await GetAPEAFIProgramResponse(input);               
                 input.AFIProgramPrompt = prompt;
                 prompt = prompt + requiredCompetencies;
                 response = await GetAPEAIResponse(prompt);
@@ -292,7 +292,7 @@ namespace SystemComments.Controllers
             return aiAPEResponse;
         }
 
-        public static string SummarizePITs(string json)
+        private static string SummarizePITs(string json)
         {
             if (string.IsNullOrWhiteSpace(json)) return "";
 
@@ -386,6 +386,7 @@ namespace SystemComments.Controllers
                                 .Where(value => !string.IsNullOrEmpty(value))
                         );
                         result = Regex.Replace(result.Replace("\r\n", "\n").Replace("\n\n","\n").Replace("<br/>", "\n"), "<.*?>", string.Empty);
+                        result = await SummarizeText(result, 9000, 1);
                         //result = await SummarizeCommentsWithGPT(result);
                         prompt = prompt.Replace("[From uploaded file]", result);
                     }
@@ -431,12 +432,20 @@ namespace SystemComments.Controllers
                     {
                         string result = string.Join(Environment.NewLine,
                             dtInsights.AsEnumerable()
-                                .Select(row => row["RotationName"] + "\n\n" + row["Comments"]?.ToString().Trim())
+                                .Select(row => row["RotationName"] + "\n\n" + WebUtility.HtmlDecode(row["Comments"]?.ToString()).Trim().Replace("<br/>", "\n").Replace("\n\n", "\n").Replace("\n\n", "\n"))
                                 .Where(value => !string.IsNullOrEmpty(value))
                         );
+
+                        string rotations = string.Join(",",
+                            dtInsights.AsEnumerable()
+                            .Take(5)
+                            .Select(row => "\"" + row["AbrRotationName"] + "\""));
                         result = Regex.Replace(result.Replace("\r\n", "\n").Replace("<br/>", "\n"), "<.*?>", string.Empty);
+                        result = Regex.Replace(result, @"(\r?\n){2,}", "\n\n");
+
+                        result = await SummarizeText(result, 9000, 2);
                         //result = await SummarizeCommentsWithGPT(result);
-                        prompt = prompt.Replace("[From uploaded file]", result);
+                        prompt = prompt.Replace("[From uploaded file]", result).Replace("[Rotations]", "[" + rotations + ",...]");
                     }
                 }
             });
@@ -1314,39 +1323,152 @@ namespace SystemComments.Controllers
             return prompt;
         }
 
-        private async Task<string> GetAPEAIResponse(string prompt)
+        private async Task<string> SummarizeText(string text, int maxTokens = 4000, Int16 promptType = 1)
         {
-            string time = "0";
+            string aiKey = _config.GetSection("AppSettings:MyInsightsToken").Value;
+            string userMessage = (promptType == 1) ? "Please summarize the area of improvements comments in detailed format line by line\n" : "Please summarize the comments with out loosing \"Rotation Name:\"\n";
+            string systemMessage = "You are an expert in Graduate Medical Education (GME) program evaluation.\n";
+            if (promptType == 2)
+            {
+                systemMessage += "Summarize detailed feedback rotation by rotation.\ndon't miss the rotation.\n\n";
+                systemMessage += "Output MUST repeat the following pattern for every rotation found in the input, in the same order:\n\n";
+                systemMessage += "Rotation Name: <exact rotation string from input>\nComments:\n- <concise point 1 reflecting only what appears in the comments>\n- <concise point 2>\n- <concise point 3>\n";
+                systemMessage += "[2–15 bullets per rotation based on the comments by rotation]\nEliminate duplicate comments by rotation.\n";
+            }
             List<object> messages = new List<object>
             {
-                new { role = "system", content = "You are a JSON generator. Always output ONLY valid JSON that matches the user prompt. Do not include any explanations, headers, or text outside JSON." },
-                new { role = "user", content = prompt }
+                new { role = "system", content = systemMessage },
+                new { role = "user", content = $"Summarize the following text in under {maxTokens} tokens:\n\n{userMessage}" + text }
             };
-            string aiKey = _config.GetSection("AppSettings:MyInsightsToken").Value;
+
             using (var client = new HttpClient())
             {
+                client.Timeout = Timeout.InfiniteTimeSpan;
                 client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", aiKey);
-                client.Timeout = Timeout.InfiniteTimeSpan; // 🔥 Disable timeout for streaming
                 var requestBody = new
                 {
                     model = "gpt-4o",
                     messages = messages,
-                    max_tokens = 8000,  // ⚡ Allow high token count                   
-                    temperature = 0,   // ⚡ Lower temperature for deterministic responses
+                    max_tokens = maxTokens,
+                    temperature = 0,
                     top_p = 0.1,
-                    stream = true        // ✅ Enable streaming
+                    stream = false
                 };
 
                 var content = new StringContent(JsonConvert.SerializeObject(requestBody), Encoding.UTF8, "application/json");
-                Stopwatch sw = Stopwatch.StartNew();
-                using (var response = await client.PostAsync("https://api.openai.com/v1/chat/completions", content))
-                {
-                    sw.Stop();
-                    time = sw.Elapsed.TotalSeconds.ToString();
-                    return await ReadStreamedResponse1(response);
-                }
+                var response = await client.PostAsync("https://api.openai.com/v1/chat/completions", content);
+                var result = await response.Content.ReadAsStringAsync();
 
+                dynamic json = JsonConvert.DeserializeObject(result);
+                return json?.choices?[0]?.message?.content ?? "";
             }
+            
+        }
+
+        private async Task<string> GetAPEAIResponse(string prompt, Int16 promptType = 1)
+        {
+            string time = "0";            
+            StringBuilder delta = new StringBuilder();           
+            List<object> messages = new List<object>
+            {
+                new { role = "system", content = "You are a JSON generator. Always output ONLY valid JSON. The JSON must include ALL PITs present in the user’s input. Do not stop early. Do not skip any PIT. Do not summarize.\n\n" },
+                new { role = "user", content = prompt }
+            };
+            string aiKey = _config.GetSection("AppSettings:MyInsightsToken").Value;           
+
+            using (var client = new HttpClient())
+            {
+                client.Timeout = Timeout.InfiniteTimeSpan;
+                client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", aiKey);
+                var requestBody = new
+                {
+                    model = "gpt-4o",
+                    messages = messages,
+                    max_tokens = 9000,
+                    temperature = 0,
+                    top_p = 0.1,
+                    stream = false
+                };
+
+                var content = new StringContent(JsonConvert.SerializeObject(requestBody), Encoding.UTF8, "application/json");
+                var response = await client.PostAsync("https://api.openai.com/v1/chat/completions", content);
+                var result = await response.Content.ReadAsStringAsync();
+
+                dynamic json = JsonConvert.DeserializeObject(result);
+                return json?.choices?[0]?.message?.content ?? "";
+            }
+
+            //using (var request = new HttpRequestMessage(HttpMethod.Post, "https://api.openai.com/v1/chat/completions"))
+            //{
+            //    request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", aiKey);
+
+            //    var requestBody = new
+            //    {
+            //        model = "gpt-4o",
+            //        messages = messages,
+            //        max_tokens = 8000,
+            //        temperature = 0,
+            //        top_p = 0.1,
+            //        stream = true
+            //    };
+
+            //    request.Content = new StringContent(JsonConvert.SerializeObject(requestBody), Encoding.UTF8, "application/json");
+
+            //    using (var response = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead))
+            //    using (var stream = await response.Content.ReadAsStreamAsync())
+            //    using (var reader = new StreamReader(stream))
+            //    {
+            //        while (!reader.EndOfStream)
+            //        {
+            //            var line = await reader.ReadLineAsync();
+
+            //            if (string.IsNullOrWhiteSpace(line))
+            //                continue;
+
+            //            if (line.StartsWith("data: "))
+            //            {
+            //                var json = line.Substring("data: ".Length);
+
+            //                if (json == "[DONE]") break;
+
+            //                var evt = JsonConvert.DeserializeObject<dynamic>(json);
+
+            //                string responseChunk = evt?.choices[0]?.delta?.content;
+            //                if (!string.IsNullOrEmpty(responseChunk))
+            //                {
+            //                    //Console.Write(delta); // 🔥 append delta to your buffer
+            //                    delta.Append(responseChunk);
+            //                }
+            //            }
+            //        }
+            //    }
+            //}
+
+            //using (var client = new HttpClient())
+            //{
+            //    client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", aiKey);
+            //    client.Timeout = Timeout.InfiniteTimeSpan; // 🔥 Disable timeout for streaming
+            //    var requestBody = new
+            //    {
+            //        model = "gpt-4o",
+            //        messages = messages,
+            //        max_tokens = 8000,  // ⚡ Allow high token count                   
+            //        temperature = 0,   // ⚡ Lower temperature for deterministic responses
+            //        top_p = 0.1,
+            //        stream = true        // ✅ Enable streaming
+            //    };
+
+            //    var content = new StringContent(JsonConvert.SerializeObject(requestBody), Encoding.UTF8, "application/json");
+            //    Stopwatch sw = Stopwatch.StartNew();
+            //    using (var response = await client.PostAsync("https://api.openai.com/v1/chat/completions", content))
+            //    {
+            //        sw.Stop();
+            //        time = sw.Elapsed.TotalSeconds.ToString();
+            //        return await ReadStreamedResponse1(response);
+            //    }
+
+            //}
+            return delta.ToString();
         }
 
         private async Task<string> SummarizeCommentsWithGPT(string comments)
