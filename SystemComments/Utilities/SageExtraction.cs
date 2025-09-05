@@ -12,6 +12,7 @@ using System.Text.RegularExpressions;
 using System.Web;
 using System.Xml.Linq;
 using SystemComments.Models.DataBase;
+using static System.Collections.Specialized.BitVector32;
 
 namespace SystemComments.Utilities
 {
@@ -782,6 +783,134 @@ namespace SystemComments.Utilities
             table.Rows.Add(row);
         }
 
+        public static string ConvertLastJsonToFormattedText(string json, ref Int32 lastSection, ref Int32 noOfSections)
+        {
+            StringBuilder sb = new StringBuilder();
+            string includedSteps = "IMPORTANT: For this response, only generate below sections.\n\t\t";
+            try
+            {
+                JObject jsonObject = JObject.Parse(json);
+                Int32 totalSections = 1;
+                Int32 currentSection = 0;
+                //Int32 followupSection = 1;
+                if (jsonObject["totalsections"] != null && jsonObject["totalsections"].ToString().Length > 0)
+                {
+                    totalSections = int.Parse(jsonObject["totalsections"].ToString());
+                }
+
+                var sections = jsonObject["sections"];
+                // Find last section with non-empty mainsection.answer
+                var objLastSection = sections
+                    .Where(s =>
+                        s["mainsection"] != null &&
+                        s["mainsection"].Any(ms => !string.IsNullOrWhiteSpace((string)ms["answer"])))
+                    .LastOrDefault();
+
+                if (objLastSection != null)
+                {
+                    currentSection = int.Parse(objLastSection["sectionnum"].ToString());
+                    sb.Append("The sectionnum field is derived from the section name (fullname) in the JSON. For example, if the section name is ‘Section 2 of 5’, then sectionnum is 2. \n");
+                    sb.Append($"Total Sections: {totalSections} \n");
+                    Int16 startStep = 1;
+                    while (startStep < currentSection)
+                    {
+                        sb.Append($"Section {startStep} completed.\n");
+                        startStep++;
+                    }
+                    if (objLastSection["mainsection"] != null)
+                    {
+                        foreach (var mainSection in objLastSection["mainsection"])
+                        {
+                            if (mainSection?["mainquestion"] != null && mainSection["mainquestion"].ToString().Length > 0)
+                            {
+                                if (mainSection["description"] != null)
+                                {
+                                    sb.Append(mainSection["description"].ToString() + "\n");
+                                }
+
+                                if (mainSection?["mainquestion"] != null)
+                                {
+                                    sb.Append(mainSection["mainquestion"].ToString() + "\n");
+                                }
+
+                                if (mainSection?["guide"]?["description"] != null)
+                                {
+                                    sb.Append(mainSection["guide"]["description"].ToString() + "\n");
+                                }
+
+                                if (mainSection?["guide"]?["guidequestions"] is JArray guideQuestions && guideQuestions.Count > 0)
+                                {
+                                    foreach (var guideQuestion in guideQuestions)
+                                    {
+                                        sb.Append("• " + guideQuestion["guidequestion"]?.ToString() + "\n");
+                                    }
+                                }
+                                if (mainSection?["wait"] != null)
+                                {
+                                    sb.Append(mainSection["wait"].ToString() + "\n");
+                                }
+                                if (mainSection?["answer"] != null && mainSection["answer"].ToString().Length > 0)
+                                {
+                                    sb.Append("Answer: " + mainSection["answer"].ToString() + "\n");                                  
+                                }                                
+                            }                           
+                        }
+                    }
+                    if (objLastSection["followupsections"] != null && objLastSection["followupsections"] is JArray followupSections && followupSections.Count > 0)
+                    {
+                        foreach (var followup in followupSections)
+                        {
+                            if (followup["question"]?.ToString().Length > 0)
+                            {
+                                if (followup["description"] != null)
+                                {
+                                    sb.Append(followup["description"].ToString() + "\n");
+                                }
+
+                                sb.Append("• " + followup["question"]?.ToString() + "\n");
+                                if (followup["wait"] != null)
+                                {
+                                    sb.Append(followup["wait"]?.ToString() + "\n");
+                                }
+                                if (followup["answer"] != null && followup["answer"]?.ToString().Length > 0)
+                                {
+                                    //sb.Append("Answer: User Completed this question.\n");
+                                    sb.Append("Answer: " + followup["answer"]?.ToString() + "\n");
+                                }                               
+                            }                            
+
+                        }
+                    }
+                }
+
+                // Find last section with at least one non-empty followupsections.answer
+                //var lastFollowupSection = sections
+                //    .Where(s =>
+                //        s["followupsections"] != null &&
+                //        s["followupsections"].Any(fs => !string.IsNullOrWhiteSpace((string)fs["answer"])))
+                //    .LastOrDefault();
+                //if (lastFollowupSection != null)
+                //{
+                //    followupSection = int.Parse(lastFollowupSection["sectionnum"].ToString());
+                //}
+                includedSteps += $"1. Section {((currentSection == 0) ? 1 : currentSection)} of {totalSections.ToString()}\n\t\t";
+                if (currentSection > 0 && currentSection < totalSections)
+                {
+                    includedSteps += $"2. Section {currentSection + 1} of {totalSections.ToString()}\n";
+                }
+
+                lastSection = ((currentSection == 0) ? 1 : currentSection);
+                noOfSections = totalSections;
+                sb.Append("\n\n" + includedSteps);
+
+            }
+            catch (Exception e)
+            {
+
+            }
+            return sb.ToString();
+        }
+
         public static string ConvertJsonToFormattedText(string json, ref Int32 lastSection, ref Int32 noOfSections)
         {
             StringBuilder sb = new StringBuilder();
@@ -1014,6 +1143,10 @@ namespace SystemComments.Utilities
                     }
                     else
                     {
+                        if (!table.Columns.Contains(property.Name))
+                        {
+                            table.Columns.Add(property.Name, typeof(string));
+                        }
                         row[property.Name] = property.Value.ToString();
                     }
                 }
@@ -1082,44 +1215,77 @@ namespace SystemComments.Utilities
         {
             try
             {
-                // Deserialize JSON 1
-                var json1Object = System.Text.Json.JsonSerializer.Deserialize<JsonRoot>(json1);
+                //// Deserialize JSON 1
+                //var json1Object = System.Text.Json.JsonSerializer.Deserialize<JsonRoot>(json1);
 
-                // Deserialize JSON 2
-                var json2Object = System.Text.Json.JsonSerializer.Deserialize<JsonRoot>(json2);
+                //// Deserialize JSON 2
+                //var json2Object = System.Text.Json.JsonSerializer.Deserialize<JsonRoot>(json2);
 
-                if (json1Object == null || json2Object == null)
-                    return json1; // If any JSON is invalid, return original JSON 1
+                //if (json1Object == null || json2Object == null)
+                //    return json1; // If any JSON is invalid, return original JSON 1
 
-                // Convert sections to a dictionary for easy lookup
-                var sectionsMap = json1Object.Sections.ToDictionary(s => s.SectionNum, s => s);
+                //// Convert sections to a dictionary for easy lookup
+                //var sectionsMap = json1Object.Sections.ToDictionary(s => s.SectionNum, s => s);
 
-                foreach (var section in json2Object.Sections)
+                //foreach (var section in json2Object.Sections)
+                //{
+                //    if (sectionsMap.ContainsKey(section.SectionNum))
+                //    {
+                //        // Merge existing section
+                //        var existingSection = sectionsMap[section.SectionNum];
+
+                //        if (existingSection.MainSection == null || existingSection.MainSection.Count == 0)
+                //        {
+                //            existingSection.MainSection = section.MainSection;
+                //        }
+
+                //        if (existingSection.FollowupSections == null || existingSection.FollowupSections.Count == 0)
+                //        {
+                //            existingSection.FollowupSections = section.FollowupSections;
+                //        }
+                //    }
+                //    else
+                //    {
+                //        // Add new section
+                //        json1Object.Sections.Add(section);
+                //    }
+                //}
+
+                //// Serialize back to JSON
+                //return System.Text.Json.JsonSerializer.Serialize(json1Object, new JsonSerializerOptions { WriteIndented = true });
+
+                JObject obj1 = JObject.Parse(json1);
+                JObject obj2 = JObject.Parse(json2);
+
+                var sections1 = (JArray)obj1["sections"];
+                var sections2 = (JArray)obj2["sections"];
+                int sectionsCount = sections1.Count;
+                // Merge sections from JSON 2 if sectionnum not in JSON 1
+                foreach (var section2 in sections2)
                 {
-                    if (sectionsMap.ContainsKey(section.SectionNum))
+                    int secNum2 = (int)section2["sectionnum"];
+                    string sectionName = section2["name"].ToString();
+                    bool exists = sections1.Any(s => (int)s["sectionnum"] == secNum2);
+                    if (!exists)
                     {
-                        // Merge existing section
-                        var existingSection = sectionsMap[section.SectionNum];
-
-                        if (existingSection.MainSection == null || existingSection.MainSection.Count == 0)
-                        {
-                            existingSection.MainSection = section.MainSection;
-                        }
-
-                        if (existingSection.FollowupSections == null || existingSection.FollowupSections.Count == 0)
-                        {
-                            existingSection.FollowupSections = section.FollowupSections;
-                        }
+                        sections1.Add(section2);
                     }
                     else
                     {
-                        // Add new section
-                        json1Object.Sections.Add(section);
+                        exists = sections1.Any(s => s["name"].ToString() == sectionName);
+                        if(!exists)
+                        {
+                            sectionsCount++;
+                            section2["sectionnum"] = sectionsCount.ToString();
+                            sections1.Add(section2);
+                        }
                     }
                 }
 
-                // Serialize back to JSON
-                return System.Text.Json.JsonSerializer.Serialize(json1Object, new JsonSerializerOptions { WriteIndented = true });
+                // update totalsections just in case
+                //obj1["totalsections"] = sections1.Count.ToString();
+
+                return obj1.ToString(Formatting.Indented);
             }
             catch (Exception ex)
             {

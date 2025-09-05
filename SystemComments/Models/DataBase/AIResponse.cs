@@ -148,4 +148,13 @@ namespace SystemComments.Models.DataBase
         public string JustificationWithCPRReferences { get; set; }
         public List<string> CPRReferences { get; set; }
     }
+
+    public class TimeHistory
+    {
+        public double TotalSeconds { get; set; } = 0;
+        public double HistorySeconds { get; set; } = 0;
+        public double PromptDBSeconds { get; set; } = 0;
+
+        public int ApiAttempts { get; set; } = 1;
+    }
 }

@@ -1,4 +1,13 @@
-﻿using System;
+﻿using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.Data.SqlClient;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
+using System;
 using System.Collections.Generic;
 using System.Data;
 using System.Diagnostics;
@@ -14,16 +23,8 @@ using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Timers;
 using System.Xml.Linq;
-using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.Http;
-using Microsoft.AspNetCore.Mvc;
-using Microsoft.Data.SqlClient;
-using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Configuration;
-using Microsoft.Extensions.Logging;
-using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
 using SystemComments.Models.DataBase;
 using SystemComments.Utilities;
 using static System.Net.Mime.MediaTypeNames;
@@ -477,11 +478,16 @@ namespace SystemComments.Controllers
             string comments = "";
             string aiResponse = "";
             string minifiedJson = "[]";
+            Stopwatch totalTime = Stopwatch.StartNew();
+            double totalSeconds = 0, promptDBSeconds = 0, historySeconds = 0;
+            int apiAttempts = 0;
+            TimeHistory timeHistory = new TimeHistory();
             List<SAGEResponse> aiSavedResponse = new List<SAGEResponse>();
             try
             {
                 if (input.EvaluationID > 0)
                 {
+                    Stopwatch promptDBTime = Stopwatch.StartNew();
                     SqlParameter[] parameters = new SqlParameter[]
                     {
                             new SqlParameter("@DepartmentID", input.DepartmentID),
@@ -493,6 +499,9 @@ namespace SystemComments.Controllers
                     DataSet dsSageData = _context.ExecuteStoredProcedure("GetSagePrompts", parameters);
                     if (dsSageData != null)
                     {
+                        promptDBTime.Stop();
+                        promptDBSeconds = promptDBTime.Elapsed.TotalSeconds;
+                        timeHistory.PromptDBSeconds = promptDBSeconds;
                         DataTable dtPrompt = dsSageData.Tables[0];
                         DataTable dtQuestions = dsSageData.Tables[1];
                         DataTable dtResponses = dsSageData.Tables[2];
@@ -504,7 +513,7 @@ namespace SystemComments.Controllers
                         }
                         if (dtResponses.Rows.Count > 0 && input.SageRequest.Length > 2)
                         {
-                            comments = dtResponses.Rows[0]["AIPrompt"].ToString();                            
+                            comments = dtResponses.Rows[0]["AIPrompt"].ToString();
                         }
                         else
                         {
@@ -520,14 +529,14 @@ namespace SystemComments.Controllers
                                 input.TrainingLevel = dtPrompt.Rows[0]["PGYLevel"].ToString();
                                 input.ActivityName = dtPrompt.Rows[0]["ActivityName"].ToString();
                                 if (comments.Length == 0)
-                                {                                    
+                                {
                                     comments = GetSagePrompt(input);
                                 }
                                 comments = comments.Replace("</br>", "\n");
                                 comments = comments.Replace("<br>", "\n");
                                 comments = comments.Replace("[Program Type]", dtPrompt.Rows[0]["DepartmentName"].ToString());
                                 comments = comments.Replace("[Rotation]", dtPrompt.Rows[0]["RotationName"].ToString());
-                                comments = comments.Replace("[Rotation Name]", dtPrompt.Rows[0]["RotationName"].ToString());                                
+                                comments = comments.Replace("[Rotation Name]", dtPrompt.Rows[0]["RotationName"].ToString());
                                 comments = comments.Replace("[Setting]", dtPrompt.Rows[0]["ActivityName"].ToString());
                                 comments = comments.Replace("[Level]", dtPrompt.Rows[0]["PGYLevel"].ToString());
                                 comments = comments.Replace("[User Type]", dtPrompt.Rows[0]["UserTypeName"].ToString());
@@ -537,8 +546,17 @@ namespace SystemComments.Controllers
                             {
                                 comments = GetSagePrompt(input);
                             }
-                            // Get Last 12 months historical data.           
-                            string history = GetPreviousHistory(input, templateIDs,Convert.ToInt64(subjectUserID));
+                            // Get Last 12 months historical data.
+                            Stopwatch promptDBHistory = Stopwatch.StartNew();
+                            string history = GetPreviousHistory(input, templateIDs, Convert.ToInt64(subjectUserID));
+                            promptDBHistory.Stop();
+                            historySeconds = promptDBHistory.Elapsed.TotalSeconds;
+                            timeHistory.HistorySeconds = historySeconds;
+                            // Summarize the comments
+                            if (history.Length > 0)
+                            {
+                                history = await SummarizeHistoricalData(history, 2000);
+                            }                        
                             comments = comments.Replace("[Historical Data]", history);
                         }
                     }
@@ -547,24 +565,30 @@ namespace SystemComments.Controllers
                     Int32 totalSections = 1;
                     if (input.SageRequest != null && input.SageRequest.Length > 2)
                     {                        
-                        sageQuestions = ConvertJsonToFormattedText(input.SageRequest, ref lastSection, ref totalSections);
+                        sageQuestions = SageExtraction.ConvertLastJsonToFormattedText(input.SageRequest, ref lastSection, ref totalSections);
                         if(sageQuestions.Length > 0)
-                        {                           
+                        {                         
                             
                             sageQuestions = sageQuestions.Replace("</br>", "\n");
                             sageQuestions = sageQuestions.Replace("<br>", "\n");
                         }                       
                     }
-                    //string aiComments = GetAISAGEWithStreaming(comments + "\n" + sageQuestions + "\n include <section> tag between the tag <sections></sections>");
-                    //string aiComments = await GetAISAGEChatGptResponse1(comments + "\n" + sageQuestions + "\n include <section> tag between the tag <sections></sections>");
-                    string aiComments = await GetFastOpenAIResponse(comments + "\n include <mainsection></mainsection> without fail. \n Answer is always empty in the response for example <answer></answer> \n" + sageQuestions);
+                    else
+                    {
+                        sageQuestions = "IMPORTANT: For this response, only generate section 1.\n";
+                    }
+                        //string aiComments = GetAISAGEWithStreaming(comments + "\n" + sageQuestions + "\n include <section> tag between the tag <sections></sections>");
+                        //string aiComments = await GetAISAGEChatGptResponse1(comments + "\n" + sageQuestions + "\n include <section> tag between the tag <sections></sections>");
+                        apiAttempts++;
+                    string aiComments = await GetFastOpenAIResponse1(comments + "\n include <mainsection></mainsection> without fail. \n Answer is always empty in the response for example <answer></answer> \n" + sageQuestions);
                     string extractJSON = SageExtractData(aiComments);
                     JToken parsedJson = JToken.Parse(extractJSON);
                     minifiedJson = JsonConvert.SerializeObject(parsedJson, Formatting.None);
-                    //if (input.SageRequest.Length > 0 && minifiedJson.Length > 0)
-                    //{
-                    //    minifiedJson = SageExtraction.MergeJson(input.SageRequest, minifiedJson);
-                    //}
+                    if (input.SageRequest.Length > 0 && minifiedJson.Length > 0)
+                    {
+                        minifiedJson = SageExtraction.MergeJson(input.SageRequest, minifiedJson);
+                        extractJSON = minifiedJson;
+                    }
                     minifiedJson = UpdateRequestJSON(minifiedJson, input.SageRequest);
 
                     Int32 sectionCount = GetSectionsCount(extractJSON);
@@ -576,23 +600,33 @@ namespace SystemComments.Controllers
                     }
                     if (sectionCount == 0)
                     {
-                        aiComments = await GetFastOpenAIResponse(comments + "\n" + sageQuestions + "\nSections are missed in the tag <sections></sections>, Please include." + allSectionsPrompt + "\n include <section> tag between the tag <sections></sections>");
+                        aiComments = await GetFastOpenAIResponse1(comments + "\n" + sageQuestions + "\nSections are missed in the tag <sections></sections>, Please include." + allSectionsPrompt + "\n include <section> tag between the tag <sections></sections>");
+                        apiAttempts++;
                         extractJSON = SageExtractData(aiComments);
                         sectionCount = GetSectionsCount(extractJSON);
                         if (sectionCount == 0)
                         {
                             extractJSON = minifiedJson;
                         }
+                        else if (input.SageRequest.Length > 0 && minifiedJson.Length > 0)
+                        {
+                            extractJSON = SageExtraction.MergeJson(input.SageRequest, minifiedJson);
+                        }
                     }
                     else if (lastSection > sectionCount && lastSection <= totalSections)
                     {
                         string updatedPrompt = $"{comments} \n{sageQuestions} \n Section {lastSection} of {totalSections} is missed, please include. {allSectionsPrompt}\n include <section> tag between the tag <sections></sections>";
-                        aiComments = await GetFastOpenAIResponse(updatedPrompt);
+                        aiComments = await GetFastOpenAIResponse1(updatedPrompt);
+                        apiAttempts++;
                         extractJSON = SageExtractData(aiComments);
                         sectionCount = GetSectionsCount(extractJSON);
                         if (sectionCount == 0)
                         {
                             extractJSON = minifiedJson;
+                        }
+                        else if (input.SageRequest.Length > 0 && minifiedJson.Length > 0)
+                        {
+                            extractJSON = SageExtraction.MergeJson(input.SageRequest, minifiedJson);
                         }
                     }
 
@@ -612,11 +646,15 @@ namespace SystemComments.Controllers
                     aiSavedResponse.Add(sageResponse);
                     minifiedJson = ChangeJSONOrder(minifiedJson);
                     DataSet dsData = ConvertJsonToDataSet(minifiedJson);
-                    DataSet dsResultSet = SaveSageResponse(dsData, input, aiResponse, comments, minifiedJson);
+                    totalTime.Stop();
+                    totalSeconds = totalTime.Elapsed.TotalSeconds;
+                    timeHistory.TotalSeconds = totalSeconds;
+                    timeHistory.ApiAttempts = apiAttempts;
+                    DataSet dsResultSet = SaveSageResponse(dsData, input, aiResponse, comments, minifiedJson, timeHistory);
                     if (dsResultSet != null && dsResultSet.Tables.Count > 0)
                     {
                         DataTable dtEvaluationQuestions = dsResultSet.Tables[0];
-                        sageResponse.ResponseJSON = UpdateJSONQuestionIDs(dtEvaluationQuestions, minifiedJson);
+                        sageResponse.ResponseJSON = UpdateJSONQuestionIDs(dtEvaluationQuestions, minifiedJson);                       
                         SaveSageResponse(sageResponse.ResponseJSON, input);
                     }
                 }
@@ -758,7 +796,7 @@ namespace SystemComments.Controllers
             return userComments;
         }
 
-        private DataSet SaveSageResponse(DataSet dsData, AIRequest input, string aiResponse, string aiPrompt, string extractJSON)
+        private DataSet SaveSageResponse(DataSet dsData, AIRequest input, string aiResponse, string aiPrompt, string extractJSON, TimeHistory timeHistory)
         {
             DataTable dtSections = new DataTable();
             DataTable dtSectionInfo = new DataTable();
@@ -844,6 +882,10 @@ namespace SystemComments.Controllers
                             new SqlParameter("@AIResponse", aiResponse),
                             new SqlParameter("@AIJSON", extractJSON),
                             new SqlParameter("@AIPrompt", aiPrompt),
+                            new SqlParameter("@TotalSeconds", timeHistory.TotalSeconds),
+                            new SqlParameter("@PromptSeconds", timeHistory.PromptDBSeconds),
+                            new SqlParameter("@CommentsSeconds", timeHistory.HistorySeconds),
+                            new SqlParameter("@TotalAttempts", timeHistory.ApiAttempts),
                             new SqlParameter("@tblSections", dtSections),
                             new SqlParameter("@tblMainQuestions", dtMainQuestions),
                             new SqlParameter("@tblGuide", dtGuide),
@@ -1323,6 +1365,45 @@ namespace SystemComments.Controllers
             return prompt;
         }
 
+        private async Task<string> SummarizeHistoricalData(string text, int maxTokens = 4000)
+        {
+            string time = "0";
+            Stopwatch sw = Stopwatch.StartNew();
+            string aiKey = _config.GetSection("AppSettings:MyInsightsToken").Value;
+            string systemMessage = "You are an expert in summarizing user comments.";
+            string userMessage = $"Summarize the following text line by line, keep it concise:\n\n{text}";
+
+            List<object> messages = new List<object>
+            {
+                new { role = "system", content = systemMessage },
+                new { role = "user", content = userMessage }
+            };
+
+            using (var client = new HttpClient())
+            {                
+                client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", aiKey);
+                var requestBody = new
+                {
+                    model = "gpt-4o-mini",
+                    messages = messages,
+                    max_tokens = 500,
+                    temperature = 0,
+                    top_p = 1,
+                    stream = false
+                };
+
+                var content = new StringContent(JsonConvert.SerializeObject(requestBody), Encoding.UTF8, "application/json");
+                var response = await client.PostAsync("https://api.openai.com/v1/chat/completions", content);
+                var result = await response.Content.ReadAsStringAsync();
+
+                dynamic json = JsonConvert.DeserializeObject(result);
+                sw.Stop();
+                time = sw.Elapsed.TotalSeconds.ToString();
+                return json?.choices?[0]?.message?.content ?? "";
+            }
+
+        }
+
         private async Task<string> SummarizeText(string text, int maxTokens = 4000, Int16 promptType = 1)
         {
             string aiKey = _config.GetSection("AppSettings:MyInsightsToken").Value;
@@ -1631,6 +1712,84 @@ namespace SystemComments.Controllers
             // Ensure max_tokens does not exceed a safe response size
             return Math.Max(100, Math.Min(availableTokens, maxResponseLimit));
         }
+
+        private async Task<string> GetFastOpenAIResponse1(string prompt)
+        {
+            string time = "0";
+            Stopwatch sw = Stopwatch.StartNew();
+            string apiKey = _config.GetSection("AppSettings:SAGEToken").Value;
+
+            List<object> messages = new List<object>
+            {
+                new { role = "system", content = "You are an expert assessment designer.\n Follow the provided 'XML' structure strictly in the prompt.\n Only return the sections explicitly requested as 'IMPORTANT'. Do not include future sections." },
+                new { role = "user", content = prompt }
+            };
+
+            var requestBody = new
+            {
+                model = "gpt-4o",
+                messages = messages,
+                max_tokens = 4000,
+                temperature = 0,
+                top_p = 1,
+                stream = true // ✅ stream from OpenAI
+            };
+
+            using var client = new HttpClient();
+            client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
+
+            var content = new StringContent(JsonConvert.SerializeObject(requestBody), Encoding.UTF8, "application/json");
+
+            // ⚡ important: don't buffer entire response
+            using var response = await client.SendAsync(
+                new HttpRequestMessage(HttpMethod.Post, "https://api.openai.com/v1/chat/completions") { Content = content },
+                HttpCompletionOption.ResponseHeadersRead);
+
+            response.EnsureSuccessStatusCode();
+
+            var sb = new StringBuilder();
+
+            using var stream = await response.Content.ReadAsStreamAsync();
+            using var reader = new StreamReader(stream);
+
+            while (!reader.EndOfStream)
+            {
+                var line = await reader.ReadLineAsync();
+                if (string.IsNullOrWhiteSpace(line) || !line.StartsWith("data: "))
+                    continue;
+
+                var jsonPart = line.Substring(6); // remove "data: "
+                if (jsonPart.Trim() == "[DONE]") break;
+
+                try
+                {
+                    using var doc = JsonDocument.Parse(jsonPart);
+                    var root = doc.RootElement;
+
+                    if (root.TryGetProperty("choices", out var choices))
+                    {
+                        foreach (var choice in choices.EnumerateArray())
+                        {
+                            if (choice.TryGetProperty("delta", out var delta) &&
+                                delta.TryGetProperty("content", out var contentProp))
+                            {
+                                var token = contentProp.GetString();
+                                if (!string.IsNullOrEmpty(token))
+                                    sb.Append(token); // append token immediately
+                            }
+                        }
+                    }
+                }
+                catch
+                {
+                    // ignore malformed chunks
+                }
+            }
+            sw.Stop();
+            time = sw.Elapsed.TotalSeconds.ToString();
+            return sb.ToString();
+        }
+
 
         private async Task<string> GetFastOpenAIResponse(string prompt)
         {
