@@ -237,9 +237,10 @@ namespace SystemComments.Controllers
                 //"\n3) Patient Care and Procedural Skills\n4) Practice-Based Learning and Improvement\n5) Professionalism\n6) Systems-Based Practice\nReturn atleast 3 to 4 PITs for one PrimaryACGMECompetencyOrCategory";
                 string requiredCompetencies = "\n\nCoverage Rule:\n\r\nThe output must always include all six ACGME Core Competencies:\nInterpersonal and Communication Skills\nMedical Knowledge" +
                     "\nPatient Care and Procedural Skills\nPractice-Based Learning and Improvement\nProfessionalism\nSystems-Based Practice\n" +
-                    "If there are additional categories identified in the AFIs or program comments (e.g., Well-Being, Supervision, Faculty Development, etc.), include those as well as separate JSON objects with their PITs.\n" +
+                    "If there are additional ACGME categories identified in the AFIs or Comments Source (e.g., Well-Being, Supervision, Faculty Development, etc.), include those as well as separate JSON objects with their PITs.\n" +
                     "This ensures that PEC receives a full framework covering the required six competencies plus any additional program-relevant categories." +
-                    "\n\nPIT Count Rule:\n- For each competency/category, output 3–4 PITs derived from the AFIs.\n- If fewer than 3 PITs exist, include what is available.";
+                    "\n\nPIT Count Rule:\n- For each ACGME competency/category, output 3–4 PITs derived from the AFIs.\n- If fewer than 3 PITs exist, include what is available." + 
+                    "\n\n\"Important: Frequency is always high. Try to include Frequency as High based on the prompt.\"\n";
                 prompt = await GetAPEAreaOfImprovementsResponse(input);                
                 input.AFIPrompt = prompt;
                 prompt = prompt + requiredCompetencies;
@@ -387,7 +388,7 @@ namespace SystemComments.Controllers
                                 .Where(value => !string.IsNullOrEmpty(value))
                         );
                         result = Regex.Replace(result.Replace("\r\n", "\n").Replace("\n\n","\n").Replace("<br/>", "\n"), "<.*?>", string.Empty);
-                        result = await SummarizeText(result, 9000, 1);
+                        result = await SummarizeText(result, 4000, 1);
                         //result = await SummarizeCommentsWithGPT(result);
                         prompt = prompt.Replace("[From uploaded file]", result);
                     }
@@ -506,7 +507,7 @@ namespace SystemComments.Controllers
                         DataTable dtQuestions = dsSageData.Tables[1];
                         DataTable dtResponses = dsSageData.Tables[2];
                         //DataTable dtDefaultJSON = dsSageData.Tables[3];
-                        if(dtPrompt.Rows.Count > 0)
+                        if (dtPrompt.Rows.Count > 0)
                         {
                             defaultJSON = dtPrompt.Rows[0]["DefaultJSON"].ToString();
                             input.SageRequest = dtPrompt.Rows[0]["AIJSON"].ToString();
@@ -536,10 +537,13 @@ namespace SystemComments.Controllers
                                 comments = comments.Replace("<br>", "\n");
                                 comments = comments.Replace("[Program Type]", dtPrompt.Rows[0]["DepartmentName"].ToString());
                                 comments = comments.Replace("[Rotation]", dtPrompt.Rows[0]["RotationName"].ToString());
+                                comments = comments.Replace("[ Rotation]", dtPrompt.Rows[0]["RotationName"].ToString());
+                                comments = comments.Replace("[ Rotation ]", dtPrompt.Rows[0]["RotationName"].ToString());
                                 comments = comments.Replace("[Rotation Name]", dtPrompt.Rows[0]["RotationName"].ToString());
                                 comments = comments.Replace("[Setting]", dtPrompt.Rows[0]["ActivityName"].ToString());
                                 comments = comments.Replace("[Level]", dtPrompt.Rows[0]["PGYLevel"].ToString());
                                 comments = comments.Replace("[User Type]", dtPrompt.Rows[0]["UserTypeName"].ToString());
+                                comments = comments.Replace("[Specialty]", dtPrompt.Rows[0]["SpecialityName"].ToString());
 
                             }
                             else
@@ -555,31 +559,32 @@ namespace SystemComments.Controllers
                             // Summarize the comments
                             if (history.Length > 0)
                             {
-                                history = await SummarizeHistoricalData(history, 2000);
-                            }                        
+                                //history = await SummarizeHistoricalData(history, 2000);
+                            }
                             comments = comments.Replace("[Historical Data]", history);
                         }
                     }
+                    comments = RemoveHTMLTags(comments);
                     string sageQuestions = "";
                     Int32 lastSection = 1;
                     Int32 totalSections = 1;
                     if (input.SageRequest != null && input.SageRequest.Length > 2)
-                    {                        
+                    {
                         sageQuestions = SageExtraction.ConvertLastJsonToFormattedText(input.SageRequest, ref lastSection, ref totalSections);
-                        if(sageQuestions.Length > 0)
-                        {                         
-                            
+                        if (sageQuestions.Length > 0)
+                        {
+
                             sageQuestions = sageQuestions.Replace("</br>", "\n");
                             sageQuestions = sageQuestions.Replace("<br>", "\n");
-                        }                       
+                        }
                     }
                     else
                     {
                         sageQuestions = "IMPORTANT: For this response, only generate section 1.\n";
                     }
-                        //string aiComments = GetAISAGEWithStreaming(comments + "\n" + sageQuestions + "\n include <section> tag between the tag <sections></sections>");
-                        //string aiComments = await GetAISAGEChatGptResponse1(comments + "\n" + sageQuestions + "\n include <section> tag between the tag <sections></sections>");
-                        apiAttempts++;
+                    //string aiComments = GetAISAGEWithStreaming(comments + "\n" + sageQuestions + "\n include <section> tag between the tag <sections></sections>");
+                    //string aiComments = await GetAISAGEChatGptResponse1(comments + "\n" + sageQuestions + "\n include <section> tag between the tag <sections></sections>");
+                    apiAttempts++;
                     string aiComments = await GetFastOpenAIResponse1(comments + "\n include <mainsection></mainsection> without fail. \n Answer is always empty in the response for example <answer></answer> \n" + sageQuestions);
                     string extractJSON = SageExtractData(aiComments);
                     JToken parsedJson = JToken.Parse(extractJSON);
@@ -594,7 +599,7 @@ namespace SystemComments.Controllers
                     Int32 sectionCount = GetSectionsCount(extractJSON);
                     Int32 allSectionsCount = GetAllSectionsCount(extractJSON);
                     string allSectionsPrompt = "";
-                    if(allSectionsCount == 0)
+                    if (allSectionsCount == 0)
                     {
                         allSectionsPrompt = "\nSections are missed in the tag <allsections></allsections>, Please include.";
                     }
@@ -630,7 +635,7 @@ namespace SystemComments.Controllers
                         }
                     }
 
-                    sectionCount = GetSectionsCount(extractJSON);                   
+                    sectionCount = GetSectionsCount(extractJSON);
                     if (lastSection > sectionCount && lastSection <= totalSections && defaultJSON.Length > 0)
                     {
                         // Include sections manually if API returns invalid data
@@ -638,7 +643,7 @@ namespace SystemComments.Controllers
                     }
 
                     parsedJson = JToken.Parse(extractJSON);
-                    minifiedJson = JsonConvert.SerializeObject(parsedJson, Formatting.None);                   
+                    minifiedJson = JsonConvert.SerializeObject(parsedJson, Formatting.None);
                     minifiedJson = UpdateRequestJSON(minifiedJson, input.SageRequest);
                     SAGEResponse sageResponse = new SAGEResponse();
                     sageResponse.EvaluationID = input.EvaluationID;
@@ -654,7 +659,7 @@ namespace SystemComments.Controllers
                     if (dsResultSet != null && dsResultSet.Tables.Count > 0)
                     {
                         DataTable dtEvaluationQuestions = dsResultSet.Tables[0];
-                        sageResponse.ResponseJSON = UpdateJSONQuestionIDs(dtEvaluationQuestions, minifiedJson);                       
+                        sageResponse.ResponseJSON = UpdateJSONQuestionIDs(dtEvaluationQuestions, minifiedJson);
                         SaveSageResponse(sageResponse.ResponseJSON, input);
                     }
                 }
@@ -741,6 +746,17 @@ namespace SystemComments.Controllers
             return aiComments;
         }
 
+        private string RemoveHTMLTags(string comments)
+        {
+            // Replace <li> and </li> with newlines
+            string text = Regex.Replace(comments, @"\s*<li>\s*", "")
+                               .Replace("</li>", "\n");
+            text = text.Replace("<ul>", "\n").Replace("</ul>", "\n");
+            text = text.Replace("<ol>", "\n").Replace("</ol>", "\n");
+            // Remove remaining HTML tags like <ul> </ul>
+            //text = Regex.Replace(text, "<.*?>", "").Trim();
+            return text;
+        }
         private string GetPreviousHistory(AIRequest input, string templateIDs, Int64 userID)
         {
             string userComments = string.Empty;
@@ -1414,7 +1430,7 @@ namespace SystemComments.Controllers
                 systemMessage += "Summarize detailed feedback rotation by rotation.\ndon't miss the rotation.\n\n";
                 systemMessage += "Output MUST repeat the following pattern for every rotation found in the input, in the same order:\n\n";
                 systemMessage += "Rotation Name: <exact rotation string from input>\nComments:\n- <concise point 1 reflecting only what appears in the comments>\n- <concise point 2>\n- <concise point 3>\n";
-                systemMessage += "[2–15 bullets per rotation based on the comments by rotation]\nEliminate duplicate comments by rotation.\n";
+                systemMessage += "[6–15 bullets per rotation based on the comments by rotation]\nEliminate duplicate comments by rotation.\n";
             }
             List<object> messages = new List<object>
             {
@@ -1711,17 +1727,19 @@ namespace SystemComments.Controllers
 
             // Ensure max_tokens does not exceed a safe response size
             return Math.Max(100, Math.Min(availableTokens, maxResponseLimit));
-        }
+        }       
+
 
         private async Task<string> GetFastOpenAIResponse1(string prompt)
         {
             string time = "0";
             Stopwatch sw = Stopwatch.StartNew();
             string apiKey = _config.GetSection("AppSettings:SAGEToken").Value;
+            int maxTokens = Convert.ToInt32(_config.GetSection("AppSettings:MaxTokens").Value);
 
             List<object> messages = new List<object>
             {
-                new { role = "system", content = "You are an expert assessment designer.\n Follow the provided 'XML' structure strictly in the prompt.\n Only return the sections explicitly requested as 'IMPORTANT'. Do not include future sections." },
+                new { role = "system", content = "You are an expert assessment designer.\n Follow the provided 'XML' structure strictly in the prompt.\n Only return the sections explicitly requested as 'IMPORTANT'. Do not include future sections and must follow guide lines listed as IMPORTANT.\n" },
                 new { role = "user", content = prompt }
             };
 
@@ -1729,7 +1747,7 @@ namespace SystemComments.Controllers
             {
                 model = "gpt-4o",
                 messages = messages,
-                max_tokens = 4000,
+                max_tokens = maxTokens,
                 temperature = 0,
                 top_p = 1,
                 stream = true // ✅ stream from OpenAI

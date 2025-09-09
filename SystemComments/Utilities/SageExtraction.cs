@@ -786,7 +786,7 @@ namespace SystemComments.Utilities
         public static string ConvertLastJsonToFormattedText(string json, ref Int32 lastSection, ref Int32 noOfSections)
         {
             StringBuilder sb = new StringBuilder();
-            string includedSteps = "IMPORTANT: For this response, only generate below sections.\n\t\t";
+            string includedSteps = "IMPORTANT: For this response, you must generate exactly the following sections in order, without skipping any:\n\t\t";
             try
             {
                 JObject jsonObject = JObject.Parse(json);
