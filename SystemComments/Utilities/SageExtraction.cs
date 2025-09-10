@@ -1,4 +1,5 @@
-﻿using Newtonsoft.Json;
+﻿using Microsoft.AspNetCore.Http.HttpResults;
+using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using System;
 using System.Collections.Generic;
@@ -25,6 +26,9 @@ namespace SystemComments.Utilities
             airesponse = Regex.Replace(airesponse, @"\t|\n|\r", "");
             airesponse = Regex.Replace(airesponse, @"<(/?)(\w+)\s+(\w+)>", "<$1$2_$3>");
             airesponse = Regex.Replace(airesponse, @"[^\x09\x0A\x0D\x20-\uD7FF\uE000-\uFFFD]", "");
+            airesponse = airesponse.Replace("```", "");
+            airesponse = Regex.Replace(airesponse, @"^[^<]*|[^>]*$", "", RegexOptions.Singleline);
+            airesponse = Regex.Replace(airesponse, @"<(\w+)>([^<]+)<\1>", "<$1>$2</$1>");
             airesponse = SanitizeXml(airesponse);
             string wrappedXml = "<root>" + airesponse + "</root>";
             XDocument xmlDoc = XDocument.Parse(wrappedXml);
