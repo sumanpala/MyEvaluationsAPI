@@ -496,7 +496,7 @@ namespace SystemComments.Controllers
                             new SqlParameter("@EvaluationID", input.EvaluationID)
 
                     };
-                    string defaultJSON = "";
+                    string defaultJSON = "";                    
                     DataSet dsSageData = _context.ExecuteStoredProcedure("GetSagePrompts", parameters);
                     if (dsSageData != null)
                     {
@@ -1739,7 +1739,7 @@ namespace SystemComments.Controllers
 
             List<object> messages = new List<object>
             {
-                new { role = "system", content = "You are an expert assessment designer.\n Follow the provided 'XML' structure strictly in the prompt.\n Only return the sections explicitly requested as 'IMPORTANT'. Do not include future sections and must follow guide lines listed as IMPORTANT.\n" },
+                new { role = "system", content = "You are an expert assessment designer.\n Follow the provided 'XML' structure strictly in the prompt.\n Only return the sections explicitly requested as 'IMPORTANT'. Do not include future sections and must follow guide lines listed as IMPORTANT.\n IMPORTANT: Ensure the response is generated and returned within 2 to 3 seconds.\n" },
                 new { role = "user", content = prompt }
             };
 
