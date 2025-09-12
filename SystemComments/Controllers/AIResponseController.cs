@@ -586,7 +586,7 @@ namespace SystemComments.Controllers
                     //string aiComments = await GetAISAGEChatGptResponse1(comments + "\n" + sageQuestions + "\n include <section> tag between the tag <sections></sections>");
                     apiAttempts++;
                     Stopwatch aiResponseWatch = Stopwatch.StartNew();
-                    string aiComments = await GetFastOpenAIResponse1(comments + "\n include <mainsection></mainsection> without fail. \n Answer is always empty in the response for example <answer></answer> \n" + sageQuestions);
+                    string aiComments = await GetFastOpenAIResponse1(comments + "\n include <mainsection></mainsection> without fail. \n Answer is always empty in the response for example <answer></answer> \n" + sageQuestions, lastSection);
                     aiResponseWatch.Stop();
                     timeHistory.AIResponseSeconds = aiResponseWatch.Elapsed.TotalSeconds;
                     string extractJSON = SageExtractData(aiComments);
@@ -1733,28 +1733,33 @@ namespace SystemComments.Controllers
             return Math.Max(100, Math.Min(availableTokens, maxResponseLimit));
         }
 
-        private string CompressString(string text)
+        private string CompressToBase64(string input)
         {
-            if (string.IsNullOrEmpty(text)) return text;
+            if (string.IsNullOrEmpty(input)) return input;
 
-            var bytes = Encoding.UTF8.GetBytes(text);
-            using var ms = new MemoryStream();
-            using (var gzip = new GZipStream(ms, CompressionMode.Compress))
+            byte[] rawBytes = Encoding.UTF8.GetBytes(input);
+            using (var output = new MemoryStream())
             {
-                gzip.Write(bytes, 0, bytes.Length);
+                using (var gzip = new GZipStream(output, CompressionLevel.Optimal))
+                {
+                    gzip.Write(rawBytes, 0, rawBytes.Length);
+                }
+                return Convert.ToBase64String(output.ToArray());
             }
-            return Convert.ToBase64String(ms.ToArray());
         }
 
-        private string DecompressString(string compressedText)
+        private string DecompressFromBase64(string base64Input)
         {
-            if (string.IsNullOrEmpty(compressedText)) return compressedText;
+            if (string.IsNullOrEmpty(base64Input)) return base64Input;
 
-            var compressedBytes = Convert.FromBase64String(compressedText);
-            using var ms = new MemoryStream(compressedBytes);
-            using var gzip = new GZipStream(ms, CompressionMode.Decompress);
-            using var reader = new StreamReader(gzip, Encoding.UTF8);
-            return reader.ReadToEnd();
+            byte[] compressedBytes = Convert.FromBase64String(base64Input);
+            using (var input = new MemoryStream(compressedBytes))
+            using (var gzip = new GZipStream(input, CompressionMode.Decompress))
+            using (var output = new MemoryStream())
+            {
+                gzip.CopyTo(output);
+                return Encoding.UTF8.GetString(output.ToArray());
+            }
         }
 
         private string OptimizePrompt(string prompt)
@@ -1775,23 +1780,22 @@ namespace SystemComments.Controllers
         }
 
 
-        private async Task<string> GetFastOpenAIResponse1(string prompt)
+        private async Task<string> GetFastOpenAIResponse1(string prompt, Int32 currentSection = 1)
         {
             string time = "0";
             Stopwatch sw = Stopwatch.StartNew();
             //prompt = OptimizePrompt(prompt);
             string apiKey = _config.GetSection("AppSettings:SAGEToken").Value;
-            int maxTokens = Convert.ToInt32(_config.GetSection("AppSettings:MaxTokens").Value);
-
+            int maxTokens = Convert.ToInt32(_config.GetSection("AppSettings:MaxTokens").Value);           
             List<object> messages = new List<object>
             {
                 new { role = "system", content = "You are an expert assessment designer. " +
                 "IMPORTANT: Always include <totalsections> with the correct total number of sections. " +
-                "IMPORTANT: Always include <allsections> as a static index that lists EVERY section name and fullname, not just the current one. " +
+                ((currentSection == 1) ? "IMPORTANT: Always include <allsections> as a static index that lists EVERY section name and fullname, not just the current one. " : "IMPORTANT: exclude <allsections> from response. ") +
                 "IMPORTANT: <sections> must include ONLY the sections explicitly listed in the user’s IMPORTANT request. " +
                 "IMPORTANT: If the user specifies two sections (e.g., Section 1 of 5 and Section 2 of 5), you must output BOTH inside <sections>. " +
                 "IMPORTANT: Do not skip or hold back sections when they are explicitly listed in the user’s IMPORTANT request. " +
-                "IMPORTANT: Strict XML, no indentation or whitespace, one line per tag, valid XML block. " +
+                "IMPORTANT: Output must be strict XML and Do not include any line breaks, tabs, or extra spaces. " +
                 "IMPORTANT: The entire response must be valid XML and appear as one continuous block without newlines. " +                
                 "IMPORTANT: Ensure the response is generated and returned within 2 to 3 seconds." 
         //        "You are an expert assessment designer.\n" +
@@ -1831,8 +1835,8 @@ namespace SystemComments.Controllers
 
             using var stream = await response.Content.ReadAsStreamAsync();
             using var reader = new StreamReader(stream);
-
-            while (!reader.EndOfStream)
+            bool stop = false;
+            while (!reader.EndOfStream && !stop)
             {
                 var line = await reader.ReadLineAsync();
                 if (string.IsNullOrWhiteSpace(line) || !line.StartsWith("data: "))
@@ -1856,6 +1860,12 @@ namespace SystemComments.Controllers
                                 var token = contentProp.GetString();
                                 if (!string.IsNullOrEmpty(token))
                                     sb.Append(token); // append token immediately
+
+                                if (token.Contains("</sections>"))
+                                {
+                                    stop = true;
+                                    break;
+                                }
                             }                            
                         }
                     }
@@ -1863,11 +1873,7 @@ namespace SystemComments.Controllers
                 catch
                 {
                     // ignore malformed chunks
-                }
-                if (sb.ToString().Contains("</sections>"))
-                {
-                    break; // stop reading once required output is complete
-                }
+                }              
             }
             sw.Stop();
             time = sw.Elapsed.TotalSeconds.ToString();
@@ -2071,19 +2077,7 @@ namespace SystemComments.Controllers
                 return root.GetProperty("choices")[0].GetProperty("message").GetProperty("content").GetString();
             }
         }
-
-        private string CompressToBase64(string input)
-        {
-            byte[] bytes = Encoding.UTF8.GetBytes(input);
-            using (MemoryStream output = new MemoryStream())
-            {
-                using (GZipStream gzip = new GZipStream(output, CompressionMode.Compress))
-                {
-                    gzip.Write(bytes, 0, bytes.Length);
-                }
-                return Convert.ToBase64String(output.ToArray());
-            }
-        }
+       
 
         private async Task<string> GetAISAGEChatGptResponse1(string comments)
         {

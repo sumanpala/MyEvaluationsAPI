@@ -175,22 +175,25 @@ namespace SystemComments.Utilities
                         {
                             JObject tempSectionArray = sectionsArray[sectionIndex] as JObject;
                             Int32 mainSectionIndex = 0;
-                            foreach (var mainSection in section["mainsection"])
+                            if (section["mainsection"] != null)
                             {
-                                JArray mainSectionArray = tempSectionArray?["mainsection"] as JArray;
-                                if (mainSectionArray == null)
+                                foreach (var mainSection in section["mainsection"])
                                 {
-                                    var mainSectionToken = new JArray();
-                                    mainSectionToken.Add(mainSection);
-                                    tempSectionArray["mainsection"] = mainSectionToken;
+                                    JArray mainSectionArray = tempSectionArray?["mainsection"] as JArray;
+                                    if (mainSectionArray == null)
+                                    {
+                                        var mainSectionToken = new JArray();
+                                        mainSectionToken.Add(mainSection);
+                                        tempSectionArray["mainsection"] = mainSectionToken;
+                                    }
+                                    else if (mainSectionArray.Count == 0)
+                                    {
+                                        var mainSectionToken = new JArray();
+                                        mainSectionToken.Add(mainSection);
+                                        tempSectionArray["mainsection"] = mainSectionToken;
+                                    }
+                                    mainSectionIndex++;
                                 }
-                                else if (mainSectionArray.Count == 0)
-                                {
-                                    var mainSectionToken = new JArray();
-                                    mainSectionToken.Add(mainSection);
-                                    tempSectionArray["mainsection"] = mainSectionToken;
-                                }
-                                mainSectionIndex++;
                             }
                             // add followup section if not available
                             var followupToken = tempSectionArray?["followupsections"];
@@ -311,21 +314,24 @@ namespace SystemComments.Utilities
                 {
                     // Update Main Questions
                     Int32 mainIndex = 1;
-                    foreach (var mainSection in section["mainsection"])
+                    if (section["mainsection"] != null)
                     {
-                        UpdateID(mainSection, "mainquestion", dt, 3, mainIndex, (sectionIndex + 1));
-
-                        if (mainSection?["guide"]?["guidequestions"] is JArray guideQuestions && guideQuestions.Count > 0)
+                        foreach (var mainSection in section["mainsection"])
                         {
-                            Int32 questionIndex = 0;
-                            foreach (var guideQuestion in guideQuestions)
+                            UpdateID(mainSection, "mainquestion", dt, 3, mainIndex, (sectionIndex + 1));
+
+                            if (mainSection?["guide"]?["guidequestions"] is JArray guideQuestions && guideQuestions.Count > 0)
                             {
-                                UpdateID(guideQuestion, "guidequestion", dt, 2, questionIndex + 1, (sectionIndex + 1));
-                                questionIndex++;
+                                Int32 questionIndex = 0;
+                                foreach (var guideQuestion in guideQuestions)
+                                {
+                                    UpdateID(guideQuestion, "guidequestion", dt, 2, questionIndex + 1, (sectionIndex + 1));
+                                    questionIndex++;
+                                }
                             }
+                            mainIndex++;
                         }
-                        mainIndex++;
-                    }                   
+                    }
                     // Update Follow-up Questions
                     if (section["followupsections"] != null)
                     {
@@ -900,6 +906,7 @@ namespace SystemComments.Utilities
                 includedSteps += $"1. Section {((currentSection == 0) ? 1 : currentSection)} of {totalSections.ToString()}\n\t\t";
                 if (currentSection > 0 && currentSection < totalSections)
                 {
+                    currentSection++;
                     includedSteps += $"2. Section {currentSection + 1} of {totalSections.ToString()}\n";
                 }
 
@@ -1275,13 +1282,24 @@ namespace SystemComments.Utilities
                         sections1.Add(section2);
                     }
                     else
-                    {
+                    {                        
+
                         exists = sections1.Any(s => s["name"].ToString() == sectionName);
                         if(!exists)
                         {
                             sectionsCount++;
                             section2["sectionnum"] = sectionsCount.ToString();
                             sections1.Add(section2);
+                        }
+                        var existingSection = sections1.FirstOrDefault(s => s["name"].ToString() == sectionName) as JObject;
+                        // Update Main Section if not available
+                        if (existingSection["mainsection"] == null && section2["mainsection"] != null)
+                        {                           
+                            existingSection["mainsection"] = section2["mainsection"];
+                        }
+                        if (existingSection["followupsections"] == null && section2["followupsections"] != null)
+                        {
+                            existingSection["followupsections"] = section2["followupsections"];
                         }
                     }
                 }
