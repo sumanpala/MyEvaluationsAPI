@@ -155,6 +155,8 @@ namespace SystemComments.Models.DataBase
         public double HistorySeconds { get; set; } = 0;
         public double PromptDBSeconds { get; set; } = 0;
 
+        public double AIResponseSeconds { get; set; } = 0;
+
         public int ApiAttempts { get; set; } = 1;
     }
 }

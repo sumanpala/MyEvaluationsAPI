@@ -585,7 +585,10 @@ namespace SystemComments.Controllers
                     //string aiComments = GetAISAGEWithStreaming(comments + "\n" + sageQuestions + "\n include <section> tag between the tag <sections></sections>");
                     //string aiComments = await GetAISAGEChatGptResponse1(comments + "\n" + sageQuestions + "\n include <section> tag between the tag <sections></sections>");
                     apiAttempts++;
+                    Stopwatch aiResponseWatch = Stopwatch.StartNew();
                     string aiComments = await GetFastOpenAIResponse1(comments + "\n include <mainsection></mainsection> without fail. \n Answer is always empty in the response for example <answer></answer> \n" + sageQuestions);
+                    aiResponseWatch.Stop();
+                    timeHistory.AIResponseSeconds = aiResponseWatch.Elapsed.TotalSeconds;
                     string extractJSON = SageExtractData(aiComments);
                     JToken parsedJson = JToken.Parse(extractJSON);
                     minifiedJson = JsonConvert.SerializeObject(parsedJson, Formatting.None);
@@ -901,6 +904,7 @@ namespace SystemComments.Controllers
                             new SqlParameter("@TotalSeconds", timeHistory.TotalSeconds),
                             new SqlParameter("@PromptSeconds", timeHistory.PromptDBSeconds),
                             new SqlParameter("@CommentsSeconds", timeHistory.HistorySeconds),
+                            new SqlParameter("@AIResponseSeconds", timeHistory.AIResponseSeconds),
                             new SqlParameter("@TotalAttempts", timeHistory.ApiAttempts),
                             new SqlParameter("@tblSections", dtSections),
                             new SqlParameter("@tblMainQuestions", dtMainQuestions),
@@ -1422,7 +1426,7 @@ namespace SystemComments.Controllers
 
         private async Task<string> SummarizeText(string text, int maxTokens = 4000, Int16 promptType = 1)
         {
-            string aiKey = _config.GetSection("AppSettings:MyInsightsToken").Value;
+            string aiKey = _config.GetSection("AppSettings:MyInsightsAPEToken").Value;
             string userMessage = (promptType == 1) ? "Please summarize the area of improvements comments in detailed format line by line\n" : "Please summarize the comments with out loosing \"Rotation Name:\"\n";
             string systemMessage = "You are an expert in Graduate Medical Education (GME) program evaluation.\n";
             if (promptType == 2)
@@ -1471,7 +1475,7 @@ namespace SystemComments.Controllers
                 new { role = "system", content = "You are a JSON generator. Always output ONLY valid JSON. The JSON must include ALL PITs present in the user’s input. Do not stop early. Do not skip any PIT. Do not summarize.\n\n" },
                 new { role = "user", content = prompt }
             };
-            string aiKey = _config.GetSection("AppSettings:MyInsightsToken").Value;           
+            string aiKey = _config.GetSection("AppSettings:MyInsightsAPEToken").Value;           
 
             using (var client = new HttpClient())
             {
@@ -1727,19 +1731,77 @@ namespace SystemComments.Controllers
 
             // Ensure max_tokens does not exceed a safe response size
             return Math.Max(100, Math.Min(availableTokens, maxResponseLimit));
-        }       
+        }
+
+        private string CompressString(string text)
+        {
+            if (string.IsNullOrEmpty(text)) return text;
+
+            var bytes = Encoding.UTF8.GetBytes(text);
+            using var ms = new MemoryStream();
+            using (var gzip = new GZipStream(ms, CompressionMode.Compress))
+            {
+                gzip.Write(bytes, 0, bytes.Length);
+            }
+            return Convert.ToBase64String(ms.ToArray());
+        }
+
+        private string DecompressString(string compressedText)
+        {
+            if (string.IsNullOrEmpty(compressedText)) return compressedText;
+
+            var compressedBytes = Convert.FromBase64String(compressedText);
+            using var ms = new MemoryStream(compressedBytes);
+            using var gzip = new GZipStream(ms, CompressionMode.Decompress);
+            using var reader = new StreamReader(gzip, Encoding.UTF8);
+            return reader.ReadToEnd();
+        }
+
+        private string OptimizePrompt(string prompt)
+        {
+            // 1. Normalize multiple spaces into one
+            string cleaned = Regex.Replace(prompt, @"[ \t]+", " ");
+
+            // 2. Collapse multiple newlines into a single newline
+            cleaned = Regex.Replace(cleaned, @"\n{2,}", "\n");
+
+            // 3. Remove unnecessary spaces between XML/HTML tags
+            cleaned = Regex.Replace(cleaned, @">\s+<", "><");
+
+            // 4. Trim leading/trailing whitespace
+            cleaned = cleaned.Trim();
+
+            return cleaned;
+        }
 
 
         private async Task<string> GetFastOpenAIResponse1(string prompt)
         {
             string time = "0";
             Stopwatch sw = Stopwatch.StartNew();
+            //prompt = OptimizePrompt(prompt);
             string apiKey = _config.GetSection("AppSettings:SAGEToken").Value;
             int maxTokens = Convert.ToInt32(_config.GetSection("AppSettings:MaxTokens").Value);
 
             List<object> messages = new List<object>
             {
-                new { role = "system", content = "You are an expert assessment designer.\n Follow the provided 'XML' structure strictly in the prompt.\n Only return the sections explicitly requested as 'IMPORTANT'. Do not include future sections and must follow guide lines listed as IMPORTANT.\n IMPORTANT: Ensure the response is generated and returned within 2 to 3 seconds.\n" },
+                new { role = "system", content = "You are an expert assessment designer. " +
+                "IMPORTANT: Always include <totalsections> with the correct total number of sections. " +
+                "IMPORTANT: Always include <allsections> as a static index that lists EVERY section name and fullname, not just the current one. " +
+                "IMPORTANT: <sections> must include ONLY the sections explicitly listed in the user’s IMPORTANT request. " +
+                "IMPORTANT: If the user specifies two sections (e.g., Section 1 of 5 and Section 2 of 5), you must output BOTH inside <sections>. " +
+                "IMPORTANT: Do not skip or hold back sections when they are explicitly listed in the user’s IMPORTANT request. " +
+                "IMPORTANT: Strict XML, no indentation or whitespace, one line per tag, valid XML block. " +
+                "IMPORTANT: The entire response must be valid XML and appear as one continuous block without newlines. " +                
+                "IMPORTANT: Ensure the response is generated and returned within 2 to 3 seconds." 
+        //        "You are an expert assessment designer.\n" +
+        //        "IMPORTANT: Always include all sections inside <allsections>\n" +
+        //"IMPORTANT: Strict XML, no indentation or extra whitespace, one line per tag.\n" +
+        //"IMPORTANT: The entire response must be valid XML and appear as one continuous block without newlines.\n" +
+        //"Only return the sections explicitly requested as 'IMPORTANT'.\n Do not include future sections and must follow guide lines listed as IMPORTANT.\n" +
+        //"IMPORTANT: Ensure the response is generated and returned within 2 to 3 seconds.\n" +
+        //"IMPORTANT: Output compact XML only, no prose.\n"
+                },
                 new { role = "user", content = prompt }
             };
 
@@ -1794,13 +1856,17 @@ namespace SystemComments.Controllers
                                 var token = contentProp.GetString();
                                 if (!string.IsNullOrEmpty(token))
                                     sb.Append(token); // append token immediately
-                            }
+                            }                            
                         }
                     }
                 }
                 catch
                 {
                     // ignore malformed chunks
+                }
+                if (sb.ToString().Contains("</sections>"))
+                {
+                    break; // stop reading once required output is complete
                 }
             }
             sw.Stop();
