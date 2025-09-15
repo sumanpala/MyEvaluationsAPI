@@ -45,12 +45,16 @@ namespace SystemComments.Controllers
         {
             DefaultRequestVersion = HttpVersion.Version20
         };
+        private readonly HttpClient _httpClient;
         public AIResponseController(APIDataBaseContext context,IJwtAuth jwtAuth, IConfiguration config, ILogger<AIResponseController> logger)
         {
             _context = context;
             this.jwtAuth = jwtAuth;
             _config = config;
             _logger = logger;
+            _httpClient = new HttpClient();
+            _httpClient.DefaultRequestHeaders.Authorization =
+                new AuthenticationHeaderValue("Bearer", config["AppSettings:SAGEToken"]);
         }
 
         // GET: api/AIResponse
@@ -507,10 +511,14 @@ namespace SystemComments.Controllers
                         DataTable dtQuestions = dsSageData.Tables[1];
                         DataTable dtResponses = dsSageData.Tables[2];
                         //DataTable dtDefaultJSON = dsSageData.Tables[3];
+                        Int64 settingsID = 0;
+                        string apiFileContent = "";
                         if (dtPrompt.Rows.Count > 0)
                         {
                             defaultJSON = dtPrompt.Rows[0]["DefaultJSON"].ToString();
                             input.SageRequest = dtPrompt.Rows[0]["AIJSON"].ToString();
+                            settingsID = Convert.ToInt64(dtPrompt.Rows[0]["SettingsID"].ToString());
+                            apiFileContent = dtPrompt.Rows[0]["APIFileContent"].ToString();
                         }
                         if (dtResponses.Rows.Count > 0 && input.SageRequest.Length > 2)
                         {
@@ -523,6 +531,19 @@ namespace SystemComments.Controllers
                             if (dtPrompt.Rows.Count > 0)
                             {
                                 comments = dtPrompt.Rows[0]["FileContent"].ToString();
+                                //comments = await CompressClientPrompt(comments, settingsID);
+                                //return null;
+                                if (string.IsNullOrEmpty(apiFileContent))
+                                {
+                                    comments = dtPrompt.Rows[0]["FileContent"].ToString();
+                                    //comments = await CompressClientPrompt(comments, settingsID);
+                                }
+                                else
+                                {
+                                    comments = apiFileContent;
+                                }
+
+                               // return null;
                                 templateIDs = dtPrompt.Rows[0]["TemplateIDs"].ToString();
                                 subjectUserID = dtPrompt.Rows[0]["SubjectUserID"].ToString();
                                 input.RotationName = dtPrompt.Rows[0]["RotationName"].ToString();
@@ -931,6 +952,17 @@ namespace SystemComments.Controllers
 
                     };
             _context.ExecuteStoredProcedure("InsertSageResponse", parameters);
+        }
+
+        private void UpdateAISageSettingsPrompt(Int64 id, string prompt)
+        {
+            SqlParameter[] parameters = new SqlParameter[]
+                    {
+                        new SqlParameter("@SageSettingsID", id),                        
+                        new SqlParameter("@Prompt", prompt)
+
+                    };
+            _context.ExecuteStoredProcedure("UpdateAISageSettingsPrompt", parameters);
         }
 
         private MatchCollection ExtractData(string airesponse)
@@ -1779,25 +1811,180 @@ namespace SystemComments.Controllers
             return cleaned;
         }
 
+        private string UpdateXMLTags(string prompt, bool isCompress)
+        {
+            var tagMap = new Dictionary<string, string>
+            {
+                { "sections", "ss" },
+                { "section", "sc" },
+                { "sectionnum", "sn" },
+                { "name", "nm" },
+                { "fullname", "fn" },
+                { "mainquestion", "mq" },
+                { "guidequestions", "gq" },
+                { "guidequestion", "gp" },
+                { "followupquestions", "fq" },
+                { "followupquestion", "fp" },
+                { "endmessage", "em" },
+                { "wait", "w" },
+                {"allsections","ac" }
+            };
+            if (isCompress)
+            {
+                foreach (var kvp in tagMap)
+                {
+                    // Replace opening tags
+                    prompt = prompt.Replace($"<{kvp.Key}>", $"<{kvp.Value}>");
+                    // Replace closing tags
+                    prompt = prompt.Replace($"</{kvp.Key}>", $"</{kvp.Value}>");
+                }
+            }
+            else
+            {
+                foreach (var kvp in tagMap)
+                {
+                    prompt = prompt.Replace($"<{kvp.Value}>", $"<{kvp.Key}>")
+                             .Replace($"</{kvp.Value}>", $"</{kvp.Key}>");
+                }
+            }
+            return prompt;
+        }
+
+        private (string systemMessage, string userMessage) SplitPrompt(string fullPrompt)
+        {
+            string[] parts = Regex.Split(fullPrompt, @"(?i)input:");
+            string part1 = parts.Length > 0 ? parts[0].Trim() : "";
+            string part2 = parts.Length > 1 ? parts[1].Trim() : "";
+
+            string canonicalRules = @"
+            You are an assessment generator.
+            Rules:
+            - Output only valid XML, never text or commentary.
+            - Use compact schema:
+            <section>
+              <sectionnum>n</sectionnum>
+              <name>short name</name>
+              <fullname>Section n of 10: full name</fullname>
+              <mainquestion>main question text</mainquestion>
+              <guidequestions>
+                <guidequestion>Prompt 1</guidequestion>
+                <guidequestion>Prompt 2</guidequestion>
+                <guidequestion>Prompt 3</guidequestion>
+              </guidequestions>
+              <followupquestions>
+                <followupquestion>Optional followup 1</followupquestion>
+                <followupquestion>Optional followup 2</followupquestion>
+              </followupquestions>
+              <endmessage>** Your anonymous assessment has been submitted. Thank you. **</endmessage>
+            </section>
+            - Do not include evaluator answers or examples.
+            - Do not generate empty tags (omit optional blocks when not needed).
+            - Keep mainquestion ≤30 words, guidequestion ≤20 words.           
+            ";
+
+                        string systemMessage = UpdateXMLTags(canonicalRules + "\n\n" + part1, true);                        
+
+                        string userMessage = UpdateXMLTags($@"Input:\n{part2}",true);
+
+                        return (systemMessage.Trim(), userMessage.Trim());
+        }
+
+        private async Task<string> CompressClientPrompt(string prompt, Int64 id)
+        {
+            int maxTokens = Convert.ToInt32(_config.GetSection("AppSettings:MaxTokens").Value);
+
+            string systemMsg =
+     "You are a prompt optimizer. Compress the narrative instructions in the client prompt to ~600 tokens. " +
+     "Rules:\n" +
+     "- Do NOT remove or change placeholders ([Program Type], [Rotation], [Training Level], [Previous History], [User Type], [Setting], [Level], [Historical Data]).\n" +
+     "- Do NOT change the XML schema or example format. Copy all XML tags and structure exactly as provided.\n" +
+     "- Only shorten verbose natural language. Keep rules intact.\n" +
+     "- Return output as PLAIN TEXT, with newline characters (\\n) instead of HTML tags.\n" +
+     "- Do not include <br>, <p>, or any HTML formatting.\n" +
+     "- Always return the FULL compressed prompt, never truncated.\n" +
+     "- End with <endprompt>.";
+
+            string userMsg =
+                "Compress the following client prompt while keeping the XML schema unchanged:\n\n" + prompt;
+            var requestBody = new
+            {
+                model = "gpt-4o",   // or "gpt-4o-mini" for faster responses
+                messages = new object[]
+            {
+                new { role = "system", content = systemMsg },
+                new { role = "user", content = userMsg }
+            },
+                max_tokens = EstimateTokens(prompt),
+                temperature = 0,
+                top_p = 1
+            };
+
+            var content = new StringContent(JsonConvert.SerializeObject(requestBody), Encoding.UTF8, "application/json");
+            var response = await _httpClient.PostAsync("https://api.openai.com/v1/chat/completions", content);
+            response.EnsureSuccessStatusCode();
+            string result = await response.Content.ReadAsStringAsync();
+
+            var parsed = JObject.Parse(result);
+            string aiMessage = parsed["choices"]?[0]?["message"]?["content"]?.ToString();
+            aiMessage = aiMessage.Replace("\\n", "\n");
+            UpdateAISageSettingsPrompt(id, aiMessage);
+            return aiMessage;
+
+        }
+
+        private async Task<string> GetFastOpenAIResponse2(string prompt, int currentSection = 1)
+        {           
+            int maxTokens = Convert.ToInt32(_config.GetSection("AppSettings:MaxTokens").Value);
+            var (systemMsg, userMsg) = SplitPrompt(prompt);
+
+            var requestBody = new
+            {
+                model = "gpt-4o",   // or "gpt-4o-mini" for faster responses
+                messages = new object[]
+            {
+                new { role = "system", content = systemMsg },
+                new { role = "user", content = userMsg }
+            },
+                max_tokens = maxTokens,
+                temperature = 0
+            };
+
+            var content = new StringContent(JsonConvert.SerializeObject(requestBody), Encoding.UTF8, "application/json");
+            var response = await _httpClient.PostAsync("https://api.openai.com/v1/chat/completions", content);
+            response.EnsureSuccessStatusCode();
+            string result = await response.Content.ReadAsStringAsync();
+
+            var parsed = JObject.Parse(result);
+            string compactXml = parsed["choices"]?[0]?["message"]?["content"]?.ToString();
+
+            if (string.IsNullOrWhiteSpace(compactXml) || !compactXml.Contains("<section>"))
+                throw new Exception("Model did not return valid XML section.");
+
+            return UpdateXMLTags(compactXml, false);
+
+        }
 
         private async Task<string> GetFastOpenAIResponse1(string prompt, Int32 currentSection = 1)
         {
+            //string[] parts = Regex.Split(prompt, @"(?i)input:");
+
+            //string systemMessage = (parts.Length > 1) ? parts[0].Trim() : ""; // everything before "Input:"
+            //string userMessage = parts.Length > 1 ? "Input:\n" + parts[1].Trim() : prompt;
+
             string time = "0";
             Stopwatch sw = Stopwatch.StartNew();
             //prompt = OptimizePrompt(prompt);
-            string apiKey = _config.GetSection("AppSettings:SAGEToken").Value;
-            int maxTokens = Convert.ToInt32(_config.GetSection("AppSettings:MaxTokens").Value);           
-            List<object> messages = new List<object>
-            {
-                new { role = "system", content = "You are an expert assessment designer. " +
-                "IMPORTANT: Always include <totalsections> with the correct total number of sections. " +
-                ((currentSection == 1) ? "IMPORTANT: Always include <allsections> as a static index that lists EVERY section name and fullname, not just the current one. " : "IMPORTANT: exclude <allsections> from response. ") +
-                "IMPORTANT: <sections> must include ONLY the sections explicitly listed in the user’s IMPORTANT request. " +
-                "IMPORTANT: If the user specifies two sections (e.g., Section 1 of 5 and Section 2 of 5), you must output BOTH inside <sections>. " +
-                "IMPORTANT: Do not skip or hold back sections when they are explicitly listed in the user’s IMPORTANT request. " +
-                "IMPORTANT: Output must be strict XML and Do not include any line breaks, tabs, or extra spaces. " +
-                "IMPORTANT: The entire response must be valid XML and appear as one continuous block without newlines. " +                
-                "IMPORTANT: Ensure the response is generated and returned within 2 to 3 seconds." 
+            //string apiKey = _config.GetSection("AppSettings:SAGEToken").Value;
+            int maxTokens = Convert.ToInt32(_config.GetSection("AppSettings:MaxTokens").Value);
+            string systemMessages = "You are an expert assessment designer. \n" +
+        "IMPORTANT: Always include <totalsections> with the correct total number of sections. \n" +
+        ((currentSection == 1) ? "Always include <allsections> as a static index that lists EVERY section name and fullname, not just the current one. " : "exclude <allsections> from response. ") +
+        "\n<sections> must include ONLY the sections explicitly listed in the user’s IMPORTANT request. " +
+        "\nIf the user specifies two sections (e.g., Section 1 of 5 and Section 2 of 5), you must output BOTH inside <sections>. " +
+        "\nDo not skip or hold back sections when they are explicitly listed in the user’s IMPORTANT request. " +
+        "\nOutput must be strict XML and Do not include any line breaks, tabs, or extra spaces. " +
+        "\nThe entire response must be valid XML and appear as one continuous block without newlines. " +
+        "\nEnsure the response is generated and returned within 2 to 3 seconds.";
         //        "You are an expert assessment designer.\n" +
         //        "IMPORTANT: Always include all sections inside <allsections>\n" +
         //"IMPORTANT: Strict XML, no indentation or extra whitespace, one line per tag.\n" +
@@ -1805,8 +1992,10 @@ namespace SystemComments.Controllers
         //"Only return the sections explicitly requested as 'IMPORTANT'.\n Do not include future sections and must follow guide lines listed as IMPORTANT.\n" +
         //"IMPORTANT: Ensure the response is generated and returned within 2 to 3 seconds.\n" +
         //"IMPORTANT: Output compact XML only, no prose.\n"
-                },
-                new { role = "user", content = prompt }
+            List<object> messages = new List<object>
+            {
+                new { role = "system", content = UpdateXMLTags(systemMessages,true)  },
+                new { role = "user", content = UpdateXMLTags(prompt, true) }
             };
 
             var requestBody = new
@@ -1819,13 +2008,13 @@ namespace SystemComments.Controllers
                 stream = true // ✅ stream from OpenAI
             };
 
-            using var client = new HttpClient();
-            client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
+            //using var client = new HttpClient();
+            //client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
 
             var content = new StringContent(JsonConvert.SerializeObject(requestBody), Encoding.UTF8, "application/json");
 
             // ⚡ important: don't buffer entire response
-            using var response = await client.SendAsync(
+            using var response = await _httpClient.SendAsync(
                 new HttpRequestMessage(HttpMethod.Post, "https://api.openai.com/v1/chat/completions") { Content = content },
                 HttpCompletionOption.ResponseHeadersRead);
 
@@ -1861,7 +2050,7 @@ namespace SystemComments.Controllers
                                 if (!string.IsNullOrEmpty(token))
                                     sb.Append(token); // append token immediately
 
-                                if (token.Contains("</sections>"))
+                                if (token.Contains("</ss>"))
                                 {
                                     stop = true;
                                     break;
@@ -1877,7 +2066,7 @@ namespace SystemComments.Controllers
             }
             sw.Stop();
             time = sw.Elapsed.TotalSeconds.ToString();
-            return sb.ToString();
+            return UpdateXMLTags(sb.ToString(), false);
         }
 
 

@@ -907,7 +907,7 @@ namespace SystemComments.Utilities
                 if (currentSection > 0 && currentSection < totalSections)
                 {
                     currentSection++;
-                    includedSteps += $"2. Section {currentSection + 1} of {totalSections.ToString()}\n";
+                    includedSteps += $"2. Section {currentSection} of {totalSections.ToString()}\n";
                 }
 
                 lastSection = ((currentSection == 0) ? 1 : currentSection);
@@ -1297,9 +1297,34 @@ namespace SystemComments.Utilities
                         {                           
                             existingSection["mainsection"] = section2["mainsection"];
                         }
-                        if (existingSection["followupsections"] == null && section2["followupsections"] != null)
+
+                        var followup1 = section2["followupsections"] as JArray; // AI JSON
+                        var followup2 = existingSection["followupsections"] as JArray;
+
+                        if ((followup2 == null || followup2.Count == 0) && followup1 != null)
                         {
-                            existingSection["followupsections"] = section2["followupsections"];
+                            existingSection["followupsections"] = followup1;
+                        }
+                        else 
+                        {
+                            if (followup2 != null && followup2.Count > 0)
+                            {
+                                foreach (var f2 in followup1)
+                                {
+                                    string f2Id = f2["id"]?.ToString();
+                                    string f2Question = f2["question"]?.ToString();
+
+                                    // check if JSON1 already has this follow-up by id or question
+                                    exists = followup2.Any(f1 =>
+                                        (f1["id"]?.ToString() == f2Id && !string.IsNullOrEmpty(f2Id)) ||
+                                        f1["question"]?.ToString() == f2Question);
+
+                                    if (!exists)
+                                    {
+                                        followup2.Add(f2.DeepClone()); // add missing follow-up
+                                    }
+                                }
+                            }
                         }
                     }
                 }
