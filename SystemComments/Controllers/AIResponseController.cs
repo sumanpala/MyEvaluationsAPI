@@ -244,7 +244,9 @@ namespace SystemComments.Controllers
                     "If there are additional ACGME categories identified in the AFIs or Comments Source (e.g., Well-Being, Supervision, Faculty Development, etc.), include those as well as separate JSON objects with their PITs.\n" +
                     "This ensures that PEC receives a full framework covering the required six competencies plus any additional program-relevant categories." +
                     "\n\nPIT Count Rule:\n- For each ACGME competency/category, output 3–4 PITs derived from the AFIs.\n- If fewer than 3 PITs exist, include what is available." + 
-                    "\n\n\"Important: Frequency is always high. Try to include Frequency as High based on the prompt.\"\n";
+                    "\n\n\"Important: Frequency is always high. Try to include Frequency as High based on the prompt.\"\n" +
+                    "\n\"Important: Include all rotations which are involved on generating the PIT.\"\n";
+                
                 prompt = await GetAPEAreaOfImprovementsResponse(input);                
                 input.AFIPrompt = prompt;
                 prompt = prompt + requiredCompetencies;
