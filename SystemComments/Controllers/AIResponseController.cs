@@ -525,6 +525,18 @@ namespace SystemComments.Controllers
                         if (dtResponses.Rows.Count > 0 && input.SageRequest.Length > 2)
                         {
                             comments = dtResponses.Rows[0]["AIPrompt"].ToString();
+                            if (dtPrompt.Rows.Count > 0)
+                            {
+                                comments = comments.Replace("[Program Type]", dtPrompt.Rows[0]["DepartmentName"].ToString());
+                                comments = comments.Replace("[Rotation]", dtPrompt.Rows[0]["RotationName"].ToString());
+                                comments = comments.Replace("[ Rotation]", dtPrompt.Rows[0]["RotationName"].ToString());
+                                comments = comments.Replace("[ Rotation ]", dtPrompt.Rows[0]["RotationName"].ToString());
+                                comments = comments.Replace("[Rotation Name]", dtPrompt.Rows[0]["RotationName"].ToString());
+                                comments = comments.Replace("[Setting]", dtPrompt.Rows[0]["ActivityName"].ToString());
+                                comments = comments.Replace("[Level]", dtPrompt.Rows[0]["PGYLevel"].ToString());
+                                comments = comments.Replace("[User Type]", dtPrompt.Rows[0]["UserTypeName"].ToString());
+                                comments = comments.Replace("[Specialty]", dtPrompt.Rows[0]["SpecialityName"].ToString());
+                            }
                         }
                         else
                         {
