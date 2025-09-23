@@ -7,6 +7,8 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
+using OpenAI;
+using OpenAI.Chat;
 using System;
 using System.Collections.Generic;
 using System.Data;
@@ -29,7 +31,6 @@ using SystemComments.Models.DataBase;
 using SystemComments.Utilities;
 using static System.Net.Mime.MediaTypeNames;
 
-
 namespace SystemComments.Controllers
 {
     [Authorize]
@@ -46,6 +47,7 @@ namespace SystemComments.Controllers
             DefaultRequestVersion = HttpVersion.Version20
         };
         private readonly HttpClient _httpClient;
+        private readonly OpenAIClient _openAIClient;
         public AIResponseController(APIDataBaseContext context,IJwtAuth jwtAuth, IConfiguration config, ILogger<AIResponseController> logger)
         {
             _context = context;
@@ -55,6 +57,7 @@ namespace SystemComments.Controllers
             _httpClient = new HttpClient();
             _httpClient.DefaultRequestHeaders.Authorization =
                 new AuthenticationHeaderValue("Bearer", config["AppSettings:SAGEToken"]);
+            _openAIClient = new OpenAIClient(config["AppSettings:SAGEToken"]);
         }
 
         // GET: api/AIResponse
@@ -621,7 +624,7 @@ namespace SystemComments.Controllers
                     //string aiComments = await GetAISAGEChatGptResponse1(comments + "\n" + sageQuestions + "\n include <section> tag between the tag <sections></sections>");
                     apiAttempts++;
                     Stopwatch aiResponseWatch = Stopwatch.StartNew();
-                    string aiComments = await GetFastOpenAIResponse1(comments + "\n include <mainsection></mainsection> without fail. \n Answer is always empty in the response for example <answer></answer> \n" + sageQuestions, lastSection);
+                    string aiComments = await GetFastOpenAIResponse2(comments + "\n include <mainsection></mainsection> without fail. \n Answer is always empty in the response for example <answer></answer> \n" + sageQuestions, lastSection);
                     aiResponseWatch.Stop();
                     timeHistory.AIResponseSeconds = aiResponseWatch.Elapsed.TotalSeconds;
                     string extractJSON = SageExtractData(aiComments);
@@ -1946,44 +1949,145 @@ namespace SystemComments.Controllers
 
         }
 
-        private async Task<string> GetFastOpenAIResponse2(string prompt, int currentSection = 1)
-        {           
-            int maxTokens = Convert.ToInt32(_config.GetSection("AppSettings:MaxTokens").Value);
-            var (systemMsg, userMsg) = SplitPrompt(prompt);
+        private async Task WarmUpAsync()
+        {
+            var chatClient = _openAIClient.GetChatClient("gpt-4o");
+            await chatClient.CompleteChatAsync(
+                new[] { ChatMessage.CreateSystemMessage("ping") },
+                new ChatCompletionOptions { MaxOutputTokenCount = 1 }
+            );
+        }
 
-            var requestBody = new
+        private async Task PrefetchSectionAsync(int sectionNumber)
+        {
+            var chatClient = _openAIClient.GetChatClient("gpt-4o");
+            var messages = new List<ChatMessage>
+        {
+            ChatMessage.CreateSystemMessage("Prefetch next section context only."),
+            ChatMessage.CreateUserMessage($"Prepare for section {sectionNumber}. Do not output, just warm context.")
+        };
+
+            try
             {
-                model = "gpt-4o",   // or "gpt-4o-mini" for faster responses
-                messages = new object[]
+                await chatClient.CompleteChatAsync(
+                    messages,
+                    new ChatCompletionOptions
+                    {
+                        Temperature = 0,
+                        MaxOutputTokenCount = 1
+                    }
+                );
+            }
+            catch
             {
-                new { role = "system", content = systemMsg },
-                new { role = "user", content = userMsg }
-            },
-                max_tokens = maxTokens,
-                temperature = 0
+                // ignore errors
+            }
+        }
+
+        private static string ExtractAndRemoveAllSections(ref string xml)
+        {
+            const string startTag = "<allsections>";
+            const string endTag = "</allsections>";
+
+            int start = xml.IndexOf(startTag, StringComparison.OrdinalIgnoreCase);
+            int end = xml.IndexOf(endTag, StringComparison.OrdinalIgnoreCase);
+
+            if (start >= 0 && end > start)
+            {
+                // Extract including the wrapper
+                string block = xml.Substring(start, (end + endTag.Length) - start);
+
+                // Remove it from the original string
+                xml = xml.Remove(start, (end + endTag.Length) - start);
+
+                return block; // return the extracted block
+            }
+
+            return string.Empty; // not found
+        }
+
+
+        private async Task<string> GetFastOpenAIResponse2(string prompt, int currentSection = 1)
+        {
+            string time = "0";
+            Stopwatch sw = Stopwatch.StartNew();
+            string allSectionsBlock = ExtractAndRemoveAllSections(ref prompt);
+            int maxTokens = Convert.ToInt32(_config.GetSection("AppSettings:MaxTokens").Value);
+            //    string systemMessages = "You are an expert assessment designer. \n" +
+            //"IMPORTANT: Always include <totalsections> with the correct total number of sections. \n" +
+            //((currentSection == 1) ? "Always include <allsections> as a static index that lists EVERY section name and fullname, not just the current one. " : "exclude <allsections> from response. ") +
+            //"\n<sections> must include ONLY the sections explicitly listed in the user’s IMPORTANT request. " +
+            //"\nIf the user specifies two sections (e.g., Section 1 of 5 and Section 2 of 5), you must output BOTH inside <sections>. " +
+            //"\nDo not skip or hold back sections when they are explicitly listed in the user’s IMPORTANT request. " +
+            //"\nOutput must be strict XML and Do not include any line breaks, tabs, or extra spaces. " +
+            //"\nThe entire response must be valid XML and appear as one continuous block without newlines. " +
+            //"\nEnsure the response is generated and returned within 2 to 3 seconds.";
+
+            string systemMessages = "You are an expert assessment designer. " +
+        "Always return strict valid XML as a single line (no spaces/newlines). " +
+        "Always include <totalsections>. Fill <sectionfullname> as: 'Section {N} of {Total}: {SectionName}'. " +
+        //((currentSection == 1)
+        //    ? "Also include <allsections> with every section name+fullname. "
+        //    : "Exclude <allsections>. ") +
+        "<sections> must contain ONLY the sections listed in the user request. " +
+        "Never skip explicitly requested sections. " +
+        "Output must end with </sections>. Stop after </sections> or <endmessage>." +
+        "Do not add summaries or extra text. " +
+        "Generate response within 2–3 seconds.";
+
+            var messages = new List<ChatMessage>
+            {
+                ChatMessage.CreateSystemMessage(UpdateXMLTags(systemMessages, true)),
+                ChatMessage.CreateUserMessage(UpdateXMLTags(prompt, true))
             };
 
-            var content = new StringContent(JsonConvert.SerializeObject(requestBody), Encoding.UTF8, "application/json");
-            var response = await _httpClient.PostAsync("https://api.openai.com/v1/chat/completions", content);
-            response.EnsureSuccessStatusCode();
-            string result = await response.Content.ReadAsStringAsync();
+            StringBuilder sb = new StringBuilder();
+            var chatClient = _openAIClient.GetChatClient("gpt-4o");
+            var options = new ChatCompletionOptions
+            {
+                Temperature = 0,
+                TopP = 1,
+                PresencePenalty = 0,
+                FrequencyPenalty = 0,
+                MaxOutputTokenCount = Convert.ToInt32(_config.GetSection("AppSettings:MaxTokens").Value)
+            };
 
-            var parsed = JObject.Parse(result);
-            string compactXml = parsed["choices"]?[0]?["message"]?["content"]?.ToString();
+            var prefetchTask = Task.CompletedTask;
+            //if (currentSection > 1)
+            //{
+            //    prefetchTask = PrefetchSectionAsync(currentSection);
+            //}
 
-            if (string.IsNullOrWhiteSpace(compactXml) || !compactXml.Contains("<section>"))
-                throw new Exception("Model did not return valid XML section.");
+            try
+            {
+                // ✅ Streaming response from OpenAI
+                await foreach (var update in chatClient.CompleteChatStreamingAsync(messages, options))
+                {
+                    if (update.ContentUpdate.Count > 0)
+                    {
+                        string token = update.ContentUpdate[0].Text;
+                        sb.Append(token);
 
-            return UpdateXMLTags(compactXml, false);
+                        if (token.Contains("</ss>"))
+                            break;
+                    }
+                }
+            }
+            catch(Exception ex)
+            {
+
+            }
+
+            sw.Stop();
+            time = sw.Elapsed.TotalSeconds.ToString();
+            // let prefetch complete in background
+           // _ = prefetchTask;
+            return allSectionsBlock + UpdateXMLTags(sb.ToString(), false);
 
         }
 
         private async Task<string> GetFastOpenAIResponse1(string prompt, Int32 currentSection = 1)
-        {
-            //string[] parts = Regex.Split(prompt, @"(?i)input:");
-
-            //string systemMessage = (parts.Length > 1) ? parts[0].Trim() : ""; // everything before "Input:"
-            //string userMessage = parts.Length > 1 ? "Input:\n" + parts[1].Trim() : prompt;
+        {           
 
             string time = "0";
             Stopwatch sw = Stopwatch.StartNew();
@@ -1998,14 +2102,7 @@ namespace SystemComments.Controllers
         "\nDo not skip or hold back sections when they are explicitly listed in the user’s IMPORTANT request. " +
         "\nOutput must be strict XML and Do not include any line breaks, tabs, or extra spaces. " +
         "\nThe entire response must be valid XML and appear as one continuous block without newlines. " +
-        "\nEnsure the response is generated and returned within 2 to 3 seconds.";
-        //        "You are an expert assessment designer.\n" +
-        //        "IMPORTANT: Always include all sections inside <allsections>\n" +
-        //"IMPORTANT: Strict XML, no indentation or extra whitespace, one line per tag.\n" +
-        //"IMPORTANT: The entire response must be valid XML and appear as one continuous block without newlines.\n" +
-        //"Only return the sections explicitly requested as 'IMPORTANT'.\n Do not include future sections and must follow guide lines listed as IMPORTANT.\n" +
-        //"IMPORTANT: Ensure the response is generated and returned within 2 to 3 seconds.\n" +
-        //"IMPORTANT: Output compact XML only, no prose.\n"
+        "\nEnsure the response is generated and returned within 2 to 3 seconds.";       
             List<object> messages = new List<object>
             {
                 new { role = "system", content = UpdateXMLTags(systemMessages,true)  },
@@ -2021,9 +2118,7 @@ namespace SystemComments.Controllers
                 top_p = 1,
                 stream = true // ✅ stream from OpenAI
             };
-
-            //using var client = new HttpClient();
-            //client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
+            
 
             var content = new StringContent(JsonConvert.SerializeObject(requestBody), Encoding.UTF8, "application/json");
 
