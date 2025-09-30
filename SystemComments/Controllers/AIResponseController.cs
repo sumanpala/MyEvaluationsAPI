@@ -481,6 +481,13 @@ namespace SystemComments.Controllers
             return result;
         }
 
+        [HttpPost("TestModel5")]
+        [AllowAnonymous]
+        public async Task<string> TestGPT5Model()
+        {
+            return await GetGPT5Response("");
+        }
+
         [HttpPost("SubmitSAGE")]
         [Authorize]
         public async Task<ActionResult<IEnumerable<SAGEResponse>>> GetSAGEResponse([FromBody] AIRequest input)
@@ -624,7 +631,7 @@ namespace SystemComments.Controllers
                     //string aiComments = await GetAISAGEChatGptResponse1(comments + "\n" + sageQuestions + "\n include <section> tag between the tag <sections></sections>");
                     apiAttempts++;
                     Stopwatch aiResponseWatch = Stopwatch.StartNew();
-                    string aiComments = await GetFastOpenAIResponse2(comments + "\n include <mainsection></mainsection> without fail. \n Answer is always empty in the response for example <answer></answer> \n" + sageQuestions, lastSection);
+                    string aiComments = await GetFastOpenAIResponse3(sageQuestions + "\n" + comments + "\n include <mainsection></mainsection> without fail. \n Answer is always empty in the response for example <answer></answer>" , lastSection, totalSections);
                     aiResponseWatch.Stop();
                     timeHistory.AIResponseSeconds = aiResponseWatch.Elapsed.TotalSeconds;
                     string extractJSON = SageExtractData(aiComments);
@@ -646,7 +653,7 @@ namespace SystemComments.Controllers
                     }
                     if (sectionCount == 0)
                     {
-                        aiComments = await GetFastOpenAIResponse1(comments + "\n" + sageQuestions + "\nSections are missed in the tag <sections></sections>, Please include." + allSectionsPrompt + "\n include <section> tag between the tag <sections></sections>");
+                        aiComments = await GetFastOpenAIResponse2(comments + "\n" + sageQuestions + "\nSections are missed in the tag <sections></sections>, Please include." + allSectionsPrompt + "\n include <section> tag between the tag <sections></sections>");
                         apiAttempts++;
                         extractJSON = SageExtractData(aiComments);
                         sectionCount = GetSectionsCount(extractJSON);
@@ -1835,6 +1842,7 @@ namespace SystemComments.Controllers
                 { "sections", "ss" },
                 { "section", "sc" },
                 { "sectionnum", "sn" },
+                { "sectionfullname", "sfn" },
                 { "name", "nm" },
                 { "fullname", "fn" },
                 { "mainquestion", "mq" },
@@ -1844,7 +1852,8 @@ namespace SystemComments.Controllers
                 { "followupquestion", "fp" },
                 { "endmessage", "em" },
                 { "wait", "w" },
-                {"allsections","ac" }
+                {"allsections","ac" },
+                { "totalsections", "ts"}
             };
             if (isCompress)
             {
@@ -2006,6 +2015,150 @@ namespace SystemComments.Controllers
             return string.Empty; // not found
         }
 
+        private async Task<string> GetGPT5Response(string prompt)
+        {
+            string time = "0";
+            Stopwatch sw = Stopwatch.StartNew();            
+            int maxTokens = Convert.ToInt32(_config.GetSection("AppSettings:MaxTokens").Value);
+
+            string systemMessages = "You are good at poetry.\n Return result in 2 to 3 seconds.";
+
+            var messages = new List<ChatMessage>
+            {
+                ChatMessage.CreateSystemMessage(systemMessages),
+                ChatMessage.CreateUserMessage("Plese provide one good poetry.")
+            };
+
+            StringBuilder sb = new StringBuilder();
+            var chatClient = _openAIClient.GetChatClient("gpt-4.1-mini");
+            var options = new ChatCompletionOptions
+            {
+                Temperature = 0,
+                TopP = 1,
+                PresencePenalty = 0,
+                FrequencyPenalty = 0,
+                MaxOutputTokenCount = Convert.ToInt32(_config.GetSection("AppSettings:MaxTokens").Value)
+            };
+           
+            try
+            {
+                // ✅ Streaming response from OpenAI
+                await foreach (var update in chatClient.CompleteChatStreamingAsync(messages, options))
+                {
+                    if (update.ContentUpdate.Count > 0)
+                    {
+                        string token = update.ContentUpdate[0].Text;
+                        sb.Append(token);
+                       
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+
+            }
+
+            sw.Stop();
+            time = sw.Elapsed.TotalSeconds.ToString();
+            // let prefetch complete in background
+            // _ = prefetchTask;
+            return sb.ToString();
+
+        }
+
+        private async Task<string> GetFastOpenAIResponse3(string prompt, int currentSection = 1, int totalSections = 4)
+        {
+            string time = "0";
+            Stopwatch sw = Stopwatch.StartNew();
+            string allSectionsBlock = ExtractAndRemoveAllSections(ref prompt);
+            string finalXml = "";
+            string systemMessages = "You are an expert assessment designer. \nImportant: Generate response within 2–3 seconds.\n" +
+            "Always return strict valid XML as a single line (no spaces/newlines). " +
+            "Always include <totalsections>. Fill <sectionfullname> as: 'Section {N} of {Total}: {SectionName}'. " +
+            //((currentSection == 1)
+            //    ? "Also include <allsections> with every section name+fullname. "
+            //    : "Exclude <allsections>. ") +
+            "<sections> must contain ONLY the sections listed in the user request. " +
+            "Never skip explicitly requested sections. " +
+            "Output must end with </sections>. Stop after </sections> or <endmessage>." +
+            "Do not add summaries or extra text. ";
+
+            var chatClient = _openAIClient.GetChatClient("gpt-4o-mini");
+            var options = new ChatCompletionOptions
+            {
+                Temperature = 0,
+                TopP = 1,
+                PresencePenalty = 0,
+                FrequencyPenalty = 0,
+                MaxOutputTokenCount = 500
+            };
+
+            // 🔹 Helper: request one section
+            async Task<string> GenerateSectionAsync(string sectionPrompt)
+            {
+                var messages = new List<ChatMessage>
+                {
+                    ChatMessage.CreateSystemMessage(UpdateXMLTags(systemMessages, true)),
+                    ChatMessage.CreateUserMessage(UpdateXMLTags(sectionPrompt, true))
+                };
+
+                StringBuilder sb = new();
+                List<string> tokenBuffer = new();
+
+                await foreach (var update in chatClient.CompleteChatStreamingAsync(messages, options))
+                {
+                    if (update.ContentUpdate.Count > 0)
+                    {
+                        string token = update.ContentUpdate[0].Text;
+                        tokenBuffer.Add(token);
+
+                        if (tokenBuffer.Count >= 20)
+                        {
+                            sb.Append(string.Join("", tokenBuffer));
+                            tokenBuffer.Clear();
+                        }
+
+                        if (token.Contains("</sc>") || token.Contains("</em>"))
+                            break;
+                    }
+                }
+
+                if (tokenBuffer.Count > 0)
+                {
+                    sb.Append(string.Join("", tokenBuffer));
+                    tokenBuffer.Clear();
+                }
+
+                return UpdateXMLTags(sb.ToString(), false);
+            }
+            string followupQuestionRule = "\r\n- If Section {currentsection} Main Question Answer is not empty and vague (<30 words, e.g., “good”), include exactly one <followupsection> with a <followupquestion>.\r\n- If <answer> is clear and >30 words, skip <followupsection>.";
+            if (currentSection <= 1)
+            {
+                var task1 = GenerateSectionAsync($"Important: Include only Section 1 and exclude <followupsection>. \n" + prompt);
+                await Task.WhenAll(task1);
+                finalXml = $"{allSectionsBlock}{task1.Result}";
+            }
+            else
+            {
+                var task1 = GenerateSectionAsync(prompt + $"\nImportant: Include only Section {currentSection - 1} of {totalSections}.\n{followupQuestionRule.Replace("{currentsection}", (currentSection - 1).ToString())}\n");
+                var task2 = GenerateSectionAsync(prompt + $"\nImportant: Include only Section {currentSection} of {totalSections}.]\n{followupQuestionRule.Replace("{currentsection}", (currentSection).ToString())}\n.Exclude <allsections> from response.\n");
+                await Task.WhenAll(task1, task2);
+                finalXml = $"{allSectionsBlock}{task1.Result}{ReplaceSecondSectionAsyncTags(task2.Result)}";
+            }          
+           
+
+            sw.Stop();
+            string timeTaken = sw.Elapsed.TotalSeconds.ToString("0.00");
+            return UpdateXMLTags(finalXml, false);
+
+
+        }
+
+        private string ReplaceSecondSectionAsyncTags(string xml)
+        {
+            xml = xml.Replace("<ss>", "").Replace("</ss>", "").Replace("<ts>", "").Replace("</ts>", "");
+            return xml;
+        }
 
         private async Task<string> GetFastOpenAIResponse2(string prompt, int currentSection = 1)
         {
@@ -2023,7 +2176,7 @@ namespace SystemComments.Controllers
             //"\nThe entire response must be valid XML and appear as one continuous block without newlines. " +
             //"\nEnsure the response is generated and returned within 2 to 3 seconds.";
 
-            string systemMessages = "You are an expert assessment designer. " +
+            string systemMessages = "You are an expert assessment designer. \nImportant: Generate response within 2–3 seconds.\n" +
         "Always return strict valid XML as a single line (no spaces/newlines). " +
         "Always include <totalsections>. Fill <sectionfullname> as: 'Section {N} of {Total}: {SectionName}'. " +
         //((currentSection == 1)
@@ -2032,8 +2185,7 @@ namespace SystemComments.Controllers
         "<sections> must contain ONLY the sections listed in the user request. " +
         "Never skip explicitly requested sections. " +
         "Output must end with </sections>. Stop after </sections> or <endmessage>." +
-        "Do not add summaries or extra text. " +
-        "Generate response within 2–3 seconds.";
+        "Do not add summaries or extra text. ";      
 
             var messages = new List<ChatMessage>
             {
@@ -2042,14 +2194,14 @@ namespace SystemComments.Controllers
             };
 
             StringBuilder sb = new StringBuilder();
-            var chatClient = _openAIClient.GetChatClient("gpt-4o");
+            var chatClient = _openAIClient.GetChatClient("gpt-4o-mini");
             var options = new ChatCompletionOptions
             {
                 Temperature = 0,
                 TopP = 1,
                 PresencePenalty = 0,
                 FrequencyPenalty = 0,
-                MaxOutputTokenCount = Convert.ToInt32(_config.GetSection("AppSettings:MaxTokens").Value)
+                MaxOutputTokenCount = 800
             };
 
             var prefetchTask = Task.CompletedTask;
@@ -2060,17 +2212,31 @@ namespace SystemComments.Controllers
 
             try
             {
+                List<string> tokenBuffer = new();
                 // ✅ Streaming response from OpenAI
                 await foreach (var update in chatClient.CompleteChatStreamingAsync(messages, options))
                 {
                     if (update.ContentUpdate.Count > 0)
                     {
                         string token = update.ContentUpdate[0].Text;
-                        sb.Append(token);
+                        tokenBuffer.Add(token);
+                        //sb.Append(token);
+                        // Flush buffer every ~20 tokens
+                        if (tokenBuffer.Count >= 20)
+                        {
+                            sb.Append(string.Join("", tokenBuffer));
+                            tokenBuffer.Clear();
+                        }
 
-                        if (token.Contains("</ss>"))
+                        if (token.Contains("</ss>") || token.Contains("</em>"))
                             break;
                     }
+                }
+                // Flush any leftovers in buffer
+                if (tokenBuffer.Count > 0)
+                {
+                    sb.Append(string.Join("", tokenBuffer));
+                    tokenBuffer.Clear();
                 }
             }
             catch(Exception ex)

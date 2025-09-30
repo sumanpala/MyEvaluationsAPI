@@ -1,9 +1,11 @@
 ﻿using Microsoft.AspNetCore.Http.HttpResults;
+using Microsoft.VisualStudio.Web.CodeGeneration.Utils;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using System;
 using System.Collections.Generic;
 using System.Data;
+using System.Diagnostics.Metrics;
 using System.Linq;
 using System.Security;
 using System.Text;
@@ -666,7 +668,12 @@ namespace SystemComments.Utilities
                     sections.Add(sectionData);
                     sectionNumber++;
                 }
-            }            
+            }
+            sections = sections
+           .GroupBy(s => s["name"]?.ToString())
+           .Select(g => g.First())
+           .ToList();
+
             jsonData["sections"] = sections;
             jsonData["allsections"] = lstAllSections;
             return JsonConvert.SerializeObject(jsonData, Newtonsoft.Json.Formatting.Indented);
@@ -796,7 +803,7 @@ namespace SystemComments.Utilities
         public static string ConvertLastJsonToFormattedText(string json, ref Int32 lastSection, ref Int32 noOfSections)
         {
             StringBuilder sb = new StringBuilder();
-            string includedSteps = "IMPORTANT: For this response, you must generate exactly the following sections in order, without skipping any:\n\t\t";
+            string includedSteps = "IMPORTANT: For this response, generate exactly the following sections::\n\t\t";
             try
             {
                 JObject jsonObject = JObject.Parse(json);
@@ -819,7 +826,7 @@ namespace SystemComments.Utilities
                 if (objLastSection != null)
                 {
                     currentSection = int.Parse(objLastSection["sectionnum"].ToString());
-                    sb.Append("The sectionnum field is derived from the section name (fullname) in the JSON. For example, if the section name is ‘Section 2 of 5’, then sectionnum is 2. \n");
+                    //sb.Append("The sectionnum field is derived from the section name (fullname) in the JSON. For example, if the section name is ‘Section 2 of 5’, then sectionnum is 2. \n");
                     sb.Append($"Total Sections: {totalSections} \n");
                     Int16 startStep = 1;
                     while (startStep < currentSection)
@@ -833,36 +840,37 @@ namespace SystemComments.Utilities
                         {
                             if (mainSection?["mainquestion"] != null && mainSection["mainquestion"].ToString().Length > 0)
                             {
-                                if (mainSection["description"] != null)
-                                {
-                                    sb.Append(mainSection["description"].ToString() + "\n");
-                                }
+                                //if (mainSection["description"] != null)
+                                //{
+                                //    sb.Append(mainSection["description"].ToString() + "\n");
+                                //}
 
-                                if (mainSection?["mainquestion"] != null)
-                                {
-                                    sb.Append(mainSection["mainquestion"].ToString() + "\n");
-                                }
+                                //if (mainSection?["mainquestion"] != null)
+                                //{
+                                //    sb.Append(mainSection["mainquestion"].ToString() + "\n");
+                                //}
 
-                                if (mainSection?["guide"]?["description"] != null)
-                                {
-                                    sb.Append(mainSection["guide"]["description"].ToString() + "\n");
-                                }
+                                //if (mainSection?["guide"]?["description"] != null)
+                                //{
+                                //    sb.Append(mainSection["guide"]["description"].ToString() + "\n");
+                                //}
 
-                                if (mainSection?["guide"]?["guidequestions"] is JArray guideQuestions && guideQuestions.Count > 0)
-                                {
-                                    foreach (var guideQuestion in guideQuestions)
-                                    {
-                                        sb.Append("• " + guideQuestion["guidequestion"]?.ToString() + "\n");
-                                    }
-                                }
-                                if (mainSection?["wait"] != null)
-                                {
-                                    sb.Append(mainSection["wait"].ToString() + "\n");
-                                }
+                                //if (mainSection?["guide"]?["guidequestions"] is JArray guideQuestions && guideQuestions.Count > 0)
+                                //{
+                                //    foreach (var guideQuestion in guideQuestions)
+                                //    {
+                                //        sb.Append("• " + guideQuestion["guidequestion"]?.ToString() + "\n");
+                                //    }
+                                //}
+                                //if (mainSection?["wait"] != null)
+                                //{
+                                //    sb.Append(mainSection["wait"].ToString() + "\n");
+                                //}
                                 if (mainSection?["answer"] != null && mainSection["answer"].ToString().Length > 0)
                                 {
-                                    sb.Append("Answer: " + mainSection["answer"].ToString() + "\n");                                  
-                                }                                
+                                    //sb.Append($"Section {currentSection}:\nMain Question Answer: " + ((mainSection["answer"].ToString().Length > 50) ? mainSection["answer"].ToString().Substring(0, 50) + "..." : mainSection["answer"].ToString())  + "\n");
+                                    sb.Append($"Section {currentSection}:\nMain Question Answer: " + mainSection["answer"].ToString() + "\n");                                  
+                                }
                             }                           
                         }
                     }
@@ -872,20 +880,21 @@ namespace SystemComments.Utilities
                         {
                             if (followup["question"]?.ToString().Length > 0)
                             {
-                                if (followup["description"] != null)
-                                {
-                                    sb.Append(followup["description"].ToString() + "\n");
-                                }
+                            //    if (followup["description"] != null)
+                            //    {
+                            //        sb.Append(followup["description"].ToString() + "\n");
+                            //    }
 
-                                sb.Append("• " + followup["question"]?.ToString() + "\n");
-                                if (followup["wait"] != null)
-                                {
-                                    sb.Append(followup["wait"]?.ToString() + "\n");
-                                }
+                            //    sb.Append("• " + followup["question"]?.ToString() + "\n");
+                            //    if (followup["wait"] != null)
+                            //    {
+                            //        sb.Append(followup["wait"]?.ToString() + "\n");
+                            //    }
                                 if (followup["answer"] != null && followup["answer"]?.ToString().Length > 0)
                                 {
                                     //sb.Append("Answer: User Completed this question.\n");
-                                    sb.Append("Answer: " + followup["answer"]?.ToString() + "\n");
+                                    sb.Append("Followup Question Answer: " + followup["answer"]?.ToString() + "\n");
+                                    //sb.Append("Followup Question Answer: " + ((followup["answer"].ToString().Length > 50) ? followup["answer"].ToString().Substring(0, 50) + "..." : followup["answer"].ToString()) + "\n");
                                 }                               
                             }                            
 
@@ -903,16 +912,21 @@ namespace SystemComments.Utilities
                 //{
                 //    followupSection = int.Parse(lastFollowupSection["sectionnum"].ToString());
                 //}
-                includedSteps += $"1. Section {((currentSection == 0) ? 1 : currentSection)} of {totalSections.ToString()}\n\t\t";
+
+
+                //string initialStep = $"1. Section {((currentSection == 0) ? 1 : currentSection)} of {totalSections.ToString()}";
+                //includedSteps += $"{initialStep}\n\t\t";
                 if (currentSection > 0 && currentSection < totalSections)
                 {
+                    //int previousSection = currentSection;
                     currentSection++;
-                    includedSteps += $"2. Section {currentSection} of {totalSections.ToString()}\n";
+                    //includedSteps += $"2. Section {currentSection} of {totalSections.ToString()}.";
                 }
+
 
                 lastSection = ((currentSection == 0) ? 1 : currentSection);
                 noOfSections = totalSections;
-                sb.Append("\n\n" + includedSteps);
+                //sb.Append("\n\n" + includedSteps);
 
             }
             catch (Exception e)
