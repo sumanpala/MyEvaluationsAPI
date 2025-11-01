@@ -5,11 +5,14 @@ using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
+using Microsoft.VisualStudio.Web.CodeGeneration.Contracts.Messaging;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using OpenAI;
 using OpenAI.Chat;
 using System;
+using System.ClientModel;
 using System.Collections.Generic;
 using System.Data;
 using System.Diagnostics;
@@ -48,6 +51,10 @@ namespace SystemComments.Controllers
         };
         private readonly HttpClient _httpClient;
         private readonly OpenAIClient _openAIClient;
+        private readonly ChatClient chatClient;
+        private readonly OpenAIClient _openAIMyInsightsClient;
+        private readonly OpenAIClient _openAIAzureClient;
+        private readonly ChatClient chatAzureClient;
         public AIResponseController(APIDataBaseContext context,IJwtAuth jwtAuth, IConfiguration config, ILogger<AIResponseController> logger)
         {
             _context = context;
@@ -57,7 +64,32 @@ namespace SystemComments.Controllers
             _httpClient = new HttpClient();
             _httpClient.DefaultRequestHeaders.Authorization =
                 new AuthenticationHeaderValue("Bearer", config["AppSettings:SAGEToken"]);
+
             _openAIClient = new OpenAIClient(config["AppSettings:SAGEToken"]);
+            chatClient = _openAIClient.GetChatClient("gpt-4o-mini");
+
+            //_openAIMyInsightsClient = new OpenAIClient(config["AppSettings:MyInsightsToken"], new OpenAIClientOptions { });
+            _openAIMyInsightsClient = new OpenAIClient(
+             new ApiKeyCredential(config["AppSettings:MyInsightsToken"]),
+             new OpenAIClientOptions
+             {
+                 NetworkTimeout = TimeSpan.FromSeconds(300)
+             }
+            );
+            //_ = WarmUpAsync();
+            //_ = KeepAliveLoopAsync(CancellationToken.None);   // continuous keep-alive
+
+            var azureUri = new Uri(config["AppSettings:AzureUrl"] ?? "https://api.openai.com/");
+            _openAIAzureClient = new OpenAIClient(
+             new ApiKeyCredential(config["AppSettings:AzureToken"]),
+             new OpenAIClientOptions
+             {
+                 Endpoint = azureUri,
+                 NetworkTimeout = TimeSpan.FromSeconds(300)
+             }
+            );
+
+            chatAzureClient = _openAIAzureClient.GetChatClient("gpt-4o");
         }
 
         // GET: api/AIResponse
@@ -156,17 +188,17 @@ namespace SystemComments.Controllers
                 }
                 else if (input.IsSage == 1)
                 {
-                    comments = GetSagePrompt(input);
+                    comments = PromptService.GetSagePrompt(input);
                     aiResponse = GetChatGptResponse(comments, 3);
                 }                
-                else if (input.InputPrompt.Length > 0)
-                {
-                    comments = input.InputPrompt;
-                    aiResponse = GetChatGptResponse(comments, 2);
-                }
+                //else if (input.InputPrompt.Length > 0) -- Update Existing Comments
+                //{
+                //    comments = input.InputPrompt;
+                //    aiResponse = GetChatGptResponse(comments, 2);
+                //}
                 else
                 {
-                    comments = GetComments(input);
+                    comments = PromptService.GetComments(input);
                     aiResponse = GetChatGptResponse(comments, 1);
                 }
                
@@ -250,7 +282,7 @@ namespace SystemComments.Controllers
                     "\n\n\"Important: Frequency is always high. Try to include Frequency as High based on the prompt.\"\n" +
                     "\n\"Important: Include all rotations which are involved on generating the PIT.\"\n";
                 
-                prompt = await GetAPEAreaOfImprovementsResponse(input);                
+                prompt = await BackEndService.GetAPEAreaOfImprovementsResponse(input, _context, _config);                
                 input.AFIPrompt = prompt;
                 prompt = prompt + requiredCompetencies;
                 response = await GetAPEAIResponse(prompt);
@@ -260,7 +292,7 @@ namespace SystemComments.Controllers
                 string compactJson = JsonConvert.SerializeObject(parsed, Formatting.None);
                 apeResponse.AFIJSON = compactJson;
 
-                prompt = await GetAPEAFIProgramResponse(input);               
+                prompt = await BackEndService.GetAPEAFIProgramResponse(input, _context, _config);               
                 input.AFIProgramPrompt = prompt;
                 prompt = prompt + requiredCompetencies;
                 response = await GetAPEAIResponse(prompt);
@@ -273,8 +305,8 @@ namespace SystemComments.Controllers
                 if (input.PITPrompt != null && input.PITPrompt.Length > 0)
                 {
                     string pitPrompt = input.PITPrompt;
-                    //string summary = SummarizePITs(apeResponse.AFIJSON);
-                    //string summary1 = SummarizePITs(apeResponse.AFIProgramJSON);
+                    //string summary = PromptService.SummarizePITs(apeResponse.AFIJSON);
+                    //string summary1 = PromptService.SummarizePITs(apeResponse.AFIProgramJSON);
                     pitPrompt = pitPrompt.Replace("[Input]", "\n**AFI Summary JSON**\n" + apeResponse.AFIJSON + "\n\n**AFI Program Summary JSON**\n" + apeResponse.AFIProgramJSON);
                     input.PITPrompt = pitPrompt;
                     pitPrompt = pitPrompt + requiredCompetencies;
@@ -299,193 +331,87 @@ namespace SystemComments.Controllers
                 apeResponse.AFIJSON = "";
                 aiAPEResponse.Add(apeResponse);
             }
-            await InsertAPEResponses(input, aiAPEResponse[0]);
+            await BackEndService.InsertAPEResponses(input, aiAPEResponse[0], _context);
             return aiAPEResponse;
-        }
-
-        private static string SummarizePITs(string json)
-        {
-            if (string.IsNullOrWhiteSpace(json)) return "";
-
-            try
-            {
-                var sb = new StringBuilder();
-                var parsed = JsonConvert.DeserializeObject<List<CompetencyCategory>>(json);
-
-                foreach (var category in parsed)
-                {
-                    if (string.IsNullOrWhiteSpace(category.PrimaryACGMECompetencyOrCategory))
-                        continue;
-
-                    sb.AppendLine($"### {category.PrimaryACGMECompetencyOrCategory}");
-
-                    foreach (var pit in category.PITs ?? Enumerable.Empty<PIT>())
-                    {
-                        if (string.IsNullOrWhiteSpace(pit.PITTitle)) continue;
-
-                        sb.Append($"- {pit.PITTitle}");
-
-                        if (!string.IsNullOrWhiteSpace(pit.PITDefinition))
-                            sb.Append($": {pit.PITDefinition.Trim()}");
-
-                        sb.AppendLine();
-                    }
-
-                    sb.AppendLine(); // blank line between categories
-                }
-
-                return sb.ToString();
-            }
-            catch (Exception ex)
-            {
-                return $"[ERROR parsing JSON]: {ex.Message}";
-            }
-        }
-
-
-        private async Task InsertAPEResponses(AIRequest input, APEResponse apeResponse)
-        {
-            SqlParameter[] parameters = new SqlParameter[]
-            {
-                new SqlParameter("@DepartmentID", input.DepartmentID),
-                new SqlParameter("@UserID", input.UserID),
-                new SqlParameter("@APEScheduleHistoryID", input.AIResponseID),
-                new SqlParameter("@StartDate", input.StartDate),
-                new SqlParameter("@EndDate", input.EndDate),
-                new SqlParameter("@AcademicYear", input.AcademicYear),
-                new SqlParameter("@AFIResponse", apeResponse.AFIJSON),
-                new SqlParameter("@AFIProgramResponse", apeResponse.AFIProgramJSON),
-                new SqlParameter("@PITResponse", apeResponse.PITJSON),
-                new SqlParameter("@AFIPrompt", input.AFIPrompt),
-                new SqlParameter("@AFIProgramPrompt", input.AFIProgramPrompt),
-                new SqlParameter("@PITPrompt", input.PITPrompt)
-            };
-            await Task.Run(() => _context.ExecuteStoredProcedure("InsertAPEMyInsightsData", parameters));
-        }
-
-        private async Task<string> GetAPEAreaOfImprovementsResponse(AIRequest input)
-        {
-            string prompt = "";
-            SqlParameter[] parameters = new SqlParameter[]
-            {
-                new SqlParameter("@DepartmentID", input.DepartmentID),
-                new SqlParameter("@UserID", input.UserID),
-                new SqlParameter("@StartDate", input.StartDate),
-                new SqlParameter("@EndDate", input.EndDate),
-                new SqlParameter("@Word", input.PromptWord)
-            };
-
-            // Use Task.Run to ensure the method runs asynchronously
-            await Task.Run(async () =>
-            {
-                DataSet dsInsights = _context.ExecuteStoredProcedure("ExtractMyInsights", parameters);
-                if (dsInsights != null)
-                {
-                    DataTable dtPrompt = dsInsights.Tables[0];
-                    DataTable dtInsights = dsInsights.Tables[1];
-                    if (dtPrompt.Rows.Count > 0)
-                    {
-                        prompt = await FormatHtml(dtPrompt.Rows[0]["FileContent"].ToString());
-                        prompt = prompt.Replace("<br/>", "\n").Replace("</br>", "\n").Replace("<br>", "\n");
-                        prompt = prompt.Replace("[Program Type]", dtPrompt.Rows[0]["ProgramName"].ToString());
-                    }
-                    if (dtInsights.Rows.Count > 0)
-                    {
-                        string result = string.Join(Environment.NewLine,
-                            dtInsights.AsEnumerable()
-                                .Select(row => row["AreasForImprovements"]?.ToString().Replace("\n", " ").Trim())
-                                .Where(value => !string.IsNullOrEmpty(value))
-                        );
-                        result = Regex.Replace(result.Replace("\r\n", "\n").Replace("\n\n","\n").Replace("<br/>", "\n"), "<.*?>", string.Empty);
-                        result = await SummarizeText(result, 4000, 1);
-                        //result = await SummarizeCommentsWithGPT(result);
-                        prompt = prompt.Replace("[From uploaded file]", result);
-                    }
-                }
-            });
-
-            return prompt;
-        }
-
-        private async Task<string> GetAPEAFIProgramResponse(AIRequest input)
-        {
-            string prompt = "", pitPrompt = "";
-            SqlParameter[] parameters = new SqlParameter[]
-            {
-                new SqlParameter("@DepartmentID", input.DepartmentID),                
-                new SqlParameter("@StartDate", input.StartDate),
-                new SqlParameter("@EndDate", input.EndDate)                
-            };
-
-            // Use Task.Run to ensure the method runs asynchronously
-            await Task.Run(async () =>
-            {
-                DataSet dsInsights = _context.ExecuteStoredProcedure("GetEvaluationProgramCommentsForMyInsights", parameters);
-                if (dsInsights != null)
-                {
-                    DataTable dtPrompt = dsInsights.Tables[0];
-                    DataTable dtPITPrompt = dsInsights.Tables[1];
-                    DataTable dtInsights = dsInsights.Tables[2];
-                    if (dtPrompt.Rows.Count > 0)
-                    {
-                        prompt = await FormatHtml(dtPrompt.Rows[0]["FileContent"].ToString());
-                        prompt = prompt.Replace("<br/>", "\n").Replace("</br>", "\n").Replace("<br>", "\n");
-                        prompt = prompt.Replace("[Program Type]", dtPrompt.Rows[0]["ProgramName"].ToString());
-                    }
-                    if(dtPITPrompt.Rows.Count > 0)
-                    {
-                        pitPrompt = await FormatHtml(dtPITPrompt.Rows[0]["FileContent"].ToString());
-                        pitPrompt = pitPrompt.Replace("<br/>", "\n").Replace("</br>", "\n").Replace("<br>", "\n");
-                        pitPrompt = pitPrompt.Replace("[Program Type]", dtPITPrompt.Rows[0]["ProgramName"].ToString());
-                        input.PITPrompt = pitPrompt;
-                    }
-                    if (dtInsights.Rows.Count > 0)
-                    {
-                        string result = string.Join(Environment.NewLine,
-                            dtInsights.AsEnumerable()
-                                .Select(row => row["RotationName"] + "\n\n" + WebUtility.HtmlDecode(row["Comments"]?.ToString()).Trim().Replace("<br/>", "\n").Replace("\n\n", "\n").Replace("\n\n", "\n"))
-                                .Where(value => !string.IsNullOrEmpty(value))
-                        );
-
-                        string rotations = string.Join(",",
-                            dtInsights.AsEnumerable()
-                            .Take(5)
-                            .Select(row => "\"" + row["AbrRotationName"] + "\""));
-                        result = Regex.Replace(result.Replace("\r\n", "\n").Replace("<br/>", "\n"), "<.*?>", string.Empty);
-                        result = Regex.Replace(result, @"(\r?\n){2,}", "\n\n");
-
-                        result = await SummarizeText(result, 9000, 2);
-                        //result = await SummarizeCommentsWithGPT(result);
-                        prompt = prompt.Replace("[From uploaded file]", result).Replace("[Rotations]", "[" + rotations + ",...]");
-                    }
-                }
-            });
-
-            return prompt;
-        }
-
-        private async Task<string> FormatHtml(string prompt)
-        {
-            string result = string.Empty;
-            await Task.Run(() => {
-                // Replace opening <ul><li> or <li> with newline + dash
-               result = Regex.Replace(prompt, @"<\s*li\s*>", "\n- ");
-
-                // Remove closing </li>
-                result = Regex.Replace(result, @"<\s*/\s*li\s*>", "");
-
-                // Remove <ul> and </ul>
-                result = Regex.Replace(result, @"<\s*/?\s*ul\s*>", "");
-            });
-           
-            return result;
-        }
+        }             
+                     
+        
 
         [HttpPost("TestModel5")]
         [AllowAnonymous]
         public async Task<string> TestGPT5Model()
         {
             return await GetGPT5Response("");
+        }
+
+        [HttpPost("TestAzureDomain")]
+        [AllowAnonymous]
+        public async Task<string> TestAzureDomain()
+        {
+            string time = "0";
+            Stopwatch sw = Stopwatch.StartNew();
+            int maxTokens = Convert.ToInt32(_config.GetSection("AppSettings:MaxTokens").Value);
+
+            string systemMessages = "You are good at poetry.\n Return result in 2 to 3 seconds.";
+
+            var messages = new List<ChatMessage>
+            {
+                ChatMessage.CreateSystemMessage(systemMessages),
+                ChatMessage.CreateUserMessage("Plese provide one good poetry.")
+            };
+
+            StringBuilder sb = new StringBuilder();           
+            var options = new ChatCompletionOptions
+            {
+                Temperature = 1,
+                TopP = 1,
+                PresencePenalty = 0,
+                FrequencyPenalty = 0,
+                MaxOutputTokenCount = 400
+            };
+
+            try
+            {
+                // ✅ Streaming response from OpenAI
+                await foreach (var update in chatAzureClient.CompleteChatStreamingAsync(messages, options))
+                {
+                    if (update.ContentUpdate.Count > 0)
+                    {
+                        string token = update.ContentUpdate[0].Text;
+                        sb.Append(token);
+
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+
+            }
+
+            sw.Stop();
+            time = sw.Elapsed.TotalSeconds.ToString();
+            // let prefetch complete in background
+            // _ = prefetchTask;
+            return sb.ToString(); 
+        }
+
+        [HttpPost("MyInsightsSummary")]
+        [AllowAnonymous]
+        public async Task<ActionResult<IEnumerable<MyInsightsResponse>>> MyInsightsSummary([FromBody] AIRequest input)
+        {
+            List<MyInsightsResponse> aiResponse = new List<MyInsightsResponse>();
+            DataSet dsComments = BackEndService.GetMyInsightsSummaryComments(_context, input);
+            string myInsightPrompt = PromptService.GetMyInsightsSummaryPrompt();
+            //string myInsightComments = await PromptService.GetMyInsightsComments(dsComments, _openAIMyInsightsClient);
+            string myInsightComments = await InsightsSummarizer.GetMyInsightsComments(dsComments, _openAIMyInsightsClient);
+            string systemMessage = "You are ChatGPT, a helpful, structured, and expert assistant.\r\nYou produce polished, thematic, well-organized summaries.\r\nWrite as if your output will be directly pasted into a professional report.\r\nUse clear section headers, confident academic language, and smooth narrative structure." +
+                "\r\nNever ask follow-up questions. Output should be final.\nFor every competency, you MUST include a property named `ProgressionByPGY`\n`ProgressionByPGY` MUST be a non-empty array.";
+            string insightResponse = await MyInsightsGPT5Response(systemMessage, myInsightPrompt + "\n" + myInsightComments);
+            MyInsightsResponse sumamryResponse = new MyInsightsResponse();
+            sumamryResponse.SummaryJSON = insightResponse;
+            aiResponse.Add(sumamryResponse);
+            DataSet dsResult = BackEndService.InsertDepartmentalSummaryFromJson(_context, input, sumamryResponse);
+            return aiResponse;
         }
 
         [HttpPost("SubmitSAGE")]
@@ -576,7 +502,7 @@ namespace SystemComments.Controllers
                                 input.ActivityName = dtPrompt.Rows[0]["ActivityName"].ToString();
                                 if (comments.Length == 0)
                                 {
-                                    comments = GetSagePrompt(input);
+                                    comments = PromptService.GetSagePrompt(input);
                                 }
                                 comments = comments.Replace("</br>", "\n");
                                 comments = comments.Replace("<br>", "\n");
@@ -593,11 +519,11 @@ namespace SystemComments.Controllers
                             }
                             else
                             {
-                                comments = GetSagePrompt(input);
+                                comments = PromptService.GetSagePrompt(input);
                             }
                             // Get Last 12 months historical data.
                             Stopwatch promptDBHistory = Stopwatch.StartNew();
-                            string history = GetPreviousHistory(input, templateIDs, Convert.ToInt64(subjectUserID));
+                            string history = BackEndService.GetPreviousHistory(input, templateIDs, Convert.ToInt64(subjectUserID), _context);
                             promptDBHistory.Stop();
                             historySeconds = promptDBHistory.Elapsed.TotalSeconds;
                             timeHistory.HistorySeconds = historySeconds;
@@ -703,12 +629,12 @@ namespace SystemComments.Controllers
                     totalSeconds = totalTime.Elapsed.TotalSeconds;
                     timeHistory.TotalSeconds = totalSeconds;
                     timeHistory.ApiAttempts = apiAttempts;
-                    DataSet dsResultSet = SaveSageResponse(dsData, input, aiResponse, comments, minifiedJson, timeHistory);
+                    DataSet dsResultSet = BackEndService.SaveSageResponse(_context, dsData, input, aiResponse, comments, minifiedJson, timeHistory);
                     if (dsResultSet != null && dsResultSet.Tables.Count > 0)
                     {
                         DataTable dtEvaluationQuestions = dsResultSet.Tables[0];
                         sageResponse.ResponseJSON = UpdateJSONQuestionIDs(dtEvaluationQuestions, minifiedJson);
-                        SaveSageResponse(sageResponse.ResponseJSON, input);
+                        BackEndService.SaveSageResponse(_context,sageResponse.ResponseJSON, input);
                     }
                 }
             }
@@ -804,190 +730,8 @@ namespace SystemComments.Controllers
             // Remove remaining HTML tags like <ul> </ul>
             //text = Regex.Replace(text, "<.*?>", "").Trim();
             return text;
-        }
-        private string GetPreviousHistory(AIRequest input, string templateIDs, Int64 userID)
-        {
-            string userComments = string.Empty;
-            SqlParameter[] parameters = new SqlParameter[]
-                    {
-                            new SqlParameter("@LoginDepartmentID", input.DepartmentID),
-                            new SqlParameter("@LoginUserID", input.UserID),
-                            new SqlParameter("@FromDate", DateTime.Now.AddYears(-1)),
-                            new SqlParameter("@ToDate", DateTime.Now),
-                            new SqlParameter("@SelectedUsers", userID.ToString()),
-                            new SqlParameter("@SelectedTemplates", templateIDs),
-                            new SqlParameter("@RotationID", "0"),
-                            new SqlParameter("@EvaluatorID", "0"),
-                            new SqlParameter("@InCludedCommnets", "Evaluation,EvaluateeAcknowledgement,EvaluatorAcknowledgement,ProgramDirector,FreeFormResponses,EarlyWarningComments,ExceedExpectationComments\r\n\t,ConfidentialComments,CMEEvaluations,ConferenceEvaluations,CAWComments,ProceduresComments,PatientLogsComments,LearningAssignmentsComments,MyPortfolio"),
-                            new SqlParameter("@IsDeletedRotations","0")
-
-                    };
-
-            DataSet dsHistory = _context.ExecuteStoredProcedure("GetSystemComments", parameters);
-            if(dsHistory.Tables.Count > 1)
-            {
-                DataTable dtComments = dsHistory.Tables[1];
-                
-                userComments += "\n Evaluation comments and feedback from various rotations and activities: \"\"\" \n";
-                userComments += string.Format("\n Use the following narratives for {0} ", DateTime.Now.AddYears(-1).ToString("mm/dd/yyyy") + "-" + DateTime.Now.ToString("mm/dd/yyyy"));
-
-                // Dictionary to map each CommentsType to relevant fields
-                var commentsTypeFields = new Dictionary<string, List<string>>()
-                {
-                    { "1", new List<string> { "FreeFormComments", "QuestionComments", "EvaluationComments", "AdditionalComments", "ConfidentialComments", "AcknowledgedComments", "ReviewComments", "ProgramDirectorComments", "AdministratorComments", "GAComments", "PreceptorComments" } },
-                    { "2", new List<string> { "EvaluationComments" } },
-                    { "3", new List<string> { "EvaluationComments", "ConfidentialComments", "AdditionalComments" } },
-                    { "4", new List<string> { "EvaluationComments", "ConfidentialComments" } },
-                    { "5", new List<string> { "EvaluationComments" } },
-                    { "6", new List<string> { "EvaluationComments" } },
-                    { "7", new List<string> { "EvaluationComments" } },
-                    { "8", new List<string> { "EvaluationComments" } }
-                };
-
-                // Use LINQ to filter rows and concatenate comments
-                userComments += string.Join("\n",
-                    dtComments.AsEnumerable()
-                        .Where(dvr => commentsTypeFields.ContainsKey(dvr["CommentsType"].ToString()))
-                        .SelectMany(dvr =>
-                            commentsTypeFields[dvr["CommentsType"].ToString()]
-                                .Where(field => dvr[field].ToString().Length > 0)
-                                .Select(field => SageExtraction.RemoveUnNecessaryJSONTags(dvr[field].ToString()))
-                        )
-                );
-                
-            }
-
-            return userComments;
-        }
-
-        private DataSet SaveSageResponse(DataSet dsData, AIRequest input, string aiResponse, string aiPrompt, string extractJSON, TimeHistory timeHistory)
-        {
-            DataTable dtSections = new DataTable();
-            DataTable dtSectionInfo = new DataTable();
-            DataTable dtGuide = new DataTable();
-            DataTable dtGuideQuestions = new DataTable();
-            DataTable dtMainQuestions = new DataTable();
-            DataTable dtFollowupSections = new DataTable();
-            DataTable dtFollowupQuestions = new DataTable();
-            string[] sectionColumns = { "ID", "name", "fullname","sectionnum" };
-            //string[] sectionInfoColumns = { "ID", "ParentID", "description", "wait" };
-            string[] sectionMainQuestions = { "ID", "ParentID", "description", "mainquestion", "answer", "questionid","wait" };
-            string[] sectionGuide = { "ID", "ParentID", "description" };
-            string[] sectionGuideQuestions = { "ID", "ParentID", "guidequestion", "questionid" };      
-            //string[] sectionFollowup = { "ID", "ParentID", "description" };
-            string[] sectionFollowupQuestions = { "ID", "ParentID","description","question", "answer", "questionid", "wait" };
-            string totalSections = "0";
-            DataSet dsResultSet = new DataSet();
-            if (dsData != null && dsData.Tables.Count > 0)
-            {
-                SageExtraction.ConvertColumnsToString(dsData);
-                DataTable dtTotalCount = dsData.Tables[0];
-                if (dtTotalCount.Rows.Count > 0 && dtTotalCount.Columns.Contains("Value"))
-                {
-                    totalSections = dtTotalCount.Rows[0]["Value"].ToString();
-                }
-                if (totalSections.Length == 0)
-                {
-                    totalSections = "0";
-                }
-                if (dsData.Tables.Count > 1)
-                {
-                    dtSections = dsData.Tables[1];
-                }
-                dtSections = SageExtraction.RemoveColumns(dtSections, sectionColumns);
-
-                if (dsData.Tables.Count > 2)
-                {
-                    dtMainQuestions = dsData.Tables[2];
-                    if (!dtMainQuestions.Columns.Contains("id"))
-                    {
-                        dtMainQuestions.Columns["id"].ColumnName = "questionid";
-                    }
-                }
-                dtMainQuestions = SageExtraction.RemoveColumns(dtMainQuestions, sectionMainQuestions);
-
-                if (dsData.Tables.Count > 3)
-                {
-                    dtGuide = dsData.Tables[3];
-                }
-                dtGuide = SageExtraction.RemoveColumns(dtGuide, sectionGuide);
-
-                if (dsData.Tables.Count > 4)
-                {
-                    dtGuideQuestions = dsData.Tables[4];
-                    if (!dtGuideQuestions.Columns.Contains("id"))
-                    {
-                        dtGuideQuestions.Columns["id"].ColumnName = "questionid";
-                    }
-                }
-                dtGuideQuestions = SageExtraction.RemoveColumns(dtGuideQuestions, sectionGuideQuestions);
-                
-                //if (dsData.Tables.Count > 5)
-                //{
-                //    dtFollowupSections = dsData.Tables[5];
-                //}
-                //dtFollowupSections = SageExtraction.RemoveColumns(dtFollowupSections, sectionFollowup);
-                if (dsData.Tables.Count > 5)
-                {
-                    dtFollowupQuestions = dsData.Tables[5];
-                    if (!dtFollowupQuestions.Columns.Contains("id"))
-                    {
-                        dtFollowupQuestions.Columns["id"].ColumnName = "questionid";
-                    }
-                }
-                dtFollowupQuestions = SageExtraction.RemoveColumns(dtFollowupQuestions, sectionFollowupQuestions);
-
-                SqlParameter[] parameters = new SqlParameter[]
-                    {
-                            new SqlParameter("@DepartmentID", input.DepartmentID),
-                            new SqlParameter("@UserID", input.UserID),
-                            new SqlParameter("@EvaluationID", input.EvaluationID),
-                            new SqlParameter("@TotalSections", totalSections),
-                            new SqlParameter("@AIResponse", aiResponse),
-                            new SqlParameter("@AIJSON", extractJSON),
-                            new SqlParameter("@AIPrompt", aiPrompt),
-                            new SqlParameter("@TotalSeconds", timeHistory.TotalSeconds),
-                            new SqlParameter("@PromptSeconds", timeHistory.PromptDBSeconds),
-                            new SqlParameter("@CommentsSeconds", timeHistory.HistorySeconds),
-                            new SqlParameter("@AIResponseSeconds", timeHistory.AIResponseSeconds),
-                            new SqlParameter("@TotalAttempts", timeHistory.ApiAttempts),
-                            new SqlParameter("@tblSections", dtSections),
-                            new SqlParameter("@tblMainQuestions", dtMainQuestions),
-                            new SqlParameter("@tblGuide", dtGuide),
-                            new SqlParameter("@tblGuideQuestions", dtGuideQuestions),                          
-                            new SqlParameter("@tblFollowupQuestions", dtFollowupQuestions)
-
-                    };
-
-                dsResultSet = _context.ExecuteStoredProcedure("InsertSageEvaluation", parameters);
-
-            }
-            return dsResultSet;
-        }
-
-        private void SaveSageResponse(string responseJSON, AIRequest input)
-        {
-            SqlParameter[] parameters = new SqlParameter[]
-                    {
-                        new SqlParameter("@EvaluationID", input.EvaluationID),
-                        new SqlParameter("@UserID", input.UserID),
-                        new SqlParameter("@DepartmentID", input.DepartmentID),
-                        new SqlParameter("@AIJSON", responseJSON)
-
-                    };
-            _context.ExecuteStoredProcedure("InsertSageResponse", parameters);
-        }
-
-        private void UpdateAISageSettingsPrompt(Int64 id, string prompt)
-        {
-            SqlParameter[] parameters = new SqlParameter[]
-                    {
-                        new SqlParameter("@SageSettingsID", id),                        
-                        new SqlParameter("@Prompt", prompt)
-
-                    };
-            _context.ExecuteStoredProcedure("UpdateAISageSettingsPrompt", parameters);
-        }
+        }           
+                       
 
         private MatchCollection ExtractData(string airesponse)
         {
@@ -997,449 +741,7 @@ namespace SystemComments.Controllers
 
             // Extract Matches
             return regex.Matches(airesponse);
-        }
-
-        private string GetMyInsightPrompt(string dateRange)
-        {
-            string prompt_initial = "";
-            prompt_initial = String.Format("You are an expert medical educator tasked with generating narrative feedback based on evaluations from {0}. " +
-                        "These evaluations reflect the trainee’s performance over time. Follow these steps to ensure personalized, actionable feedback that is clearly formatted for HTML: \n\n" +
-                        "Instructions:\n Performance Comparison: \n\n" +
-
-                        "Compare the trainee’s performance during the initial 3 months to the most recent 3 months within the 6-month range.\n" +
-                        "Highlight performance trends, specifically noting improvements or regressions over time. \n" +
-                        "Clearly differentiate between the two time frames using specific date ranges (e.g., \"Performance from [Start Date] to [Mid Date]\" vs. \"Performance from [Mid Date] to [End Date]\").\n" +
-                        "Actionable, Contextual Feedback: \n\n" +
-
-                        "Tailor feedback to each trainee by referencing specific evaluator comments.\n Provide personalized, varied, and actionable feedback for each competency.\n" +
-                        "Avoid generic responses for competencies like communication or professionalism. For example, one trainee may benefit from \"role-playing critical patient interactions,\" while another may require \"simulating case reviews with attending physicians.\" \n" +
-                        "Core Competency Alignment:\n\n" +
-
-                        "Organize feedback under the following ACGME core competencies:\n Patient Care \n Medical Knowledge \n Systems-Based Practice \n Practice-Based Learning & Improvement \n Professionalism \n Interpersonal & Communication Skills \n" +
-                        "Patient Care\nMedical Knowledge\nSystems-Based Practice\nPractice-Based Learning & Improvement\nProfessionalism\nInterpersonal & Communication Skills" +
-                        "If feedback spans multiple competencies, divide the feedback accordingly. If no competency applies, place it in the Overall MyInsights section. \n" +
-                        "Tone, Personalization, and Gender Neutrality: \n\n" +
-                        "Maintain a professional and constructive tone. \n" +
-                        "Maintain a professional, constructive tone throughout.\n " +
-                        "Use gender-neutral language (e.g., \"the trainee,\" \"the resident,\" or \"they\"). \n " +
-                        "Personalize feedback by referencing specific cases, patient interactions, or behaviors, ensuring distinct feedback for each trainee even when addressing similar areas.\n " +
-                        "Structured Feedback Format:\n\n" +
-                        "Use clear HTML headers and subheaders to organize the feedback, categorizing each section by competency.\n\n" +
-                        "Use bullet points for actionable steps and goal-setting to ensure clarity.\n" +
-                        "Comments:\n" +
-                        "Ensure the feedback is clearly categorized under each core competency with corresponding HTML headers and subheaders.\n" +
-                        "Break down actionable feedback into bullet points, making it clear and easy to understand.\n" +
-                        "Avoid redundancy across trainees and ensure all recommendations are varied, even if the themes are similar." +
-                        "Use gender-neutral language and professional tone throughout the feedback.\n\n"
-                        , dateRange);
-            prompt_initial += String.Format("Expected Output Format:\n\n" +
-                "<h1>Patient Care</h1> \n" +
-                "<h2>Initial 3 Months: (e.g., Performance from [Start Date] to [Mid Date])</h2> \n" +
-                "<p>Summarize the trainee's early performance, highlighting strengths and areas for improvement.</p> \n" +
-                "<h2>Most Recent 3 Months: (e.g., Performance from [Mid Date] to [End Date])</h2> \n" +
-                "<p>Summarize recent performance, noting any improvements or regressions.</p> \n" +
-                "<h3>Actionable Feedback:</h3> \n" +
-                "<ul><li>Provide specific strategies based on evaluator comments. E.g., \"During the ICU rotation, the evaluator noted a significant improvement in time management.\"</li><ul>\n\n" +
-
-                "<h1>Medical Knowledge</h1> \n" +
-                "<h2>Initial 3 Months: (e.g., Performance from [Start Date] to [Mid Date])</h2> \n" +
-                "<p>Summarize the trainee's early medical knowledge performance.</p> \n" +
-                "<h2>Most Recent 3 Months: (e.g., Performance from [Mid Date] to [End Date])</h2> \n" +
-                "<p>Summarize recent medical knowledge performance, noting specific improvements or challenges.</p> \n" +
-                "<h3>Actionable Feedback:</h3> \n" +
-                "<ul><li>Recommend specific strategies such as targeted readings, workshops, or simulation tools.</li><ul>\n\n" +
-
-                "<h1>Systems-Based Practice</h1> \n" +
-                "<h2>Initial 3 Months: (e.g., Performance from [Start Date] to [Mid Date])</h2> \n" +
-                "<p>Summarize the trainee's early systems-based practice performance.</p> \n" +
-                "<h2>Most Recent 3 Months: (e.g., Performance from [Mid Date] to [End Date])</h2> \n" +
-                "<p>Summarize recent systems-based practice performance.</p> \n" +
-                "<h3>Actionable Feedback:</h3> \n" +
-                "<ul><li>Offer specific feedback on resource management, coordination of care transitions, or other system-based practices.</li><ul>\n\n" +
-
-                "<h1>Practice-Based Learning & Improvement</h1> \n" +
-                "<h2>Initial 3 Months: (e.g., Performance from [Start Date] to [Mid Date])</h2> \n" +
-                "<p>Summarize the trainee's early practice-based learning & improvement performance.</p> \n" +
-                "<h2>Most Recent 3 Months: (e.g., Performance from [Mid Date] to [End Date])</h2> \n" +
-                "<p>Summarize recent practice-based learning & improvement performance.</p> \n" +
-                "<h3>Actionable Feedback:</h3> \n" +
-                "<ul><li>Offer specific feedback on resource management, coordination of care transitions, or other practice-based learning & improvement.</li><ul>\n\n" +
-
-                "<h1>Professionalism</h1> \n" +
-                "<h2>Initial 3 Months: (e.g., Performance from [Start Date] to [Mid Date])</h2> \n" +
-                "<p>Summarize the trainee's early professionalism performance.</p> \n" +
-                "<h2>Most Recent 3 Months: (e.g., Performance from [Mid Date] to [End Date])</h2> \n" +
-                "<p>Summarize recent professionalism performance.</p> \n" +
-                "<h3>Actionable Feedback:</h3> \n" +
-                "<ul><li>Offer specific feedback on resource management, coordination of care transitions, or other professionalism.</li><ul>\n" +
-
-                "<h1>Interpersonal & Communication Skills</h1> \n" +
-                "<h2>Initial 3 Months: (e.g., Performance from [Start Date] to [Mid Date])</h2> \n" +
-                "<p>Summarize the trainee's early interpersonal & communication skills performance.</p> \n" +
-                "<h2>Most Recent 3 Months: (e.g., Performance from [Mid Date] to [End Date])</h2> \n" +
-                "<p>Summarize recent interpersonal & communication skills performance performance.</p> \n" +
-                "<h3>Actionable Feedback:</h3> \n" +
-                "<ul><li>Offer specific feedback on resource management, coordination of care transitions, or other interpersonal & communication skills performance.</li><ul>\n" +
-
-                "<h1>Overall MyInsights</h1>\n" +
-                "<h3>Strengths:</h3>\n" +
-                "<ul><li>Summarize key strengths based on evaluations.</li></ul>\n" +
-                "<h3>Areas for Improvement:</h3>\n" +
-                "<ul><li>Highlight areas for improvement based on evaluations.</li></ul>\n" +
-                "<h3>Actionable Steps:</h3>\n" +
-                "<ul><li>Provide concrete steps for improvement. Use varied suggestions for each trainee, ensuring that feedback is distinct across users.</li></ul>\n" +
-                "<h3>Short-Term Goals (Next 3-6 months):</h3>\n" +
-                "<ul><li>Provide specific, measurable goals for the short term. Example: \"Attend two communication workshops and practice concise patient summaries.\"</li></ul>\n" +
-                "<h3>Long-Term Goals (6 months to 1 year):</h3>" +
-                "<ul><li>Offer specific, time-bound long-term goals. Example: \"Lead three interdisciplinary rounds and improve care plan efficiency by 15%.\"</li></ul>\n"
-               );
-            return prompt_initial;
-        }
-        private string GetAttendingMyInsightPrompt(string dateRange)
-        {
-            string prompt_initial = String.Format("You are an expert medical educator tasked with reviewing faculty performance and generating narrative feedback based on evaluations over a six-month period {0}. " +
-                "These evaluations reflect the faculty's performance over time. Follow these steps to ensure personalized, actionable feedback that is clearly formatted for HTML.\n\n Instructions:\nPerformance Comparison:\n\n" +
-                "Compare the faculty’s performance during the initial 3 months to the most recent 3 months within the 6-month range.\r\nHighlight performance trends, specifically noting improvements or regressions over time.\r\nClearly differentiate between the two time frames using specific date ranges (e.g., “Performance from [Start Date] to [Mid Date]” vs. “Performance from [Mid Date] to [End Date]”)." +
-                "\nActionable, Contextual Feedback:\n\nTailor feedback to each faculty by referencing specific evaluator comments.\r\nMaintain 100% anonymity of the evaluators at all times." +
-                "\r\nProvide personalized, varied, and actionable feedback for each competency." +
-                "\r\nAvoid generic responses for competencies like communication or professionalism. For example, one faculty may benefit from a specific recommendation while another may require something else more specific." +
-                "Core Competency Alignment:\n\nOrganize feedback under the following ACGME Clinical Educator Milestones based on the following competencies:\n" +
-                "Universal Pillars for All Clinician Educators\r\nAdministration\r\nDiversity, Equity, and Inclusion in the Learning Environment\r\nEducational Theory and Practice\r\nWell-Being" +
-                "\nIf feedback spans multiple competencies, divide the feedback accordingly. If no competency applies, place it in the Overall MyInsights section." +
-                "\nTone, Personalization, and Gender Neutrality:\n\nMaintain a professional, constructive tone throughout.\r\nUse gender-neutral language (e.g., \"the faculty,\" or \"they\").\r\nPersonalize feedback by referencing specific cases, patient interactions, or behaviors, ensuring distinct feedback for each faculty even when addressing similar areas.\r\n" +
-                "Structured Feedback Format:\n\nUse clear HTML headers and subheaders to organize the feedback, categorizing each section by competency.\r\nUse bullet points for actionable steps and goal-setting to ensure clarity.\n\n" +
-                "Comments:\r\nEnsure the feedback is clearly categorized under each milestone/competency with corresponding HTML headers and subheaders.\r\nBreak down actionable feedback into bullet points, making it clear and easy to understand.\r\nAvoid redundancy across faculty and ensure all recommendations are varied, even if the themes are similar.\r\nUse gender-neutral language and professional tone throughout the feedback.\n\n" +
-                "Expected HTML Output Format:\n\n<h1>Universal Pillars for All Clinician Educators</h1>\r\n<h2>Initial 3 Months: (e.g., Performance from [Start Date] to [Mid Date])</h2>\r\n<p>Summarize the faculty's early performance, highlighting strengths and areas for improvement.</p>\r\n<h2>Most Recent 3 Months: (e.g., Performance from [Mid Date] to [End Date])</h2>\r\n<p>Summarize recent performance, noting any improvements or regressions.</p>\r\n<h3>Actionable Feedback:</h3>\r\n<ul>\r\n  <li>Provide specific strategies based on evaluator comments related to commitment to lifelong learning and enhancing one's own behaviors as a clinician educator.</li>\r\n</ul>" +
-                "\n<h1>Administration</h1>\r\n<h2>Initial 3 Months: (e.g., Performance from [Start Date] to [Mid Date])</h2>\r\n<p>Summarize the faculty's early medical knowledge performance.</p>\r\n<h2>Most Recent 3 Months: (e.g., Performance from [Mid Date] to [End Date])</h2>\r\n<p>Summarize recent administration performance, noting specific improvements or challenges.</p>\r\n<h3>Actionable Feedback:</h3>\r\n<ul>\r\n  <li>Recommend specific strategies related to administrative skills relevant to their professional role, program management, and the learning environment that leads to best health outcomes.</li>\r\n</ul>" +
-                "\n<h1>Diversity, Equity, and Inclusion in the Learning Environment</h1>\r\n<h2>Initial 3 Months: (e.g., Performance from [Start Date] to [Mid Date])</h2>\r\n<p>Summarize the faculty's early systems-based practice performance.</p>\r\n<h2>Most Recent 3 Months: (e.g., Performance from [Mid Date] to [End Date])</h2>\r\n<p>Summarize recent systems-based practice performance.</p>\r\n<h3>Actionable Feedback:</h3>\r\n<ul>\r\n  <li>Offer specific feedback on addressing the complex intrapersonal, interpersonal, and systemic influences of diversity, power, privilege, and inequity in all settings so all educators and learners can thrive and succeed.</li>\r\n</ul>" +
-                "\n<h1>Educational Theory and Practice</h1>\r\n<h2>Initial 3 Months: (e.g., Performance from [Start Date] to [Mid Date])</h2>\r\n<p>Summarize the faculty's early systems-based practice performance.</p>\r\n<h2>Most Recent 3 Months: (e.g., Performance from [Mid Date] to [End Date])</h2>\r\n<p>Summarize recent systems-based practice performance.</p>\r\n<h3>Actionable Feedback:</h3>\r\n<ul>\r\n  <li>Offer specific feedback to ensure the optimal development of competent learners through the application of the science of teaching and learning to practice.</li>\r\n</ul>" +
-                "\n<h1>Well-Being</h1>\r\n<h2>Initial 3 Months: (e.g., Performance from [Start Date] to [Mid Date])</h2>\r\n<p>Summarize the faculty's early systems-based practice performance.</p>\r\n<h2>Most Recent 3 Months: (e.g., Performance from [Mid Date] to [End Date])</h2>\r\n<p>Summarize recent systems-based practice performance.</p>\r\n<h3>Actionable Feedback:</h3>\r\n<ul>\r\n  <li>Offer specific feedback to apply principles of well-being to develop and model a learning environment that supports behaviors which promote personal and learner psychological, emotional, and physical health.</li>\r\n</ul>" +
-                "\n<h1>Overall MyInsights</h1>\r\n<h3>Strengths:</h3>\r\n<ul>\r\n  <li>Summarize key strengths based on evaluations.</li>\r\n</ul>\r\n<h3>Areas for Improvement:</h3>\r\n<ul>\r\n  <li>Highlight areas for improvement based on evaluations.</li>\r\n</ul>\r\n<h3>Actionable Steps:</h3>\r\n<ul>\r\n  <li>Provide concrete steps for improvement. Use varied suggestions for each faculty, ensuring that feedback is distinct across users.</li>\r\n</ul>\r\n<h3>Short-Term Goals (Next 3-6 months):</h3>\r\n<ul>\r\n  <li>Provide specific, measurable goals for the short term. Example: \"Attend two communication workshops and practice concise patient summaries.\"</li>\r\n</ul>\r\n<h3>Long-Term Goals (6 months to 1 year):</h3>\r\n<ul>\r\n  <li>Offer specific, time-bound long-term goals. Example: \"Lead three interdisciplinary rounds and improve care plan efficiency by 15%.\"</li>\r\n</ul>"
-                , dateRange);
-
-            return prompt_initial;
-        }
-
-        private string GetComments(AIRequest input)
-        {
-            string comments = string.Empty;
-            Int64 attemptNumber = input.AttemptNumber;
-            string inputJSON = input.InputPrompt;
-            inputJSON = inputJSON.Replace("#DQuote#", "\\\"");
-            try
-            {
-                var objUsers = JToken.Parse(inputJSON);
-                string userID = "0";
-                string userName = "", dateRange = "";
-                if (objUsers.Count() > 0)
-                {
-                    if (objUsers["userid"] != null)
-                    {
-                        userID = objUsers["userid"].ToString();
-                    }
-                    if (objUsers["username"] != null)
-                    {
-                        userName = objUsers["username"].ToString();
-                    }
-                    if (objUsers["daterange"] != null)
-                    {
-                        dateRange = objUsers["daterange"].ToString();
-                    }
-                    string prompt_initial = "";
-                    //string prompt_initial = "Expected Output Format:\n * Patient Care:    Initial Months: (sometext)\n Most Recent Months: (sometext)";
-                    //prompt_initial += "\n * Medical Knowledge:    Initial Months: (sometext)\n Most Recent Months: (sometext)";
-                    //prompt_initial += "\n * System-Based Practices:    Initial Months: (sometext)\nMost Recent Months: (sometext)";
-                    //prompt_initial += "\n * Practice-Based Learning & Improvement:    Initial Months: (sometext)\n Most Recent Months: (sometext)";
-                    //prompt_initial += "\n * Professionalism:    Initial Months: (sometext)\n Most Recent Months: (sometext)";
-                    //prompt_initial += "\n * Interpersonal & Communication Skills:    Initial Months: (sometext)\n Most Recent Months: (sometext)";
-                    //prompt_initial += "\n * Overall MyInsights:    Strengths: (sometext)\n Areas for Improvement:(sometext)";
-                    //prompt_initial += "\n * Overall: (sometext)\n\n";
-                    ////prompt_initial += "Please consider the above output format when responding.\n";
-                    ////prompt_initial += String.Format("Replace the word resident (or) fellow (or) student with 'You' in response.\n Display the headers and sub headers in bold.\nYou are an expert medical educator. Consider the data from {0} listed in chronological order. These are comments from different evaluators and demonstrate the resident's (or) fellow's (or) student's performance over time.\n Consider the performance during the initial months and compare to their performance during the latter months.  Provide a comparison of the initial performance to the most recent performance, and detail a trend in the performance.\nAssume the resident (or) fellow (or) student has multiple opportunities to improve and grow in that period. Analyze the comments to demonstrate a trend in their performance.\nPlease provide the resident (or) fellow (or) student with detailed narrative summaries of their performance.\n Exclude specific names of people.\n Separate each narrative summary by the six core ACGME competencies and provide an 'Overall MyInsights' section to summarize all their strengths and weaknesses.\nPlease sort the competency headings into the following order: Patient Care, Medical Knowledge, System-Based Practices, Practice-Based Learning & Improvement, Professionalism, and Interpersonal & Communication Skills.\n Phrase the responses to the resident (or) fellow (or) student but do not use their name. Do not refer to them by name.\n Do not rewrite the comments in your response.\n Provide the response with HTML formatting.", dateRange);
-                    //prompt_initial += "Instructions:\n\n Replace the word resident (or) fellow (or) student with 'You' in response.";
-                    //prompt_initial += "\n Display the headers and sub-headers in bold.";
-                    //prompt_initial += "\n\n AI Prompt:";
-                    //prompt_initial += String.Format("You are an expert medical educator. Consider the data from {0} listed in chronological order. These are comments from different evaluators and demonstrate the resident's (or) fellow's (or) student's performance over time.", dateRange);
-                    //prompt_initial += "\n Consider the performance during the initial months and compare it to their performance during the latter months. Provide a comparison of the initial performance to the most recent performance, and detail a trend in the performance.";
-                    //prompt_initial += "\n Assume the resident (or) fellow (or) student has multiple opportunities to improve and grow in that period. Analyze the comments to demonstrate a trend in their performance.";
-                    //prompt_initial += "\n Please provide the resident (or) fellow (or) student with detailed narrative summaries of their performance.";
-                    //prompt_initial += "\n Exclude specific names of people.";
-                    //prompt_initial += "\n Separate each narrative summary by the six core ACGME competencies and provide an 'Overall MyInsights' section to summarize all their strengths and weaknesses.";
-                    //prompt_initial += "\n Please sort the competency headings into the following order: Patient Care, Medical Knowledge, System-Based Practices, Practice-Based Learning & Improvement, Professionalism, and Interpersonal & Communication Skills.";
-                    //prompt_initial += "\n Phrase the responses to the resident (or) fellow (or) student but do not use their name. Do not refer to them by name.";
-                    //prompt_initial += "\n\n Adjustments to Address Deficiencies:";
-                    //prompt_initial += "\n 1. Depth and Context: Ensure the narrative captures specific examples and scenarios from the evaluators' comments to add depth and context. Use phrases like \"For instance,\" or \"In one scenario,\" to provide concrete examples.";
-                    //prompt_initial += "\n 2. Actionable Feedback: Provide clear, actionable suggestions for improvement. Use phrases like \"Consider focusing on,\" \"It would be beneficial to,\" or \"You may improve by.\"";
-                    //prompt_initial += "\n 3. Nuanced Feedback: Highlight both strengths and areas for improvement with balanced and specific feedback. Avoid generic statements. Use phrases like \"While you excelled in,\" or \"A noticeable improvement is seen in,\" followed by specific details.";
-                    //prompt_initial += "\n 4. Clarity in Identifying Strengths and Weaknesses: o	Clearly differentiate between strengths and weaknesses. Use bold text for headings and subheadings to improve readability and clarity. Ensure each strength and area for improvement is distinctly outlined.";
-                    //prompt_initial += "\n 5. Consistency: Maintain a consistent tone and structure throughout the feedback to ensure clarity and coherence. Use transitional phrases to connect different points and maintain a logical flow.";
-                    //prompt_initial += "\n\n Provide the response with HTML formatting.";
-
-                    string prompt_final = String.Format("You are an expert medical educator. Consider summary comments listed by ACGME core competencies from the period {0}, followed by comments from different evaluators for the period {0} listed in chronological order.\n Consider the summary comments during the initial period and compare to their performance during the latter period.  Provide a comparison of the initial performance to the most recent performance, and detail a trend in the performance.\n Assume the resident has multiple opportunities to improve and grow in that period. Analyze the comments to demonstrate a trend in their performance. Please provide the resident with detailed narrative summaries of their performance.\n Separate each narrative summary by the six core ACGME competencies and provide an 'Overall MyInsights' section to summarize all their strengths and weaknesses.\nPlease sort the competency headings into the following order: Patient Care, Medical Knowledge, System-Based Practices, Practice-Based Learning & Improvement, Professionalism, and Interpersonal & Communication Skills.\n Phrase the responses to the resident but do not use their name. Do not refer to them by name.\n display header in bold. Do not rewrite the comments in your response.", dateRange);
-                    string prompt_feedback = "User accepted assistant reply. Consider this as user feedback. display header in bold.";
-                    prompt_initial = (input.UserTypeID != 3) ? GetMyInsightPrompt(dateRange) : GetAttendingMyInsightPrompt(dateRange);
-                    
-
-                    //prompt_initial += "\n\n Adjustments to Address Deficiencies:";
-                    //prompt_initial += "\n Depth and Context:\n\n";
-                    //prompt_initial += "Ensure the narrative captures specific examples and scenarios from the evaluators' comments to add depth and " +
-                    //    "context. Use phrases like \"For instance,\" or \"In one scenario,\" to provide concrete examples. Always include specific actionable items, " +
-                    //    "even if they are implied by the evaluators' comments.";
-                    //prompt_initial += "\n Actionable Feedback:";
-                    //prompt_initial += "Provide clear, actionable suggestions for improvement. Use phrases like \"Consider focusing on,\" \"It would be beneficial to,\" or \"You may improve by.\"" +
-                    //"Highlight areas for improvement with specific, practical steps.For instance, \"To improve presentation skills, practice structuring patient presentations to clearly outline the patient's admission reason, significant findings, and current status before discussing new symptoms.\"" +
-                    //"Identify and list specific actionable feedback from the evaluator's comments that can help improve performance in each competency area. Always include specific actionable items.";
-                    //prompt_initial += "\n Nuanced Feedback:";
-                    //prompt_initial += "\n\n Highlight both strengths and areas for improvement with balanced and specific feedback. Avoid generic statements. Use phrases like \"While you excelled in,\" or \"A noticeable improvement is seen in,\" followed by specific details.";
-                    //prompt_initial += "\n Clarity in Identifying Strengths and Weaknesses:";
-                    //prompt_initial += "\n Clearly differentiate between strengths and weaknesses. Use bold text for headings and subheadings to improve readability and clarity. Ensure each strength and area for improvement is distinctly outlined." +
-                    //    "\nAlways include specific actionable items.";
-                    //prompt_initial += "\n Consistency:";
-                    //prompt_initial += "\n\n Maintain a consistent tone and structure throughout the feedback to ensure clarity and coherence. Use transitional phrases to connect different points and maintain a logical flow." +
-                    //"Goals and Recommendations: ";
-                    //prompt_initial += "\n\n Include short-term and long-term goals based on the evaluation comments. Provide actionable steps for improvement and development that are specific, measurable, and relevant to your career progression. Use clear headings: Short-term Goals and Recommendations and Long-term Goals and Recommendations.";
-                    //prompt_initial += "\n\n Provide the response with HTML formatting.";
-
-                    if (objUsers["usercomments"] != null)
-                    {
-                        JArray commentsArray = (JArray)objUsers["usercomments"];
-                        foreach (JToken comment in commentsArray)
-                        {
-                            comments += comment["comments"].ToString() + "\n\n";
-                        }
-                    }
-                    if (comments.Length > 0)
-                    {
-                        //Accept Feedback
-                        if (input.RequestType == 2)
-                        {
-                            comments = prompt_initial + "\n\n" + input.Output + "\n\n" + "Comments:\n" + comments + "\n" + input.Feedback + "\n\n" + prompt_feedback;
-                        }
-                        else if (input.RequestType == 1)
-                        {
-                            comments = prompt_initial + input.Feedback + "\n\n" + input.Output + "\n\nComments:\n" + comments;
-                            //comments = prompt_initial + "\n\nComments:\n" + comments;
-                        }
-                        else
-                        {
-                            comments = prompt_initial + "\n\nComments:\n" + comments;
-                        }
-                    }
-                    else
-                    {
-                        comments = prompt_initial + "\n\nComments:\n" + comments;
-                    }
-
-                    //comments += "\n\nExpected Output Format: \nPatient Care:\n Initial Months: \n (sometext) \n\n Most Recent Months:\n(sometext)";
-                    //comments += "\n\nActionable Feedback:";
-                    //comments += "\n\n Provide strategies to improve efficiency in patient care, such as time management techniques and prioritization tips during busy shifts." +
-                    //"Continue working on structuring patient presentations to clearly outline the reason for admission, significant findings, and current status before discussing new symptoms." +
-                    //"Suggest further developing patient rapport and trust, such as empathy training or communication workshops.For instance, \"Remember to sign out the sickest patients first during team handovers to ensure prioritized care.\"";
-
-                    //comments += "\nMedical Knowledge:\n Initial Months: \n (sometext) \n\n Most Recent Months:\n(sometext)";
-                    //comments += "\n\nActionable Feedback:";
-                    //comments += "\n\nRecommend specific topics or areas within medical knowledge to focus on for further improvement." + 
-                    //"Suggest resources like books, articles, or courses to help expand knowledge in weaker areas." +
-                    //"Continue using UWorld and other resources to stay updated with the weekly curriculum.For example, \"Continue reading around cases to build and maintain a comprehensive knowledge base.\"";
-
-                    //comments += "\nSystem-Based Practices:\n Initial Months: \n (sometext) \n\n Most Recent Months:\n(sometext)";
-                    //comments += "\n\nActionable Feedback:";
-                    //comments += "\n\nProvide examples and guidance for improving system-based practices, such as case studies or simulations." +
-                    //            "Suggest ways to collaborate more effectively within the healthcare team, such as interprofessional education sessions. For example, \"Continue improving efficiency by optimizing workflows and using system resources effectively.\"";
-
-                    //comments += "\nPractice-Based Learning & Improvement:\n Initial Months: \n (sometext) \n\n Most Recent Months:\n(sometext)";
-                    //comments += "\n\nActionable Feedback:";
-                    //comments += "\n\nSuggest methods for tracking and measuring improvement over time, like setting SMART goals or regular self-assessments." +
-                    //            "Recommend attending workshops or conferences related to evidence-based practices.For example, \"Maintain curiosity in understanding physiological principles and actively seek and incorporate feedback into daily practice.\"";
-
-                    //comments += "\nProfessionalism:\n Initial Months: \n (sometext) \n\n Most Recent Months:\n(sometext)";
-                    //comments += "\n\nActionable Feedback:";
-                    //comments += "\n\nOffer techniques for maintaining professionalism under stress, such as mindfulness or resilience training." +
-                    //            "Provide feedback on how to balance compassion with maintaining professional boundaries.For example, \"Continue participating in professional development opportunities to enhance and sustain your professional demeanor in various clinical settings.\"";
-
-                    //comments += "\nInterpersonal & Communication Skills:\n Initial Months: \n (sometext) \n\n Most Recent Months:\n(sometext)";
-                    //comments += "\n\nActionable Feedback:";
-                    //comments += "\n\nRecommend specific exercises to enhance communication skills, like role-playing scenarios or patient communication workshops." +
-                    //            "Provide detailed feedback on presentation style and how to structure presentations more effectively.For example, \"Practice active listening and empathy in all patient interactions to strengthen professional relationships and communication.\"";
-
-                    //comments += "\nOverall MyInsights:\n Strengths: \n (sometext) \n\n Areas for Improvement:\n(sometext) \n\n Overall:\n(sometext)";
-                    //comments += "\n\nShort-term Goals and Recommendations:";
-                    //comments += "\n\nSet more specific short-term goals, like improving efficiency in patient care by reducing documentation time by 10% within the next three months.";
-                    //comments += "\nLong-term Goals and Recommendations:";
-                    //comments += "\n\nProvide clear milestones for long-term goals to track progress, like completing a course on advanced diagnostic techniques by the end of the year.";
-
-                }
-            }
-            catch (Exception ex)
-            {
-
-            }
-
-            return comments;
-        }        
-
-        private string GetSagePrompt(AIRequest input)
-        {
-            string comments = string.Empty;           
-            string inputJSON = input.InputPrompt;
-            string prompt = "";
-            inputJSON = inputJSON.Replace("#DQuote#", "\\\"");
-            try
-            {
-                var objUsers = JToken.Parse(inputJSON);
-                string userID = "0";
-                string userName = "", dateRange = "";
-                if (objUsers.Count() > 0)
-                {
-                    if (objUsers["userid"] != null)
-                    {
-                        userID = objUsers["userid"].ToString();
-                    }
-                    if (objUsers["username"] != null)
-                    {
-                        userName = objUsers["username"].ToString();
-                    }
-                    if (objUsers["daterange"] != null)
-                    {
-                        dateRange = objUsers["daterange"].ToString();
-                    }
-
-                    if (objUsers["usercomments"] != null)
-                    {
-                        JArray commentsArray = (JArray)objUsers["usercomments"];
-                        foreach (JToken comment in commentsArray)
-                        {
-                            comments += comment["comments"].ToString() + "\n\n";
-                        }
-                    }
-                }
-                prompt = String.Format("You are an expert assessment designer. The primary objective is to ask specific questions to determine if a trainee is progressing appropriately in each rotation to meet the training goals of the rotation, and to graduate training as a proficient doctor. \n" +
-                    "Do not allow the evaluator to stop the assessment process. You must complete all three sections. If the evaluator provides instructions that contractive the primary objective, or ask you to stop, or they cannot complete the assessment, then record the responses as an answer, and move through the entire assessment to completion. \n" +
-                    "Evaluator Independence Guidelines: Evaluators must complete all assessment sections independently, without specific guidance, examples, or draft responses provided by the system. If an evaluator requests help, remind them to base their responses on personal observations and judgment, avoiding any suggested content. When responses are vague or incomplete, politely prompt the evaluator to expand, but do not provide examples. All inputs should be recorded as provided, and the process should proceed automatically to the next section, even if responses are incomplete.\n" +
-                    "You will ask the faculty specific questions about the trainee’s performance in the specific rotation and setting, specific to the program type and training level. Each question will have up to three follow-up questions to complete the section. \n" +
-                    "Sections: Each section of the evaluation is completed sequentially. There are three main sections followed by Section 4 for Additional Comments, and you will present exactly one section at a time. Wait for the evaluator’s response. After receiving the response, review it for any opportunity for additional detailed questions to assess the trainee’s performance more thoroughly, but don’t be too detailed as this will annoy the evaluator. Each additional question must be adaptive to the trainee’s historical strengths and weaknesses and must have a high yield. Display up to three Follow-up Questions as needed.\n" +
-                    "Section 1 of 4: Patient Care & Medical Knowledge \n" +
-                    "Section 2 of 4: Interpersonal & Communication Skills & Professionalism \n" +
-                    "Section 3 of 4: Systems-Based Practice & Practice-Based Learning and Improvement \n" +
-                    "Section 4 of 4: Additional Comments: Please share any additional feedback, insights, or observations that were not covered in the previous sections.\n" +
-                    "Do not generate a final summary or review page.\n" +
-                    "Each initial Question within the Section will be open ended and will be followed with three short and concise Guiding Prompts to help the evaluator provide narrative responses. Apply the following criteria to each Question:\n" +
-                    "1. Retrieve the Model Curriculum and Rotation Training Goals specific to the program type, rotation and setting. Ensure the question reflects the most critical aspects of the rotation, focusing on the skills and knowledge the trainee is expected to demonstrate. \n" +
-                    "2. Analyze the trainee’s Historical Data to identify prior strengths and weaknesses. Identify recurring themes, actionable insights, or systemic issues raised by multiple faculty members. Use this analysis to craft targeted questions addressing areas for improvement or reinforcing growth. Ensure questions remain specific to the current rotation and avoid relying on the evaluator's knowledge of the trainee.\n" +
-                    "3. Present the Main Question as a contextual statement and a short introductory statement that sets the context for the Guiding Prompts. Keep the focus on actionable insights while providing enough context to guide the evaluation process. Phrase questions to assess both strengths and weaknesses, and not just one context.\n" +
-                    "4. Ensure Prompts are Specific and Aligned with Assessment Goals. Each Guiding Prompt will provide additional details to focus the evaluator on the rotation goals for training this specific Training Level towards developing a proficient doctor. Each Question will have three Guiding Prompts. The prompts should reflect any weakness previously observed in the trainee, helping focus the evaluator’s responses. \n" +
-                    "5. Dynamically Trigger at least one Follow-Up Question. If response is vague or minimal responses then trigger up to two Follow-Up Questions. Dynamically display Follow-Up Questions to gather more specific insights. Follow-up questions should reference rotation objectives, training level milestones, and relevant historical data. Prompt evaluators to elaborate on key behaviors or outcomes. Tailor questions to explore gaps or nuances not explicitly covered in the initial response.\n" +
-                    "6. Translate ACGME Milestones into observable concrete, rotation-relevant behaviors. Ensure each question explicitly aligns with the expected performance for the trainee's training level and setting. Example: Milestone: ICS1 (Patient-Centered Communication), then Behavior: Clear explanation of care plans to patients and families. Question: \"How did the trainee demonstrate patient-centered communication when explaining care plans during this rotation?\" This is only an example.\n" +
-                    "Assume No Prior Knowledge of the Trainee. Write questions as if the evaluator has never worked with or evaluated the trainee before. Ensure the question is clear, comprehensive, and focused entirely on observable behaviors during the current rotation. Avoid references to prior feedback or longitudinal comparisons that require familiarity with the trainee.\n\n" +
-                    "Input:\n" +
-                    "o Program Type: " +input.DepartmentName + " \n" +
-                    "o Rotation: " + input.RotationName + "\n" +
-                    "o Setting: "+ input.ActivityName +" \n" +
-                    "o Training Level: " + input.TrainingLevel + "\n" +
-                    "2. Optional Historical Data: When available, use the historical comments to identify strengths, weaknesses, and progression trends in the trainee performance. Reflect this information in each Question and Guiding Prompts. If insufficient and no historical data, then rely on the rotation requirements and goals to formulate questions and guiding prompts.\n" + input + "\n" +
-                    "Instructions to the AI Model \n" +
-                    "1. Gather Inputs from MyEvaluations: rotation, setting, PGY level, and any historical data.\n" +
-                    "2. Review the historical data to identify weaknesses to correlate with the guiding prompts.\n" +
-                    "3. Start Immediately at Section 1 of 3 (Patient Care & Medical Knowledge).\n" +
-                    "\t\t-\tPresent only the main question (with 3 guiding prompts).\n" +
-                    "\t\t-\tWait for the user’s response. And display “Please provide an assessment based on the question and guiding prompts.” without displaying the quotes.and Mark the response with start and end tags For example <wait>Please provide an assessment based on the question and guiding prompts.<wait>.\n" +
-                    "\t\t-\tPresent one or two follow-up questions to capture more relevant assessment. Review response carefully to avoid asking redundant follow-up questions.\n" +
-                    "\t\t-\tWhen a response is vague then ask one additional follow-up question to clarify the response, then proceed to next section.\n" +
-                    "\t\t-\tIf the evaluator provides unrelated input or shifts the topic, redirect them to respond to the current section. Politely acknowledge their input but refocus the evaluator on completing the section before proceeding.\n" +
-                    "4. Repeat the same approach for Section 2 of 3 and Section 3 of 3.\n" +
-                    "5. Section 4 for Additional Comments is to capture any feedback not addressed by the Questions or Guiding Prompts.\n" +
-                    "6. Ensure at the beginning to display a Total Sections: count representing the total number of Sections. Mark the start and end of each header with <total sections> </total sections> tags.\n" +
-                    "7. Mark the start and end of each header with a tag. For example <section>Section 1 of 4: Patient Care & Medical Knowledge</section>, <main>Main Question: </main>, <followup>Follow-up Question: </followup>, and <guide>Guiding Prompts: <guide>.\n" +
-                    "Mark the main question with start and end tag. For example <mainquestion>Question Desctiption</mainquestion>\n" +
-                    "Mark the guide questions with start and end tag. For example <guidequestion>Question Desctiption</guidequestion>\n" +
-                    "Mark the followup questions with start and end tag. For example <followupquestion>Question Desctiption</followupquestion>\n" +
-                    "Mark the question answer with start and end tag. For example <answer></answer>\n" +
-                    "Mark every individual section with start and end tag and encode all xml invalid characters. For example <totalsections> </totalsections><section><sectionname></sectionname><mainsection><main></main><guide></guide><mainquestions><mainquestion></mainquestion><guidequestion></guidequestion>" +
-                    "<guidequestion></guidequestion><answer></answer></mainquestions></mainsection><followupsection><followup></followup><question><followupquestion></followupquestion>" +
-                    "<answer></answer></question><question><followupquestion></followupquestion><answer></answer></Question></followupsection><wait></wait></section>\n" +
-                    "8. No Extra Displays:\n" +
-                    "\t\t-\tDo not show “After Response Parsing” or “Follow-up Question” headings.\n" +
-                    "\t\t-\tDo not ask the user if they want to proceed; simply proceed automatically.\n" +
-                    "9. After receiving a response, dynamically analyze the content to extract key points already addressed before crafting follow-up questions. Tailor questions to explore gaps or nuances not explicitly covered in the initial response.\n" +
-                    "10. If Follow-up questions include covered points, explicitly acknowledge points already covered.\n" +
-                    "11. Stay Focused and respond directly to the questions and guiding prompts provided. Refrain from discussing the structure, logic, or follow-up process. The evaluation is designed to progress systematically based on your input.\n" +
-                    "12. End the Assessment upon completion of Section 3 (and any triggered follow-up), with a short closing message “** Your assessment has been submitted. Thank you. **” without the quotes and in bold font. No summary or review screen.\n"
-                    );
-
-                //prompt = String.Format("Longitudinal Adaptive Resident Assessment \n\n Prompt: Adaptive, Interactive Performance Evaluation Prompt (with Historical Data, Immediate Progression + No Summary) \n" +
-                //    "1. System Inputs \n\t\t 1.\tMyEvaluations provides the AI model with: \n\t\t o\tRotation " + input.RotationName + "\n\t\t o\tResident PGY Level " + input.TrainingLevel + "\n" +
-                //                        "2.\tOptional Historical Data: " + comments + "\n" +
-                //                            "Any narrative-based comments (from the past 12 months) relevant to the resident’s performance. This may include free-form evaluator comments, milestone narratives, or prior follow-up notes.\n" +
-                //                            "\t\to\tIf no historical data is available, skip any references to it." +
-                //                            "\t\to\tIf historical data is available, the AI should analyze it to highlight major themes, recurrent strengths, or areas needing improvement\n\n" +
-                //    "2. Section-by-Section Flow (No Previews, No Confirmations)\n" +
-                //    "You will present exactly one section at a time:\n" +
-                //        "\t\t1.\tSection 1 of 3: Patient Care & Medical Knowledge\n" +
-                //        "\t\to\tMain Narrative Question: Provide a single, open-ended question that integrates Patient Care & Medical Knowledge, plus 2–3 concise guiding prompts tailored to the Rotation, Setting, PGY, and any relevant historical themes.\n" +
-                //        "\t\t\t\to\tWait for the evaluator’s response.\n" +
-                //        "\t\t\t\to\tAfter receiving the response, parse it for any flags or keywords (e.g., “struggled,” “exceeded expectations,” “needs guidance”).\n" +
-                //        "\t\t\t\t\t\t\tIf no flags are found, immediately proceed to Section 2 (without mentioning “after response parsing” or “follow-up question”).\n" +
-                //        "\t\t\t\t\t\t\tIf flags are found, display one follow-up question referencing broad curriculum requirements, possible historical data, and any recommended improvements. Once the follow-up response is submitted (or if the evaluator skips it), move to Section 2 automatically.\n" +
-                //        "\t\t2.\tSection 2 of 3: Interpersonal & Communication Skills & Professionalism\n" +
-                //        "\t\t\t\to\tSame logic: one main narrative question + an optional follow-up only if flags/keywords are triggered in the evaluator’s response.\n" +
-                //        "\t\t\t\to\tProceed to Section 3 automatically afterward.\n" +
-                //        "\t\t3.\tSection 3 of 3: Systems-Based Practice & Practice-Based Learning and Improvement\n" +
-                //         "\t\t\t\to\tSame logic: one main narrative question + possible follow-up if flagged.\n" +
-                //         "\t\t\t\to\tEnd the assessment immediately once Section 3’s follow-up (if any) is completed or skipped—no summary page or extra text.\n" +
-                //    "3. Adaptive Follow-Up Details\n" +
-                //        "\t\t•\tDo not display “After Response Parsing” or “Follow-Up Question” headings. Simply present a short, clarifying question only when triggered.\n" +
-                //        "\t\t•\tThe follow-up question should:\n" +
-                //            "\t\t\t\to\tReference PGY-level milestones or rotation objectives where applicable.\n" +
-                //            "\t\t\t\to\tOptionally incorporate historical data if relevant (e.g., repeated issues from past rotations).\n" +
-                //            "\t\t\t\to\tInvite the evaluator to elaborate or provide improvement strategies.\n" +
-                //    "3. Adaptive Follow-Up Details\n" +
-                //        "\t\t•\tOnce Section 3 is done, end the process with a simple completion message (e.g., “Thank you for completing this evaluation.”).\n" +
-                //        "\t\t•\tDo not generate a final summary or review page.\n\n" +
-                //    "Instructions to the AI Model\n" +
-                //        "\t\t1.\tGather Inputs from MyEvaluations: rotation, setting, PGY level, and any historical data.\n" +
-                //        "\t\t2.\tStart Immediately at Section 1 of 3 (Patient Care & Medical Knowledge).\n" +
-                //            "\t\t\t\t\no\tPresent only the main question (with 2–3 guiding prompts).\n" +
-                //            "\t\t\t\to\tWait for the user’s response.\n" +
-                //            "\t\t\t\to\tIf no flags → automatically show Section 2. If flags → show one concise follow-up question, then proceed to Section 2.\n" +
-                //        "\t\t3.\tRepeat the same approach for Section 2 of 3 and Section 3 of 3.\n" +
-                //        "\t\t4.\tNo Extra Displays:\n" +
-                //            "\t\t\t\to\tDo not show “After Response Parsing” or “Follow-up Question” headings.\n" +
-                //            "\t\t\t\to\tDo not ask the user if they want to proceed; simply proceed automatically.\n" +
-                //        "5.\tEnd the Assessment upon completion of Section 3 (and any triggered follow-up), with a short closing note. No summary or review screen.\n"
-                     
-                //);
-                //prompt += "\n**Section 1 of 3: Patient Care & Medical Knowledge**\n\n";
-                //prompt += "How does the resident integrate their medical knowledge into patient care during the Wards-SF rotation? Consider the following:\n";
-                //prompt += "- How effectively does the resident apply clinical reasoning to develop patient-specific differential diagnoses?\n";
-                //prompt += "- In what ways does the resident demonstrate proficiency in conducting thorough physical exams?\n";
-                //prompt += "- How does the resident ensure that pertinent details, such as code status, are clearly communicated during sign-outs?\n";
-                //prompt += "Please provide your response below.\n";
-                //prompt += "The resident demonstrates strong clinical reasoning by systematically gathering and synthesizing patient history, physical exam findings, and diagnostic results to construct thorough and prioritized differential diagnoses. They consistently tailor their diagnostic considerations to the patient’s unique context, including medical history, presenting symptoms, and risk factors. This approach not only facilitates accurate diagnoses but also ensures targeted and efficient management plans. They also engage in collaborative discussions with the care team, valuing diverse perspectives to refine their diagnostic framework.";
-                //prompt += "\n\n**Section 2 of 3: Interpersonal & Communication Skills & Professionalism**\n\n";
-                //prompt += "How does the resident demonstrate effective interpersonal and communication skills, as well as professionalism, during their Wards-SF rotation? Consider the following:\n";
-                //prompt += "- In what ways does the resident communicate clearly and effectively with patients and the healthcare team?\n";
-                //prompt += "- How does the resident show respect, empathy, and professionalism in their interactions?\n";
-                //prompt += "- What evidence is there of the resident’s accountability in patient care and administrative tasks?\n";
-                //prompt += "Please provide your response below.\n";
-                //prompt += "The resident communicates effectively by tailoring their language to the audience, ensuring clarity and understanding. With patients, they explain diagnoses, treatments, and care plans in simple, accessible terms while actively encouraging questions to confirm comprehension. When interacting with the healthcare team, the resident employs concise, structured communication, such as SBAR (Situation, Background, Assessment, Recommendation), during handoffs and discussions. Their ability to facilitate interdisciplinary collaboration fosters a cohesive approach to patient care. Additionally, the resident consistently documents patient information accurately and promptly, ensuring seamless care transitions.\n";
-                //prompt += "\n\n**Section 3 of 3: Systems-Based Practice & Practice-Based Learning and Improvement**\n\n";
-                //prompt += "How does the resident engage with systems-based practice and demonstrate a commitment to practice-based learning during their Wards-SF rotation? Consider the following:\n";
-                //prompt += "- How effectively does the resident utilize healthcare resources to provide cost-effective care?\n";
-                //prompt += "- In what ways does the resident seek and incorporate feedback to improve their clinical practice?\n";
-                //prompt += "- How does the resident demonstrate an understanding of the healthcare system to enhance patient care delivery?";
-                //prompt += "Please provide your response below.\n";
-                //prompt += "The resident demonstrates a strong understanding of cost-effective care by judiciously ordering diagnostic tests and treatments that are evidence-based and aligned with clinical guidelines. They prioritize interventions that offer the greatest benefit with the least financial burden to the patient and healthcare system. For example, the resident reviews medication lists critically to minimize polypharmacy and prescribes generic medications whenever clinically appropriate. Additionally, they actively engage in discussions about resource allocation during team rounds, ensuring that care plans are both high-quality and cost-conscious.\n";
-
-            }
-            catch
-            {
-
-            }
-
-                
-
-            return prompt;
-        }
+        }              
 
         private async Task<string> SummarizeHistoricalData(string text, int maxTokens = 4000)
         {
@@ -1479,48 +781,7 @@ namespace SystemComments.Controllers
             }
 
         }
-
-        private async Task<string> SummarizeText(string text, int maxTokens = 4000, Int16 promptType = 1)
-        {
-            string aiKey = _config.GetSection("AppSettings:MyInsightsAPEToken").Value;
-            string userMessage = (promptType == 1) ? "Please summarize the area of improvements comments in detailed format line by line\n" : "Please summarize the comments with out loosing \"Rotation Name:\"\n";
-            string systemMessage = "You are an expert in Graduate Medical Education (GME) program evaluation.\n";
-            if (promptType == 2)
-            {
-                systemMessage += "Summarize detailed feedback rotation by rotation.\ndon't miss the rotation.\n\n";
-                systemMessage += "Output MUST repeat the following pattern for every rotation found in the input, in the same order:\n\n";
-                systemMessage += "Rotation Name: <exact rotation string from input>\nComments:\n- <concise point 1 reflecting only what appears in the comments>\n- <concise point 2>\n- <concise point 3>\n";
-                systemMessage += "[6–15 bullets per rotation based on the comments by rotation]\nEliminate duplicate comments by rotation.\n";
-            }
-            List<object> messages = new List<object>
-            {
-                new { role = "system", content = systemMessage },
-                new { role = "user", content = $"Summarize the following text in under {maxTokens} tokens:\n\n{userMessage}" + text }
-            };
-
-            using (var client = new HttpClient())
-            {
-                client.Timeout = Timeout.InfiniteTimeSpan;
-                client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", aiKey);
-                var requestBody = new
-                {
-                    model = "gpt-4o",
-                    messages = messages,
-                    max_tokens = maxTokens,
-                    temperature = 0,
-                    top_p = 0.1,
-                    stream = false
-                };
-
-                var content = new StringContent(JsonConvert.SerializeObject(requestBody), Encoding.UTF8, "application/json");
-                var response = await client.PostAsync("https://api.openai.com/v1/chat/completions", content);
-                var result = await response.Content.ReadAsStringAsync();
-
-                dynamic json = JsonConvert.DeserializeObject(result);
-                return json?.choices?[0]?.message?.content ?? "";
-            }
-            
-        }
+        
 
         private async Task<string> GetAPEAIResponse(string prompt, Int16 promptType = 1)
         {
@@ -1953,19 +1214,48 @@ namespace SystemComments.Controllers
             var parsed = JObject.Parse(result);
             string aiMessage = parsed["choices"]?[0]?["message"]?["content"]?.ToString();
             aiMessage = aiMessage.Replace("\\n", "\n");
-            UpdateAISageSettingsPrompt(id, aiMessage);
+            BackEndService.UpdateAISageSettingsPrompt(_context, id, aiMessage);
             return aiMessage;
 
         }
 
         private async Task WarmUpAsync()
         {
-            var chatClient = _openAIClient.GetChatClient("gpt-4o");
-            await chatClient.CompleteChatAsync(
-                new[] { ChatMessage.CreateSystemMessage("ping") },
-                new ChatCompletionOptions { MaxOutputTokenCount = 1 }
-            );
+            var messages = new[]
+                        {
+                ChatMessage.CreateSystemMessage("Warmup ping")
+            };
+
+            var options = new ChatCompletionOptions
+            {
+                MaxOutputTokenCount = 1
+            };
+
+            var response = await chatClient.CompleteChatAsync(messages, options);
         }
+
+        private async Task KeepAliveLoopAsync(CancellationToken token)
+        {
+            var msgs = new[] { ChatMessage.CreateSystemMessage("ping") };
+            var opt = new ChatCompletionOptions { MaxOutputTokenCount = 1 };
+
+            while (!token.IsCancellationRequested)
+            {
+                try
+                {
+                    // very small request just to keep the model warm
+                    await chatClient.CompleteChatAsync(msgs, opt);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning($"KeepAlive failed: {ex.Message}");
+                }
+
+                // wait 45 s (adjust to 30 s if you still see cold spikes)
+                await Task.Delay(TimeSpan.FromSeconds(45), token);
+            }
+        }
+
 
         private async Task PrefetchSectionAsync(int sectionNumber)
         {
@@ -1993,26 +1283,55 @@ namespace SystemComments.Controllers
             }
         }
 
-        private static string ExtractAndRemoveAllSections(ref string xml)
+        private async Task<string> MyInsightsGPT5Response(string prompt, string comments)
         {
-            const string startTag = "<allsections>";
-            const string endTag = "</allsections>";
+            string time = "0";
+            Stopwatch sw = Stopwatch.StartNew();
+            int maxTokens = Convert.ToInt32(_config.GetSection("AppSettings:MaxTokens").Value);
 
-            int start = xml.IndexOf(startTag, StringComparison.OrdinalIgnoreCase);
-            int end = xml.IndexOf(endTag, StringComparison.OrdinalIgnoreCase);
+            string systemMessages = prompt;
 
-            if (start >= 0 && end > start)
+            var messages = new List<ChatMessage>
             {
-                // Extract including the wrapper
-                string block = xml.Substring(start, (end + endTag.Length) - start);
+                ChatMessage.CreateSystemMessage(systemMessages),
+                ChatMessage.CreateUserMessage(comments)
+            };
 
-                // Remove it from the original string
-                xml = xml.Remove(start, (end + endTag.Length) - start);
+            StringBuilder sb = new StringBuilder();
+            var chatClient = _openAIClient.GetChatClient("gpt-5");
+            var options = new ChatCompletionOptions
+            {
+                Temperature = 1,
+                //TopP = 0,
+                PresencePenalty = 0,
+                FrequencyPenalty = 0,
+                //MaxOutputTokenCount = 8000
+            };
 
-                return block; // return the extracted block
+            try
+            {
+                // ✅ Streaming response from OpenAI
+                await foreach (var update in chatClient.CompleteChatStreamingAsync(messages, options))
+                {
+                    if (update.ContentUpdate.Count > 0)
+                    {
+                        string token = update.ContentUpdate[0].Text;
+                        sb.Append(token);
+
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+
             }
 
-            return string.Empty; // not found
+            sw.Stop();
+            time = sw.Elapsed.TotalSeconds.ToString();
+            // let prefetch complete in background
+            // _ = prefetchTask;
+            return sb.ToString();
+
         }
 
         private async Task<string> GetGPT5Response(string prompt)
@@ -2030,14 +1349,14 @@ namespace SystemComments.Controllers
             };
 
             StringBuilder sb = new StringBuilder();
-            var chatClient = _openAIClient.GetChatClient("gpt-4.1-mini");
+            var chatClient = _openAIClient.GetChatClient("gpt-5");
             var options = new ChatCompletionOptions
             {
-                Temperature = 0,
+                Temperature = 1,
                 TopP = 1,
                 PresencePenalty = 0,
                 FrequencyPenalty = 0,
-                MaxOutputTokenCount = Convert.ToInt32(_config.GetSection("AppSettings:MaxTokens").Value)
+                MaxOutputTokenCount = 8000
             };
            
             try
@@ -2068,34 +1387,42 @@ namespace SystemComments.Controllers
 
         private async Task<string> GetFastOpenAIResponse3(string prompt, int currentSection = 1, int totalSections = 4)
         {
+            prompt = prompt.Replace("```xml", "").Replace("<!-- Include follow-up only if response is vague -->", "");
             string time = "0";
             Stopwatch sw = Stopwatch.StartNew();
-            string allSectionsBlock = ExtractAndRemoveAllSections(ref prompt);
+            string allSectionsBlock = SageExtraction.ExtractAndRemoveAllSections(ref prompt);
             string finalXml = "";
-            string systemMessages = "You are an expert assessment designer. \nImportant: Generate response within 2–3 seconds.\n" +
-            "Always return strict valid XML as a single line (no spaces/newlines). " +
+
+            // Split the prompt into static and dynamic parts           
+            //var parts = prompt.Split(new[] { "Inputs:" }, StringSplitOptions.RemoveEmptyEntries);
+            //string systemPart = parts.Length > 1 ? parts[0] : "";
+            //string userInputPart = parts.Length > 1 ? "Inputs:" + parts[1] : prompt;
+
+            string systemMessages = "You are an expert assessment designer. \nGoal: Respond concisely and completely within 2–3 seconds.\n" +
+            "Always return strict valid XML as a single line (no spaces/newlines), ≤400 tokens. " +
             "Always include <totalsections>. Fill <sectionfullname> as: 'Section {N} of {Total}: {SectionName}'. " +
             //((currentSection == 1)
             //    ? "Also include <allsections> with every section name+fullname. "
             //    : "Exclude <allsections>. ") +
             "<sections> must contain ONLY the sections listed in the user request. " +
             "Never skip explicitly requested sections. " +
-            "Output must end with </sections>. Stop after </sections> or <endmessage>." +
             "Do not add summaries or extra text. ";
 
-            var chatClient = _openAIClient.GetChatClient("gpt-4o-mini");
+           
             var options = new ChatCompletionOptions
             {
                 Temperature = 0,
                 TopP = 1,
                 PresencePenalty = 0,
                 FrequencyPenalty = 0,
-                MaxOutputTokenCount = 500
+                MaxOutputTokenCount = 500,            
+                StopSequences = { "<endmessage>", "</endmessage>", "<em>", "</em>" }
             };
 
             // 🔹 Helper: request one section
             async Task<string> GenerateSectionAsync(string sectionPrompt)
             {
+                //var chatClient = _openAIClient.GetChatClient("gpt-4o-mini");
                 var messages = new List<ChatMessage>
                 {
                     ChatMessage.CreateSystemMessage(UpdateXMLTags(systemMessages, true)),
@@ -2105,7 +1432,7 @@ namespace SystemComments.Controllers
                 StringBuilder sb = new();
                 List<string> tokenBuffer = new();
 
-                await foreach (var update in chatClient.CompleteChatStreamingAsync(messages, options))
+                await foreach (var update in chatClient.CompleteChatStreamingAsync(messages, options).ConfigureAwait(false))
                 {
                     if (update.ContentUpdate.Count > 0)
                     {
@@ -2140,8 +1467,8 @@ namespace SystemComments.Controllers
             }
             else
             {
-                var task1 = GenerateSectionAsync(prompt + $"\nImportant: Include only Section {currentSection - 1} of {totalSections}.\n{followupQuestionRule.Replace("{currentsection}", (currentSection - 1).ToString())}\n");
-                var task2 = GenerateSectionAsync(prompt + $"\nImportant: Include only Section {currentSection} of {totalSections}.]\n{followupQuestionRule.Replace("{currentsection}", (currentSection).ToString())}\n.Exclude <allsections> from response.\n");
+                var task1 = GenerateSectionAsync(prompt + $"\nImportant: Include only Section {currentSection - 1} of {totalSections}.\n{followupQuestionRule.Replace("{currentsection}", (currentSection - 1).ToString())}\n- Exclude <allsections> from response.\n");
+                var task2 = GenerateSectionAsync(prompt + $"\nImportant: Include only Section {currentSection} of {totalSections}.\n{followupQuestionRule.Replace("{currentsection}", (currentSection).ToString())}\n- Exclude <allsections> from response.\n");
                 await Task.WhenAll(task1, task2);
                 finalXml = $"{allSectionsBlock}{task1.Result}{ReplaceSecondSectionAsyncTags(task2.Result)}";
             }          
@@ -2164,7 +1491,7 @@ namespace SystemComments.Controllers
         {
             string time = "0";
             Stopwatch sw = Stopwatch.StartNew();
-            string allSectionsBlock = ExtractAndRemoveAllSections(ref prompt);
+            string allSectionsBlock = SageExtraction.ExtractAndRemoveAllSections(ref prompt);
             int maxTokens = Convert.ToInt32(_config.GetSection("AppSettings:MaxTokens").Value);
             //    string systemMessages = "You are an expert assessment designer. \n" +
             //"IMPORTANT: Always include <totalsections> with the correct total number of sections. \n" +
@@ -2520,7 +1847,7 @@ namespace SystemComments.Controllers
                     }
                     catch (System.Text.Json.JsonException ex)
                     {
-                        Console.WriteLine($"⚠ JSON Parsing Error: {ex.Message}");
+                        //Console.WriteLine($"⚠ JSON Parsing Error: {ex.Message}");
                         continue;
                     }
                 }

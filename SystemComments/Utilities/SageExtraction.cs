@@ -12,6 +12,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
+using System.Threading.Tasks;
 using System.Web;
 using System.Xml.Linq;
 using SystemComments.Models.DataBase;
@@ -1352,6 +1353,45 @@ namespace SystemComments.Utilities
             {
                 return json1;
             }
+        }
+
+        public static async Task<string> FormatHtml(string prompt)
+        {
+            string result = string.Empty;
+            await Task.Run(() => {
+                // Replace opening <ul><li> or <li> with newline + dash
+                result = Regex.Replace(prompt, @"<\s*li\s*>", "\n- ");
+
+                // Remove closing </li>
+                result = Regex.Replace(result, @"<\s*/\s*li\s*>", "");
+
+                // Remove <ul> and </ul>
+                result = Regex.Replace(result, @"<\s*/?\s*ul\s*>", "");
+            });
+
+            return result;
+        }
+
+        public static string ExtractAndRemoveAllSections(ref string xml)
+        {
+            const string startTag = "<allsections>";
+            const string endTag = "</allsections>";
+
+            int start = xml.IndexOf(startTag, StringComparison.OrdinalIgnoreCase);
+            int end = xml.IndexOf(endTag, StringComparison.OrdinalIgnoreCase);
+
+            if (start >= 0 && end > start)
+            {
+                // Extract including the wrapper
+                string block = xml.Substring(start, (end + endTag.Length) - start);
+
+                // Remove it from the original string
+                xml = xml.Remove(start, (end + endTag.Length) - start);
+
+                return block; // return the extracted block
+            }
+
+            return string.Empty; // not found
         }
     }
     // JSON Model Classes

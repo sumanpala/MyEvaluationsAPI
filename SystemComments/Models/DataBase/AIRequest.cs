@@ -59,6 +59,7 @@ namespace SystemComments.Models.DataBase
         public string AFIPrompt { get; set; }
         public string AFIProgramPrompt { get; set; }
         public Int32 AcademicYear { get; set; } = 0;
+        public Int16 IsFaculty { get; set; } = 0;
 
     }
 }
