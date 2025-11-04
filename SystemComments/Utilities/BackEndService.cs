@@ -6,6 +6,7 @@ using System.Collections.Generic;
 using System.Data;
 using System.Linq;
 using System.Net;
+using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using SystemComments.Models.DataBase;
@@ -32,6 +33,106 @@ namespace SystemComments.Utilities
                 new SqlParameter("@PITPrompt", input.PITPrompt)
             };
             await Task.Run(() => _context.ExecuteStoredProcedure("InsertAPEMyInsightsData", parameters));
+        }
+
+        public static async Task<string> GetRotationMyInsightsNarrativeResponse(MyInsightsRotationSummary input, APIDataBaseContext _context, IConfiguration _config)
+        {
+            string prompt = "";
+            SqlParameter[] parameters = new SqlParameter[]
+            {
+                new SqlParameter("@DepartmentID", input.DepartmentID),
+                new SqlParameter("@AcademicYear", input.AcademicYear),
+                new SqlParameter("@TargetID", input.TargetID)
+            };
+
+            // Use Task.Run to ensure the method runs asynchronously
+            await Task.Run(async () =>
+            {
+                DataSet dsInsights = _context.ExecuteStoredProcedure("GetProgramCommnetsForInsights", parameters);
+                if (dsInsights == null) return;
+
+                DataTable dtPrompt = dsInsights.Tables[0];
+                DataTable dtInsights = dsInsights.Tables[1];
+
+                if (dtPrompt.Rows.Count > 0)
+                {
+                    string startDate = dtPrompt.Rows[0]["StartDate"].ToString();
+                    string endDate = dtPrompt.Rows[0]["EndDate"].ToString();
+                    string midDate = dtPrompt.Rows[0]["MidDate"].ToString();
+                    string midDate1 = dtPrompt.Rows[0]["MidDate1"].ToString();
+                    input.SummaryID = Convert.ToInt64(dtPrompt.Rows[0]["SummaryID"].ToString());
+                    prompt = await SageExtraction.FormatHtml(dtPrompt.Rows[0]["APIFileContent"].ToString());
+                    prompt = prompt.Replace("<br/>", "\n").Replace("</br>", "\n").Replace("<br>", "\n");
+                    prompt = prompt.Replace("[Start Date]", startDate).Replace("[End Date]", endDate);
+                    prompt = prompt.Replace("[Mid Date]", midDate).Replace("[Mid Date1]", midDate1);
+                }
+
+                if (dtInsights.Rows.Count > 0)
+                {
+                    // Distinct rotations
+                    List<string> distinctRotations = dtInsights.AsEnumerable()
+                        .Select(r => r.Field<string>("Rotation"))
+                        .Where(r => !string.IsNullOrEmpty(r))
+                        .Distinct()
+                        .OrderBy(r => r)
+                        .ToList();
+
+                    int batchSize = 10;
+                    int totalBatches = (int)Math.Ceiling(distinctRotations.Count / (double)batchSize);
+
+                    var batchTasks = new List<Task<string>>();
+
+                    for (int i = 0; i < distinctRotations.Count; i += batchSize)
+                    {
+                        var batch = distinctRotations.Skip(i).Take(batchSize).ToList();
+
+                        // Create a new DataTable per task to avoid cross-thread DataView filtering
+                        batchTasks.Add(Task.Run(async () =>
+                        {
+                            var sb = new StringBuilder();
+
+                            foreach (var rotation in batch)
+                            {
+                                var comments = dtInsights.AsEnumerable()
+                                    .Where(row => row.Field<string>("Rotation") == rotation)
+                                    .Select(row => row["CommentLine"]?.ToString()?.Replace("\n", " ").Trim())
+                                    .Where(text => !string.IsNullOrEmpty(text))
+                                    .ToList();
+
+                                if (comments.Count > 0)
+                                {
+                                    sb.AppendLine($"{rotation}:");
+                                    sb.AppendLine(string.Join(Environment.NewLine, comments));
+                                    sb.AppendLine();
+                                }
+                            }
+
+                            string cleaned = Regex.Replace(
+                                sb.ToString().Replace("\r\n", "\n").Replace("\n\n", "\n").Replace("<br/>", "\n"),
+                                "<.*?>", string.Empty);
+
+                            // Summarize this batch
+                            string summary = await PromptService.SummarizeMisightsRotationText4(_config, cleaned, 9000);
+                            return summary.Trim();
+                        }));
+                    }
+
+                    // Run all batches in parallel safely
+                    var summaries = await Task.WhenAll(batchTasks);
+
+                    // Merge in order
+                    var combined = new StringBuilder();
+                    for (int i = 0; i < summaries.Length; i++)
+                    {                        
+                        combined.AppendLine(summaries[i]);
+                        combined.AppendLine();
+                    }                    
+                    prompt = prompt.Replace("[Rotation Comments]", combined.ToString());
+                    input.Prompt = prompt;
+                }
+            });
+
+            return prompt;
         }
 
         public static async Task<string> GetAPEAreaOfImprovementsResponse(AIRequest input, APIDataBaseContext _context, IConfiguration _config)
@@ -241,6 +342,25 @@ namespace SystemComments.Utilities
 
                     };
             dsResultSet = _context.ExecuteStoredProcedure("usp_InsertDepartmentalSummaryFromJson", parameters);
+            return dsResultSet;
+        }
+
+        public static DataSet SaveMyInsightsFromJson(APIDataBaseContext _context, MyInsightsRotationSummary input)
+        {
+            DataSet dsResultSet = new DataSet();
+            SqlParameter[] parameters = new SqlParameter[]
+                    {
+                        new SqlParameter("@ID", input.SummaryID),                        
+                        new SqlParameter("@UserID", input.UserID),
+                        new SqlParameter("@DepartmentID", input.DepartmentID),
+                        new SqlParameter("@TargetID", input.TargetID),
+                        new SqlParameter("@Academicyear", input.AcademicYear),                       
+                        new SqlParameter("@Json", input.SummaryJSON),
+                        new SqlParameter("@Prompt", input.Prompt)                        
+
+                    };
+
+            dsResultSet = _context.ExecuteStoredProcedure("usp_SaveMyInsightsFromJson", parameters);
             return dsResultSet;
         }
 

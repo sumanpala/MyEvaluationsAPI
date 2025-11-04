@@ -1,6 +1,7 @@
 ﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -395,6 +396,50 @@ namespace SystemComments.Controllers
             return sb.ToString(); 
         }
 
+        [HttpPost("MyInsightsRotations")]
+        [AllowAnonymous]
+        public async Task<ActionResult<IEnumerable<MyInsightsResponse>>> MyInsightsSummary([FromBody] MyInsightsRotationSummary input)
+        {
+            List<MyInsightsResponse> aiResponse = new List<MyInsightsResponse>();
+            try
+            {                
+                string prompt = await BackEndService.GetRotationMyInsightsNarrativeResponse(input, _context, _config);
+                string systemMessage = "You are an automated educational feedback formatter. " +
+                    "You must return output strictly in the JSON structure provided below — with the same keys, order, and nesting. " +
+                    "Do not include any rotation names or program identifiers inside Actionable Feedback values. " +
+                    "Each feedback item must be a plain, rotation-neutral, and actionable statement.\n\n### NON-NEGOTIABLE RULES\n" +
+                    "1. Output **only JSON**, never markdown, text, or explanation.\n" +
+                    "2. The JSON structure, keys, and order must match exactly the template below.\n" +
+                    "3. All keys are required — none may be omitted or renamed.\n" +
+                    "4. The output must be syntactically valid JSON (parsable by standard JSON parsers).\n" +
+                    "5. Actionable Feedback arrays must contain multiple feedback statements, **without any rotation name prefix or label** (e.g., “Consult Service:” or “Urology:” are strictly forbidden inside Actionable Feedback text).\n" +
+                    "6. Replace placeholder tokens ({{...}}) with real, contextually generated text based on provided evaluation data.\n" +
+                    "7. If data is missing, set the Summary field exactly to: \"Insufficient Data to Assess.\".\n" +
+                    "8. Keep a professional, neutral tone; never include identifying details, names, or departments.\n" +
+                    "9. Do not add any additional keys, sections, or metadata.\n10. Never add rotation names, program identifiers, or prefixes inside feedback text.\n" +
+                    "11. Dates must appear in MM/DD/YYYY format when applicable.\n12. Output only the JSON object — no wrapping quotes, markdown, or code fences.\n\n### EXACT JSON STRUCTURE TO RETURN " +
+                    "{\r\n  \"RotationGoalsandLearningOutcomes\": {\r\n    \"Initial3Months\": {\r\n      \"DateRange\": \"{{StartDate}} to {{MidDate}}\",\r\n      \"Summary\": \"{{DynamicSummaryInitial}}\"\r\n    },\r\n    \"MostRecent3Months\": {\r\n      \"DateRange\": \"{{MidDate}} to {{EndDate}}\",\r\n      \"Summary\": \"{{DynamicSummaryRecent}}\"\r\n    },\r\n    \"ActionableFeedback\": [\r\n      \"{{ActionablePoint1}}\",\r\n      \"{{ActionablePoint2}}\",\r\n      \"{{ActionablePoint3}}\"\r\n    ]\r\n  },\r\n\r\n  \"TeachingandSupervisionQuality\": {\r\n    \"Initial3Months\": {\r\n      \"Summary\": \"{{DynamicSummaryInitial}}\"\r\n    },\r\n    \"MostRecent3Months\": {\r\n      \"Summary\": \"{{DynamicSummaryRecent}}\"\r\n    },\r\n    \"ActionableFeedback\": [\r\n      \"{{ActionablePoint1}}\",\r\n      \"{{ActionablePoint2}}\",\r\n      \"{{ActionablePoint3}}\"\r\n    ]\r\n  },\r\n\r\n  \"InterprofessionalCollaborationandSystemsBasedPractice\": {\r\n    \"Initial3Months\": {\r\n      \"Summary\": \"{{DynamicSummaryInitial}}\"\r\n    },\r\n    \"MostRecent3Months\": {\r\n      \"Summary\": \"{{DynamicSummaryRecent}}\"\r\n    },\r\n    \"ActionableFeedback\": [\r\n      \"{{ActionablePoint1}}\",\r\n      \"{{ActionablePoint2}}\",\r\n      \"{{ActionablePoint3}}\"\r\n    ]\r\n  },\r\n\r\n  \"ClinicalWorkloadandAutonomy\": {\r\n    \"Initial3Months\": {\r\n      \"Summary\": \"{{DynamicSummaryInitial}}\"\r\n    },\r\n    \"MostRecent3Months\": {\r\n      \"Summary\": \"{{DynamicSummaryRecent}}\"\r\n    },\r\n    \"ActionableFeedback\": [\r\n      \"{{ActionablePoint1}}\",\r\n      \"{{ActionablePoint2}}\",\r\n      \"{{ActionablePoint3}}\"\r\n    ]\r\n  },\r\n\r\n  \"WellnessandSupport\": {\r\n    \"Initial3Months\": {\r\n      \"Summary\": \"{{DynamicSummaryInitial}}\"\r\n    },\r\n    \"MostRecent3Months\": {\r\n      \"Summary\": \"{{DynamicSummaryRecent}}\"\r\n    },\r\n    \"ActionableFeedback\": [\r\n      \"{{ActionablePoint1}}\",\r\n      \"{{ActionablePoint2}}\",\r\n      \"{{ActionablePoint3}}\"\r\n    ]\r\n  },\r\n\r\n  \"OverallMyInsights\": {\r\n    \"Strengths\": [\r\n      \"{{DynamicStrength1}}\",\r\n      \"{{DynamicStrength2}}\"\r\n    ],\r\n    \"AreasforImprovement\": [\r\n      \"{{DynamicImprovement1}}\",\r\n      \"{{DynamicImprovement2}}\"\r\n    ],\r\n    \"ActionableSteps\": [\r\n      \"{{DynamicAction1}}\",\r\n      \"{{DynamicAction2}}\"\r\n    ],\r\n    \"ShortTermGoals\": [\r\n      \"{{ShortTermGoal1}}\"\r\n    ],\r\n    \"LongTermGoals\": [\r\n      \"{{LongTermGoal1}}\"\r\n    ]\r\n  }\r\n}\r\n";
+                string insightResponse = await MyInsightsGPT5Response(systemMessage, prompt + "\n Important: Please return Expected JSON Output Format");
+                MyInsightsResponse summaryResponse = new MyInsightsResponse();
+                summaryResponse.SummaryJSON = insightResponse;
+                input.SummaryJSON = insightResponse;
+                aiResponse.Add(summaryResponse);
+                DataSet dsData = BackEndService.SaveMyInsightsFromJson(_context, input);
+
+            }
+            catch (System.Exception ex)
+            {
+                MyInsightsResponse summaryResponse = new MyInsightsResponse();
+                summaryResponse.SummaryJSON = "[]";                
+                aiResponse.Add(summaryResponse);
+                _logger.LogError(ex, "An error occurred while making the OpenAI API request");
+               
+            }
+            return aiResponse;
+        }     
+                  
+       
+
         [HttpPost("MyInsightsSummary")]
         [AllowAnonymous]
         public async Task<ActionResult<IEnumerable<MyInsightsResponse>>> MyInsightsSummary([FromBody] AIRequest input)
@@ -407,10 +452,10 @@ namespace SystemComments.Controllers
             string systemMessage = "You are ChatGPT, a helpful, structured, and expert assistant.\r\nYou produce polished, thematic, well-organized summaries.\r\nWrite as if your output will be directly pasted into a professional report.\r\nUse clear section headers, confident academic language, and smooth narrative structure." +
                 "\r\nNever ask follow-up questions. Output should be final.\nFor every competency, you MUST include a property named `ProgressionByPGY`\n`ProgressionByPGY` MUST be a non-empty array.";
             string insightResponse = await MyInsightsGPT5Response(systemMessage, myInsightPrompt + "\n" + myInsightComments);
-            MyInsightsResponse sumamryResponse = new MyInsightsResponse();
-            sumamryResponse.SummaryJSON = insightResponse;
-            aiResponse.Add(sumamryResponse);
-            DataSet dsResult = BackEndService.InsertDepartmentalSummaryFromJson(_context, input, sumamryResponse);
+            MyInsightsResponse summaryResponse = new MyInsightsResponse();
+            summaryResponse.SummaryJSON = insightResponse;
+            aiResponse.Add(summaryResponse);
+            DataSet dsResult = BackEndService.InsertDepartmentalSummaryFromJson(_context, input, summaryResponse);
             return aiResponse;
         }
 

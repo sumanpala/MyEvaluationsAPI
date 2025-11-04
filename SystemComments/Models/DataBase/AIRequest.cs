@@ -62,4 +62,21 @@ namespace SystemComments.Models.DataBase
         public Int16 IsFaculty { get; set; } = 0;
 
     }
+
+    public class MyInsightsRotationSummary
+    {
+        public Int64 DepartmentID { get; set; }
+
+        public Int32 AcademicYear { get; set; } 
+        public Int16 TargetID { get; set; } = 1;
+
+        public Int64 SummaryID { get; set; } = 0;
+
+        public string SummaryJSON { get; set; } = "";
+
+        public Int64 UserID { get; set; } = 1;
+
+        public string Prompt { get; set; } = "";
+
+    }
 }

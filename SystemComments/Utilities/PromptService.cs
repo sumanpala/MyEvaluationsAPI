@@ -10,6 +10,7 @@ using OpenAI.Chat;
 using System;
 using System.Collections.Generic;
 using System.Data;
+using System.Diagnostics;
 using System.Linq;
 using System.Net.Http;
 using System.Net.Http.Headers;
@@ -17,6 +18,7 @@ using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Xml.Linq;
 using SystemComments.Models.DataBase;
 
 namespace SystemComments.Utilities
@@ -128,14 +130,14 @@ namespace SystemComments.Utilities
                 "\r\nProvide personalized, varied, and actionable feedback for each competency." +
                 "\r\nAvoid generic responses for competencies like communication or professionalism. For example, one faculty may benefit from a specific recommendation while another may require something else more specific." +
                 "Core Competency Alignment:\n\nOrganize feedback under the following ACGME Clinical Educator Milestones based on the following competencies:\n" +
-                "Universal Pillars for All Clinician Educators\r\nAdministration\r\nDiversity, Equity, and Inclusion in the Learning Environment\r\nEducational Theory and Practice\r\nWell-Being" +
+                "Universal Pillars for All Clinician Educators\r\nAdministration\r\nLearning Environment\r\nEducational Theory and Practice\r\nWell-Being" +
                 "\nIf feedback spans multiple competencies, divide the feedback accordingly. If no competency applies, place it in the Overall MyInsights section." +
                 "\nTone, Personalization, and Gender Neutrality:\n\nMaintain a professional, constructive tone throughout.\r\nUse gender-neutral language (e.g., \"the faculty,\" or \"they\").\r\nPersonalize feedback by referencing specific cases, patient interactions, or behaviors, ensuring distinct feedback for each faculty even when addressing similar areas.\r\n" +
                 "Structured Feedback Format:\n\nUse clear HTML headers and subheaders to organize the feedback, categorizing each section by competency.\r\nUse bullet points for actionable steps and goal-setting to ensure clarity.\n\n" +
                 "Comments:\r\nEnsure the feedback is clearly categorized under each milestone/competency with corresponding HTML headers and subheaders.\r\nBreak down actionable feedback into bullet points, making it clear and easy to understand.\r\nAvoid redundancy across faculty and ensure all recommendations are varied, even if the themes are similar.\r\nUse gender-neutral language and professional tone throughout the feedback.\n\n" +
                 "Expected HTML Output Format:\n\n<h1>Universal Pillars for All Clinician Educators</h1>\r\n<h2>Initial 3 Months: (e.g., Performance from [Start Date] to [Mid Date])</h2>\r\n<p>Summarize the faculty's early performance, highlighting strengths and areas for improvement.</p>\r\n<h2>Most Recent 3 Months: (e.g., Performance from [Mid Date] to [End Date])</h2>\r\n<p>Summarize recent performance, noting any improvements or regressions.</p>\r\n<h3>Actionable Feedback:</h3>\r\n<ul>\r\n  <li>Provide specific strategies based on evaluator comments related to commitment to lifelong learning and enhancing one's own behaviors as a clinician educator.</li>\r\n</ul>" +
                 "\n<h1>Administration</h1>\r\n<h2>Initial 3 Months: (e.g., Performance from [Start Date] to [Mid Date])</h2>\r\n<p>Summarize the faculty's early medical knowledge performance.</p>\r\n<h2>Most Recent 3 Months: (e.g., Performance from [Mid Date] to [End Date])</h2>\r\n<p>Summarize recent administration performance, noting specific improvements or challenges.</p>\r\n<h3>Actionable Feedback:</h3>\r\n<ul>\r\n  <li>Recommend specific strategies related to administrative skills relevant to their professional role, program management, and the learning environment that leads to best health outcomes.</li>\r\n</ul>" +
-                "\n<h1>Diversity, Equity, and Inclusion in the Learning Environment</h1>\r\n<h2>Initial 3 Months: (e.g., Performance from [Start Date] to [Mid Date])</h2>\r\n<p>Summarize the faculty's early systems-based practice performance.</p>\r\n<h2>Most Recent 3 Months: (e.g., Performance from [Mid Date] to [End Date])</h2>\r\n<p>Summarize recent systems-based practice performance.</p>\r\n<h3>Actionable Feedback:</h3>\r\n<ul>\r\n  <li>Offer specific feedback on addressing the complex intrapersonal, interpersonal, and systemic influences of diversity, power, privilege, and inequity in all settings so all educators and learners can thrive and succeed.</li>\r\n</ul>" +
+                "\n<h1>Learning Environment</h1>\r\n<h2>Initial 3 Months: (e.g., Performance from [Start Date] to [Mid Date])</h2>\r\n<p>Summarize the faculty's early systems-based practice performance.</p>\r\n<h2>Most Recent 3 Months: (e.g., Performance from [Mid Date] to [End Date])</h2>\r\n<p>Summarize recent systems-based practice performance.</p>\r\n<h3>Actionable Feedback:</h3>\r\n<ul>\r\n  <li>Offer specific feedback on addressing the complex intrapersonal, interpersonal, and systemic influences of diversity, power, privilege, and inequity in all settings so all educators and learners can thrive and succeed.</li>\r\n</ul>" +
                 "\n<h1>Educational Theory and Practice</h1>\r\n<h2>Initial 3 Months: (e.g., Performance from [Start Date] to [Mid Date])</h2>\r\n<p>Summarize the faculty's early systems-based practice performance.</p>\r\n<h2>Most Recent 3 Months: (e.g., Performance from [Mid Date] to [End Date])</h2>\r\n<p>Summarize recent systems-based practice performance.</p>\r\n<h3>Actionable Feedback:</h3>\r\n<ul>\r\n  <li>Offer specific feedback to ensure the optimal development of competent learners through the application of the science of teaching and learning to practice.</li>\r\n</ul>" +
                 "\n<h1>Well-Being</h1>\r\n<h2>Initial 3 Months: (e.g., Performance from [Start Date] to [Mid Date])</h2>\r\n<p>Summarize the faculty's early systems-based practice performance.</p>\r\n<h2>Most Recent 3 Months: (e.g., Performance from [Mid Date] to [End Date])</h2>\r\n<p>Summarize recent systems-based practice performance.</p>\r\n<h3>Actionable Feedback:</h3>\r\n<ul>\r\n  <li>Offer specific feedback to apply principles of well-being to develop and model a learning environment that supports behaviors which promote personal and learner psychological, emotional, and physical health.</li>\r\n</ul>" +
                 "\n<h1>Overall MyInsights</h1>\r\n<h3>Strengths:</h3>\r\n<ul>\r\n  <li>Summarize key strengths based on evaluations.</li>\r\n</ul>\r\n<h3>Areas for Improvement:</h3>\r\n<ul>\r\n  <li>Highlight areas for improvement based on evaluations.</li>\r\n</ul>\r\n<h3>Actionable Steps:</h3>\r\n<ul>\r\n  <li>Provide concrete steps for improvement. Use varied suggestions for each faculty, ensuring that feedback is distinct across users.</li>\r\n</ul>\r\n<h3>Short-Term Goals (Next 3-6 months):</h3>\r\n<ul>\r\n  <li>Provide specific, measurable goals for the short term. Example: \"Attend two communication workshops and practice concise patient summaries.\"</li>\r\n</ul>\r\n<h3>Long-Term Goals (6 months to 1 year):</h3>\r\n<ul>\r\n  <li>Offer specific, time-bound long-term goals. Example: \"Lead three interdisciplinary rounds and improve care plan efficiency by 15%.\"</li>\r\n</ul>"
@@ -182,6 +184,111 @@ namespace SystemComments.Utilities
                 return $"[ERROR parsing JSON]: {ex.Message}";
             }
         }
+
+        public static async Task<string> SummarizeMisightsRotationText4(IConfiguration _config, string text, int maxTokens = 8000)
+        {
+            string aiKey = _config.GetSection("AppSettings:MyInsightsAPEToken").Value;
+
+            string userMessage = "";
+            string systemMessage = "You are an expert summarizer specializing in academic and clinical evaluation data. \r\nYour goal is to extract, group, and summarize evaluator comments by rotation name." +
+                "\r\n\r\nFollow these formatting rules exactly:\r\n\r\nFormat:\r\n[Rotation Name A]\r\n    [Date]: [Rotation Name A]: [Comment 1]\r\n    [Date]: [Rotation Name A]: [Comment 2]\r\n    " +
+                "[Date]: [Rotation Name A]: [Comment 3]\r\n[Rotation Name B]\r\n    [Date]: [Rotation Name B]: [Comment 1]\r\n    [Date]: [Rotation Name B]: [Comment 2]\r\n    [Date]: [Rotation Name B]: [Comment 3]\r\n\r\n" +
+                "**Formatting Requirements**\r\n1. Group all comments under their corresponding [Rotation Name].\r\n2. Within each rotation, list entries in chronological order (oldest to newest).\r\n" +
+                "3. Each comment must begin with the date, followed by the rotation name, and then the summarized comment text.\r\n4. If multiple comments appear under the same date and rotation, include each as a new line entry." +
+                "\r\n5. Clean text by removing HTML tags, escape characters (like `&nbsp;` or `&#39;`), and redundant phrases.\r\n6. Do not alter meaning or omit relevant insights.\r\n" +
+                "7. Preserve unique details or context related to feedback, supervision, teaching, professionalism, or program improvements.\r\n\r\n**Example Input:**\r\n" +
+                "06/14/2024: Consult Service: Free-Form Responses: 06/14/2024 Did the ward resident supervise the interns/subinterns well? Comments: The ward resident spent time teaching and mentoring interns and subinterns." +
+                "\r\n07/12/2024: Consult Service: Free-Form Responses: 07/12/2024 Did the ward resident supervise the interns/subinterns well? Comments: I am happy.\r\n\r\n**Example Output:**" +
+                "\r\nConsult Service\r\n    06/14/2024: Consult Service: The ward resident spent time teaching and mentoring interns and subinterns.\r\n    07/12/2024: Consult Service: I am happy.\r\n\r\n" +
+                "**Bias Awareness Reminder**\r\nMaintain a neutral and factual tone. Avoid adding interpretation or speculation beyond what is in the comments.\r\n";
+
+            List<object> messages = new List<object>
+            {
+                new { role = "system", content = systemMessage },
+                new { role = "user", content = $"Summarize the following text in under {maxTokens} tokens:\n\n{userMessage}" + text }
+            };
+
+            using (var client = new HttpClient())
+            {
+                client.Timeout = Timeout.InfiniteTimeSpan;
+                client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", aiKey);
+                var requestBody = new
+                {
+                    model = "gpt-4o",
+                    messages = messages,
+                    max_tokens = maxTokens,
+                    temperature = 0,
+                    top_p = 0.1,
+                    stream = false
+                };
+
+                var content = new StringContent(JsonConvert.SerializeObject(requestBody), Encoding.UTF8, "application/json");
+                var response = await client.PostAsync("https://api.openai.com/v1/chat/completions", content);
+                var result = await response.Content.ReadAsStringAsync();
+
+                dynamic json = JsonConvert.DeserializeObject(result);
+                return json?.choices?[0]?.message?.content ?? "";
+            }
+        }
+
+        public static async Task<string> SummarizeMisightsRotationText(IConfiguration _config, string text, int maxTokens = 4000)
+        {
+            string aiKey = _config.GetSection("AppSettings:MyInsightsAPEToken").Value;
+            OpenAIClient _openAIClient = new OpenAIClient(aiKey);
+            ChatClient chatClient = _openAIClient.GetChatClient("gpt-5");
+            
+            string userMessage = "";
+            string systemMessage = "You are an expert summarizer specializing in academic and clinical evaluation data. \r\nYour goal is to extract, group, and summarize evaluator comments by rotation name." +
+                "\r\n\r\nFollow these formatting rules exactly:\r\n\r\nFormat:\r\n[Rotation Name A]\r\n    [Date]: [Rotation Name A]: [Comment 1]\r\n    [Date]: [Rotation Name A]: [Comment 2]\r\n    " +
+                "[Date]: [Rotation Name A]: [Comment 3]\r\n[Rotation Name B]\r\n    [Date]: [Rotation Name B]: [Comment 1]\r\n    [Date]: [Rotation Name B]: [Comment 2]\r\n    [Date]: [Rotation Name B]: [Comment 3]\r\n\r\n" +
+                "**Formatting Requirements**\r\n1. Group all comments under their corresponding [Rotation Name].\r\n2. Within each rotation, list entries in chronological order (oldest to newest).\r\n" +
+                "3. Each comment must begin with the date, followed by the rotation name, and then the summarized comment text.\r\n4. If multiple comments appear under the same date and rotation, include each as a new line entry." +
+                "\r\n5. Clean text by removing HTML tags, escape characters (like `&nbsp;` or `&#39;`), and redundant phrases.\r\n6. Do not alter meaning or omit relevant insights.\r\n" +
+                "7. Preserve unique details or context related to feedback, supervision, teaching, professionalism, or program improvements.\r\n\r\n**Example Input:**\r\n" +
+                "06/14/2024: Consult Service: Free-Form Responses: 06/14/2024 Did the ward resident supervise the interns/subinterns well? Comments: The ward resident spent time teaching and mentoring interns and subinterns." +
+                "\r\n07/12/2024: Consult Service: Free-Form Responses: 07/12/2024 Did the ward resident supervise the interns/subinterns well? Comments: I am happy.\r\n\r\n**Example Output:**" +
+                "\r\nConsult Service\r\n    06/14/2024: Consult Service: The ward resident spent time teaching and mentoring interns and subinterns.\r\n    07/12/2024: Consult Service: I am happy.\r\n\r\n" +
+                "**Bias Awareness Reminder**\r\nMaintain a neutral and factual tone. Avoid adding interpretation or speculation beyond what is in the comments.\r\n";
+
+                       
+            var messages = new List<ChatMessage>
+            {
+                ChatMessage.CreateSystemMessage(systemMessage),
+                ChatMessage.CreateUserMessage(text)
+            };
+
+            StringBuilder sb = new StringBuilder();            
+            var options = new ChatCompletionOptions
+            {
+                Temperature = 1,
+                //TopP = 0,
+                PresencePenalty = 0,
+                FrequencyPenalty = 0,
+                //MaxOutputTokenCount = 8000
+            };
+
+            try
+            {
+                // ✅ Streaming response from OpenAI
+                await foreach (var update in chatClient.CompleteChatStreamingAsync(messages, options))
+                {
+                    if (update.ContentUpdate.Count > 0)
+                    {
+                        string token = update.ContentUpdate[0].Text;
+                        sb.Append(token);
+
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+
+            }
+            
+            return sb.ToString();
+        }
+        
+
         public static async Task<string> SummarizeText(IConfiguration _config, string text, int maxTokens = 4000, Int16 promptType = 1)
         {
             string aiKey = _config.GetSection("AppSettings:MyInsightsAPEToken").Value;
