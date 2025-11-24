@@ -16,7 +16,7 @@ public static class InsightsSummarizer
     private const int MaxOutputTokens = 8000;
     private static readonly SemaphoreSlim _gptSemaphore = new SemaphoreSlim(5); // Max concurrent GPT calls
 
-    public static async Task<string> GetMyInsightsComments(DataSet dsComments, OpenAIClient _client)
+    public static async Task<string> GetMyInsightsComments(Int16 isFaculty, DataSet dsComments, OpenAIClient _client)
     {
         var globalSb = new StringBuilder();
         var summarizationTasks = new List<Task<(string periodLevelKey, string summary)>>();
@@ -57,7 +57,7 @@ public static class InsightsSummarizer
                         // Build the Training Level text block
                         var sbLevel = new StringBuilder();
                         sbLevel.AppendFormat("Period {0}: ({1}-{2})\n", periodNum, startDate, endDate);
-                        sbLevel.AppendFormat("\t\tTraining Level: {0}\n", trainingLevel);
+                        sbLevel.AppendFormat("\t\t{1}: {0}\n", trainingLevel, (isFaculty == 0) ? "Training Level" : "Speciality");
 
                         var filteredUsers = dtComments.AsEnumerable()
                             .Where(r => r.Field<Int16>("PeriodNum") == periodNum &&
@@ -138,7 +138,7 @@ public static class InsightsSummarizer
         await _gptSemaphore.WaitAsync(); // concurrency control
         try
         {
-            var chatClient = _client.GetChatClient("gpt-4o");
+            var chatClient = _client.GetChatClient("gpt-4.1");
 
             var messages = new List<ChatMessage>
             {

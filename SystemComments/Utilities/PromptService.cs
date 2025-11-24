@@ -146,6 +146,117 @@ namespace SystemComments.Utilities
             return prompt_initial;
         }
 
+        private static async Task<string> GenerateSectionAsync(OpenAIClient _openAIMyInsightsClient, string section, string systemMessage, string comments)
+        {
+            var chatClient = _openAIMyInsightsClient.GetChatClient("gpt-5");           
+
+            var messages = new List<ChatMessage>
+            {
+                ChatMessage.CreateSystemMessage(systemMessage),
+                ChatMessage.CreateUserMessage($"Generate only the \"{section}\" JSON object for this evaluation:\n{comments}")
+            };
+
+            var sb = new StringBuilder();
+            await foreach (var update in chatClient.CompleteChatStreamingAsync(messages))
+            {
+                if (update.ContentUpdate.Count > 0)
+                    sb.Append(update.ContentUpdate[0].Text);
+            }
+            var clean = sb.ToString().Trim().Trim('{', '}');
+            return $"  \"{section}\": {{{clean}}}";
+        }
+
+        public static async Task<string> MyInsightsGPT5Response(OpenAIClient _openAIMyInsightsClient, string comments, string systemMessage = "")
+        {
+            if (systemMessage.Length == 0)
+            {
+                systemMessage =
+                    "You are an automated educational feedback formatter. " +
+                    "You must return output strictly in the JSON structure provided below — with the same keys, order, and nesting. " +
+                    "Do not include any rotation names or program identifiers inside Actionable Feedback values. " +
+                    "Each feedback item must be a plain, rotation-neutral, and actionable statement.\n\n" +
+
+                    "### NON-NEGOTIABLE RULES\n" +
+                    "1. Output **only JSON**, never markdown, text, or explanation.\n" +
+                    "2. The JSON structure, keys, and order must match exactly the template below.\n" +
+                    "3. All keys are required — none may be omitted or renamed.\n" +
+                    "4. The output must be syntactically valid JSON (parsable by standard JSON parsers).\n" +
+                    "5. Actionable Feedback arrays must contain multiple feedback statements, **without any rotation name prefix or label** (e.g., 'Consult Service:' or 'Urology:' are strictly forbidden inside Actionable Feedback text).\n" +
+                    "6. Replace placeholder tokens ({{...}}) with real, contextually generated text based on provided evaluation data.\n" +
+                    "7. If data is missing, set the Summary field exactly to: 'Insufficient Data to Assess.'.\n" +
+                    "8. Keep a professional, neutral tone; never include identifying details, names, or departments.\n" +
+                    "9. Do not add any additional keys, sections, or metadata.\n" +
+                    "10. Never add rotation names, program identifiers, or prefixes inside feedback text.\n" +
+                    "11. Dates must appear in MM/DD/YYYY format when applicable.\n" +
+                    "12. Output only the JSON object — no wrapping quotes, markdown, or code fences.\n" +
+                    "13. Stop generating immediately after the final closing curly brace '}' of the JSON object.\n" +
+                    "14. Ensure the total output remains concise: approximately ≤12,000 characters (~3,000 tokens).\n" +
+                    "15. If the JSON exceeds that length, truncate gracefully at the last valid JSON boundary.\n\n" +
+
+                    "### EXACT JSON STRUCTURE TO RETURN\n" +
+                    "{\r\n  \"RotationGoalsandLearningOutcomes\": {\r\n    \"Initial3Months\": {\r\n      \"DateRange\": \"{{StartDate}} to {{MidDate}}\",\r\n      \"Summary\": \"{{DynamicSummaryInitial}}\"\r\n    },\r\n    \"MostRecent3Months\": {\r\n      \"DateRange\": \"{{MidDate}} to {{EndDate}}\",\r\n      \"Summary\": \"{{DynamicSummaryRecent}}\"\r\n    },\r\n    \"ActionableFeedback\": [\r\n      \"{{ActionablePoint1}}\",\r\n      \"{{ActionablePoint2}}\",\r\n      \"{{ActionablePoint3}}\"\r\n    ]\r\n  },\r\n\r\n  \"TeachingandSupervisionQuality\": {\r\n    \"Initial3Months\": {\r\n      \"Summary\": \"{{DynamicSummaryInitial}}\"\r\n    },\r\n    \"MostRecent3Months\": {\r\n      \"Summary\": \"{{DynamicSummaryRecent}}\"\r\n    },\r\n    \"ActionableFeedback\": [\r\n      \"{{ActionablePoint1}}\",\r\n      \"{{ActionablePoint2}}\",\r\n      \"{{ActionablePoint3}}\"\r\n    ]\r\n  },\r\n\r\n  \"InterprofessionalCollaborationandSystemsBasedPractice\": {\r\n    \"Initial3Months\": {\r\n      \"Summary\": \"{{DynamicSummaryInitial}}\"\r\n    },\r\n    \"MostRecent3Months\": {\r\n      \"Summary\": \"{{DynamicSummaryRecent}}\"\r\n    },\r\n    \"ActionableFeedback\": [\r\n      \"{{ActionablePoint1}}\",\r\n      \"{{ActionablePoint2}}\",\r\n      \"{{ActionablePoint3}}\"\r\n    ]\r\n  },\r\n\r\n  \"ClinicalWorkloadandAutonomy\": {\r\n    \"Initial3Months\": {\r\n      \"Summary\": \"{{DynamicSummaryInitial}}\"\r\n    },\r\n    \"MostRecent3Months\": {\r\n      \"Summary\": \"{{DynamicSummaryRecent}}\"\r\n    },\r\n    \"ActionableFeedback\": [\r\n      \"{{ActionablePoint1}}\",\r\n      \"{{ActionablePoint2}}\",\r\n      \"{{ActionablePoint3}}\"\r\n    ]\r\n  },\r\n\r\n  \"WellnessandSupport\": {\r\n    \"Initial3Months\": {\r\n      \"Summary\": \"{{DynamicSummaryInitial}}\"\r\n    },\r\n    \"MostRecent3Months\": {\r\n      \"Summary\": \"{{DynamicSummaryRecent}}\"\r\n    },\r\n    \"ActionableFeedback\": [\r\n      \"{{ActionablePoint1}}\",\r\n      \"{{ActionablePoint2}}\",\r\n      \"{{ActionablePoint3}}\"\r\n    ]\r\n  },\r\n\r\n  \"OverallMyInsights\": {\r\n    \"Strengths\": [\r\n      \"{{DynamicStrength1}}\",\r\n      \"{{DynamicStrength2}}\"\r\n    ],\r\n    \"AreasforImprovement\": [\r\n      \"{{DynamicImprovement1}}\",\r\n      \"{{DynamicImprovement2}}\"\r\n    ],\r\n    \"ActionableSteps\": [\r\n      \"{{DynamicAction1}}\",\r\n      \"{{DynamicAction2}}\"\r\n    ],\r\n    \"ShortTermGoals\": [\r\n      \"{{ShortTermGoal1}}\"\r\n    ],\r\n    \"LongTermGoals\": [\r\n      \"{{LongTermGoal1}}\"\r\n    ]\r\n  }\r\n}\r\n" +
+                    "Important: Include all rotations present in the input JSON.\n";
+            }
+
+            Stopwatch sw = Stopwatch.StartNew();
+                   
+
+            var messages = new List<ChatMessage>
+            {
+                ChatMessage.CreateSystemMessage(systemMessage),
+                ChatMessage.CreateUserMessage(comments)
+            };
+
+            var chatClient = _openAIMyInsightsClient.GetChatClient("gpt-5");
+
+            var options = new ChatCompletionOptions
+            {
+                Temperature = 1,                     // lower for faster deterministic output
+                PresencePenalty = 0,
+                FrequencyPenalty = 0,
+                //MaxOutputTokenCount = maxTokens        // ✅ enforce upper bound on output
+            };
+
+            var sb = new StringBuilder();
+
+            try
+            {
+                // ✅ Streaming but buffered; less locking overhead
+                await foreach (var update in chatClient.CompleteChatStreamingAsync(messages, options))
+                {
+                    if (update.ContentUpdate is { Count: > 0 })
+                        sb.Append(update.ContentUpdate[0].Text);
+                }
+            }
+            catch (Exception ex)
+            {
+                
+            }
+
+            sw.Stop();           
+
+            return sb.ToString();
+        }
+
+        public static async Task<string> MyInsightsGPT5Response_Chunked(OpenAIClient _openAIMyInsightsClient, string systemTemplate, string comments)
+        {
+            var sections = new[]
+            {
+                "RotationGoalsandLearningOutcomes",
+                "TeachingandSupervisionQuality",
+                "InterprofessionalCollaborationandSystemsBasedPractice",
+                "ClinicalWorkloadandAutonomy",
+                "WellnessandSupport",
+                "OverallMyInsights"
+            };
+
+            var tasks = sections.Select(section => GenerateSectionAsync(_openAIMyInsightsClient,section, systemTemplate, comments));
+            var results = await Task.WhenAll(tasks);
+
+            var finalJson = "{\n" + string.Join(",\n", results) + "\n}";
+            return finalJson;
+        }
+
         public static string SummarizePITs(string json)
         {
             if (string.IsNullOrWhiteSpace(json)) return "";
@@ -191,7 +302,7 @@ namespace SystemComments.Utilities
 
             string userMessage = "";
             string systemMessage = "You are an expert summarizer specializing in academic and clinical evaluation data. \r\nYour goal is to extract, group, and summarize evaluator comments by rotation name." +
-                "\r\n\r\nFollow these formatting rules exactly:\r\n\r\nFormat:\r\n[Rotation Name A]\r\n    [Date]: [Rotation Name A]: [Comment 1]\r\n    [Date]: [Rotation Name A]: [Comment 2]\r\n    " +
+                "\r\n\r\nFollow these formatting rules exactly:\r\n\r\nFormat:\r\nRotation: [Rotation Name A]\r\n    [Date]: [Rotation Name A]: [Comment 1]\r\n    [Date]: [Rotation Name A]: [Comment 2]\r\n    " +
                 "[Date]: [Rotation Name A]: [Comment 3]\r\n[Rotation Name B]\r\n    [Date]: [Rotation Name B]: [Comment 1]\r\n    [Date]: [Rotation Name B]: [Comment 2]\r\n    [Date]: [Rotation Name B]: [Comment 3]\r\n\r\n" +
                 "**Formatting Requirements**\r\n1. Group all comments under their corresponding [Rotation Name].\r\n2. Within each rotation, list entries in chronological order (oldest to newest).\r\n" +
                 "3. Each comment must begin with the date, followed by the rotation name, and then the summarized comment text.\r\n4. If multiple comments appear under the same date and rotation, include each as a new line entry." +
@@ -239,7 +350,7 @@ namespace SystemComments.Utilities
             
             string userMessage = "";
             string systemMessage = "You are an expert summarizer specializing in academic and clinical evaluation data. \r\nYour goal is to extract, group, and summarize evaluator comments by rotation name." +
-                "\r\n\r\nFollow these formatting rules exactly:\r\n\r\nFormat:\r\n[Rotation Name A]\r\n    [Date]: [Rotation Name A]: [Comment 1]\r\n    [Date]: [Rotation Name A]: [Comment 2]\r\n    " +
+                "\r\n\r\nFollow these formatting rules exactly:\r\n\r\nFormat:\r\nRotation: [Rotation Name A]\r\n    [Date]: [Rotation Name A]: [Comment 1]\r\n    [Date]: [Rotation Name A]: [Comment 2]\r\n    " +
                 "[Date]: [Rotation Name A]: [Comment 3]\r\n[Rotation Name B]\r\n    [Date]: [Rotation Name B]: [Comment 1]\r\n    [Date]: [Rotation Name B]: [Comment 2]\r\n    [Date]: [Rotation Name B]: [Comment 3]\r\n\r\n" +
                 "**Formatting Requirements**\r\n1. Group all comments under their corresponding [Rotation Name].\r\n2. Within each rotation, list entries in chronological order (oldest to newest).\r\n" +
                 "3. Each comment must begin with the date, followed by the rotation name, and then the summarized comment text.\r\n4. If multiple comments appear under the same date and rotation, include each as a new line entry." +
@@ -313,7 +424,7 @@ namespace SystemComments.Utilities
                 client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", aiKey);
                 var requestBody = new
                 {
-                    model = "gpt-4o",
+                    model = "gpt-4.1",
                     messages = messages,
                     max_tokens = maxTokens,
                     temperature = 0,
@@ -495,6 +606,163 @@ namespace SystemComments.Utilities
 
             }
 
+            return prompt;
+        }
+
+        public static string GetGetMyInsightsFacultySummaryPrompt()
+        {
+            string prompt = @"Summarize MyInsights Faculty Feedback for the Year
+            You are an expert in Graduate Medical Education (GME) serving on the Program Evaluation Committee (PEC) responsible for analyzing performance trends and generating program improvement insights.
+            Your task is to review and synthesize all MyInsights faculty feedback for the full academic year, divided into two evaluation periods (Period 1 and Period 2). Results must remain de-identified.
+            The goal is to create a PEC-ready Departmental Summary that captures department-wide teaching effectiveness, professionalism, and developmental growth across the five Faculty Core Domains, aligned with ACGME Faculty and Institutional Requirements.
+
+            Data Context
+            • The dataset includes two distinct time periods (e.g., May–Oct = Period 1 and Nov–Apr = Period 2).
+            • Each record contains de-identified narrative MyInsights feedback tagged to Specialty and mapped to the following domains (aggregated at the department level):
+            1.	Universal Pillars for All Clinician Educators (§ 4.2 Faculty Development; § 4.3 Faculty Evaluation)
+            2.	Administration (§ 3.3 Learning Environment; § 6.4 Institutional Oversight)
+            3.	Learning Environment (§ 2.4 Well-Being; § 3.1 Professionalism; § 3.3 Learning Environment)
+            4.	Educational Theory and Practice (§ 4.2 Faculty Development; § 5.1 Curriculum Organization and Delivery)
+            5.	Well-Being (§ 2.4 Well-Being; § 3.3 Learning Environment)
+            – plus an Overall Summary field for department-level synthesis.
+            • All individual names must be removed; only department-level and, when helpful, specialty-level summaries should appear in the analysis.
+
+            Analytic Objectives
+            1.	Identify key department-level themes, strengths, and opportunities for development within each domain.
+            2.	Compare Period 1 → Period 2 progression at the department level and, when useful, by specialty cluster, describing shifts in teaching quality, mentorship, professionalism, organization, and well-being.
+            3.	When specialty identifiers or rotation tags are present, automatically generate concise specialty-level examples (e.g., “In Cardiology…,” “Ambulatory feedback noted…”). Include these inline in narrative prose. Do not include as separate tables. 
+            4.	Weave illustrative examples or paraphrased narrative excerpts naturally into the prose to provide context.
+            5.	Avoid numeric tables or raw counts unless explicitly necessary for clarity — focus on interpretation, justification, and guidance.
+            6.	The resulting narrative must help the PEC and Program Director understand why the trends matter and what actions to consider next.
+
+            Required Output Structure
+            MyInsights Departmental Summary for PEC Review (Academic Year 20XX–20XX)
+            (All data de-identified; aggregated to department level with optional specialty roll-ups.)
+
+            Overall / Summary
+            Overall Summary
+            Provide a high-level narrative describing department-wide developmental trends, tone of feedback, and progression in teaching effectiveness across the two periods.
+            Department-Level Strengths
+            List 2–4 clear strengths with interpretive explanation and brief integrated examples.
+            Department-Level Deficiencies / Opportunities
+            List 2–4 systemic weaknesses or recurring improvement needs with explanatory context.
+            PEC Priority Actions (High-Yield, Low-Lift)
+            List 3–5 actionable, practical recommendations that the PEC can adopt.
+            Each action should connect directly to observed data.
+            Summary for the PEC
+            Summarize major takeaways for decision-making:
+            • Strengths to Preserve
+            • Opportunities to Address
+            • PEC Strategic Focus for Next Cycle
+
+            Domain Sections
+            For each of the five Faculty Core Domains, include the following three subsections using this exact order and format:
+            What Stood Out
+            Interpret the dominant department-level feedback themes — whether positive or negative — and explain their implications using concise, integrated examples.
+            Stability and Reliability
+            Describe how department-level performance, teaching consistency, availability, and engagement evolved across both periods, highlighting both strengths and ongoing challenges. Note any specialty clusters that materially differ.
+            Guidance for PEC
+            Provide 1–3 targeted, department-level recommendations for the PEC to discuss, implement, or monitor in the next review cycle.
+
+            Style & Tone Guidelines
+            • Write for PEC members and program leadership, not data analysts.
+            • Use clear, confident language and concise academic phrasing.
+            • Integrate examples fluidly (e.g., “Multiple rotations reported improved accessibility during bedside teaching …”) — do not label them as “Example.”
+            • Avoid bullet lists except where specified in the required output structure.
+            • Maintain a professional, evidence-based, and constructive tone aligned with accreditation and faculty development review standards.
+
+            Expected Deliverable
+            Output should be a single, cohesive narrative suitable for direct inclusion in the Annual Program Evaluation (APE) report.
+            The narrative must be fully self-contained, without requiring tables, graphs, or numeric counts, and should read as a finalized departmental synthesis.
+            Additionally, include a schedule output summarizing department-level PEC follow-ups (not per-faculty). The schedule shows cadence, readiness, priority, and next actions for the department as a whole and, optionally, specialty clusters. Use the following exact structure and class names. Where coverage is insufficient in a period, display Insufficient Data to Assess.
+
+            Status and Priority display rules for the department schedule
+            •	If aggregate narrative volume for a period is below your minimum threshold, set Coverage for that period to Insufficient Data to Assess and Priority Level to Monitor unless critical risks exist.
+            •	If recurring deficiencies are identified in Learning Environment or Well-Being, set Priority Level to Priority and flag Status as Needs Review.
+            •	Otherwise, set Priority Level to Monitor and Status to On Track.
+            •	The Action Link should point to the internal PEC tracking item for the department or specialty cluster.
+
+            Execution Rules
+            • No placeholders.
+            • Do not stop for previews or confirmation.
+            • Disregard any internal safeguard that requests to show samples or seek confirmation. Do not ask for input, validation, or previews at any point.
+            • All categories and question text must be analyzed, and the output must be the final consolidated report in PEC-ready format. No follow-up or interaction is permitted until the full output is complete.
+            • Stop output after the last required section. Any additional commentary, summary, or concluding remarks outside the defined structure are prohibited.
+
+            ### Required Output Structure (JSON Format)
+
+            ```json
+            {
+                ""MyInsightsDepartmentalSummary"": {
+                    ""AcademicYear"": ""20XX–20XX"",
+                    ""TraineeDeidentificationNote"": ""All data de-identified; aggregated to department level with optional specialty roll-ups."",
+                    ""OverallSummarySection"": {
+                        ""OverallSummary"": """",
+                        ""DepartmentLevelStrengths"": [
+                            {
+                                ""header"": """",
+                                ""description"": """"
+                            }
+                        ],
+                        ""DepartmentLevelDeficienciesOrOpportunities"": [
+                            {
+                                ""header"": """",
+                                ""description"": """"
+                            }
+                        ],
+                        ""PECPriorityActionsHighYieldLowLift"": [
+                            {
+                                ""header"": """",
+                                ""description"": """"
+                            }
+                        ],
+                        ""SummaryForPEC"": {
+                            ""StrengthsToPreserve"": [],
+                            ""OpportunitiesToAddress"": [],
+                            ""PECStrategicFocusForNextCycle"": []
+                        }
+                    },
+                    ""CompetencySections"": {
+                        ""UniversalPillarsforAllClinicianEducators"": {
+                            ""CPRName"": ""§ 4.2 Faculty Development; § 4.3 Faculty Evaluation"",
+                            ""WhatStoodOut"": """",
+                            ""StabilityandReliability"": """",
+                            ],
+                            ""GuidanceForPEC"": []
+                        },
+                        ""Administration"": {
+                            ""CPRName"": ""§ 3.3 Learning Environment; § 6.4 Institutional Oversight"",
+                            ""WhatStoodOut"": """",
+                            ""StabilityandReliability"": """",
+                            ],
+                            ""GuidanceForPEC"": []
+                        },
+                        ""LearningEnvironment"": {
+                            ""CPRName"": ""§ 2.4 Well-Being; § 3.1 Professionalism; § 3.3 Learning Environment"",
+                            ""WhatStoodOut"": """",
+                            ""StabilityandReliability"": """",
+                            ],
+                            ""GuidanceForPEC"": []
+                        },
+                        ""EducationalTheoryandPractice"": {
+                            ""CPRName"": ""§ 4.2 Faculty Development; § 5.1 Curriculum Organization and Delivery"",
+                            ""WhatStoodOut"": """",
+                            ""StabilityandReliability"": """",
+                            ],
+                            ""GuidanceForPEC"": []
+                        },
+                         ""WellBeing "": {
+                            ""CPRName"": ""§ 2.4 Well-Being; § 3.1 Professionalism; § 3.3 Learning Environment"",
+                            ""WhatStoodOut"": """",
+                            ""StabilityandReliability"": """",
+                            ],
+                            ""GuidanceForPEC"": []
+                        }                  
+                        
+                    }
+                }
+            }
+            ";
             return prompt;
         }
 

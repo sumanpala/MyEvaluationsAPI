@@ -839,7 +839,8 @@ namespace SystemComments.Utilities
                     {
                         foreach (var mainSection in objLastSection["mainsection"])
                         {
-                            if (mainSection?["mainquestion"] != null && mainSection["mainquestion"].ToString().Length > 0)
+                            //if (mainSection?["mainquestion"] != null && mainSection["mainquestion"].ToString().Length > 0)
+                            if (mainSection?["mainquestion"] != null)
                             {
                                 //if (mainSection["description"] != null)
                                 //{
@@ -870,7 +871,7 @@ namespace SystemComments.Utilities
                                 if (mainSection?["answer"] != null && mainSection["answer"].ToString().Length > 0)
                                 {
                                     //sb.Append($"Section {currentSection}:\nMain Question Answer: " + ((mainSection["answer"].ToString().Length > 50) ? mainSection["answer"].ToString().Substring(0, 50) + "..." : mainSection["answer"].ToString())  + "\n");
-                                    sb.Append($"Section {currentSection}:\nMain Question Answer: " + mainSection["answer"].ToString() + "\n");                                  
+                                    sb.Append($"Section {currentSection}:\nEvaluator Response: " + mainSection["answer"].ToString() + "\n" + $"<answer>{mainSection["answer"].ToString()}</answer>" + "\n");                                  
                                 }
                             }                           
                         }
@@ -894,7 +895,7 @@ namespace SystemComments.Utilities
                                 if (followup["answer"] != null && followup["answer"]?.ToString().Length > 0)
                                 {
                                     //sb.Append("Answer: User Completed this question.\n");
-                                    sb.Append("Followup Question Answer: " + followup["answer"]?.ToString() + "\n");
+                                    sb.Append("Followup Question Evaluator Response: " + followup["answer"]?.ToString() + "\n");
                                     //sb.Append("Followup Question Answer: " + ((followup["answer"].ToString().Length > 50) ? followup["answer"].ToString().Substring(0, 50) + "..." : followup["answer"].ToString()) + "\n");
                                 }                               
                             }                            
@@ -935,6 +936,33 @@ namespace SystemComments.Utilities
 
             }
             return sb.ToString();
+        }
+
+        public static string ConvertJsonToXmlContext(string json)
+        {
+            var jobj = JObject.Parse(json);
+
+            // Extract only the last completed section XML (not the whole JSON)
+            var xmlBuilder = new StringBuilder();
+
+            if (jobj["sections"] is JArray sections)
+            {
+                var lastSection = sections.LastOrDefault();
+                if (lastSection != null)
+                {
+                    xmlBuilder.Append("<section>");
+                    xmlBuilder.Append($"<sectionname>{lastSection["name"]}</sectionname>");
+                    xmlBuilder.Append($"<sectionfullname>{lastSection["fullname"]}</sectionfullname>");
+
+                    var answer = lastSection["mainsection"]?[0]?["answer"]?.ToString();
+                    if (!string.IsNullOrEmpty(answer))
+                        xmlBuilder.Append($"<answer>{answer}</answer>");
+
+                    xmlBuilder.Append("</section>");
+                }
+            }
+
+            return xmlBuilder.ToString();
         }
 
         public static string ConvertJsonToFormattedText(string json, ref Int32 lastSection, ref Int32 noOfSections)
@@ -1136,12 +1164,15 @@ namespace SystemComments.Utilities
             }
 
             // add columns if not available
+            Int32 columnIndex = 0;
             foreach (string column in columns)
             {
                 if (!dtData.Columns.Contains(column))
                 {
                     dtData.Columns.Add(new DataColumn(column, typeof(string)));
                 }
+                dtData.Columns[column].SetOrdinal(columnIndex);
+                columnIndex++;
             }
 
             return dtData;
@@ -1374,24 +1405,38 @@ namespace SystemComments.Utilities
 
         public static string ExtractAndRemoveAllSections(ref string xml)
         {
-            const string startTag = "<allsections>";
-            const string endTag = "</allsections>";
+            //const string startTag = "<allsections>";
+            //const string endTag = "</allsections>";
 
-            int start = xml.IndexOf(startTag, StringComparison.OrdinalIgnoreCase);
-            int end = xml.IndexOf(endTag, StringComparison.OrdinalIgnoreCase);
+            //int start = xml.IndexOf(startTag, StringComparison.OrdinalIgnoreCase);
+            //int end = xml.IndexOf(endTag, StringComparison.OrdinalIgnoreCase);
 
-            if (start >= 0 && end > start)
-            {
-                // Extract including the wrapper
-                string block = xml.Substring(start, (end + endTag.Length) - start);
+            //if (start >= 0 && end > start)
+            //{
+            //    // Extract including the wrapper
+            //    string block = xml.Substring(start, (end + endTag.Length) - start);
 
-                // Remove it from the original string
-                xml = xml.Remove(start, (end + endTag.Length) - start);
+            //    // Remove it from the original string
+            //    xml = xml.Remove(start, (end + endTag.Length) - start);
 
-                return block; // return the extracted block
-            }
+            //    return block; // return the extracted block
+            //}
+            // Regex: capture the FIRST <allsections>...</allsections> that contains <section>
+            var match = Regex.Match(
+                xml,
+                @"<allsections\s*>\s*<section[\s\S]*?</allsections>",
+                RegexOptions.IgnoreCase | RegexOptions.Singleline
+            );
 
-            return string.Empty; // not found
+            if (!match.Success)
+                return string.Empty;
+
+            string block = match.Value;
+
+            // Remove it from the original text
+            xml = xml.Remove(match.Index, match.Length);
+
+            return block; // not found
         }
     }
     // JSON Model Classes

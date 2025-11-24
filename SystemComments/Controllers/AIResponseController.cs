@@ -50,11 +50,13 @@ namespace SystemComments.Controllers
         {
             DefaultRequestVersion = HttpVersion.Version20
         };
-        private readonly HttpClient _httpClient;
-        private readonly OpenAIClient _openAIClient;
-        private readonly ChatClient chatClient;
-        private readonly OpenAIClient _openAIMyInsightsClient;
+        private readonly HttpClient _httpClient; // Sage
+        private readonly OpenAIClient _openAIClient; // Sage
+        private readonly OpenAIClient _openAIMyInsightsClient; //MyInsights
+        private readonly OpenAIClient _openAIAPEMyInsightsClient; // APE MyInsights
         private readonly OpenAIClient _openAIAzureClient;
+
+        private ChatClient chatClient;        
         private readonly ChatClient chatAzureClient;
         public AIResponseController(APIDataBaseContext context,IJwtAuth jwtAuth, IConfiguration config, ILogger<AIResponseController> logger)
         {
@@ -74,9 +76,18 @@ namespace SystemComments.Controllers
              new ApiKeyCredential(config["AppSettings:MyInsightsToken"]),
              new OpenAIClientOptions
              {
-                 NetworkTimeout = TimeSpan.FromSeconds(300)
+                 NetworkTimeout = TimeSpan.FromSeconds(500)
              }
             );
+
+            _openAIAPEMyInsightsClient = new OpenAIClient(
+             new ApiKeyCredential(config["AppSettings:MyInsightsAPEToken"]),
+             new OpenAIClientOptions
+             {
+                 NetworkTimeout = TimeSpan.FromSeconds(500)
+             }
+            );
+
             //_ = WarmUpAsync();
             //_ = KeepAliveLoopAsync(CancellationToken.None);   // continuous keep-alive
 
@@ -396,62 +407,236 @@ namespace SystemComments.Controllers
             return sb.ToString(); 
         }
 
-        [HttpPost("MyInsightsRotations")]
+        [HttpPost("MyInsightsRotations1")]
         [AllowAnonymous]
-        public async Task<ActionResult<IEnumerable<MyInsightsResponse>>> MyInsightsSummary([FromBody] MyInsightsRotationSummary input)
+        public async Task<ActionResult<IEnumerable<MyInsightsRotationSummaryResponse>>> MyInsightsSummary1([FromBody] MyInsightsRotationSummary input)
         {
-            List<MyInsightsResponse> aiResponse = new List<MyInsightsResponse>();
+            List<MyInsightsRotationSummaryResponse> aiResponse = new List<MyInsightsRotationSummaryResponse>();
+            MyInsightsRotationSummaryResponse summaryResponse = new MyInsightsRotationSummaryResponse();
+            string baseDir = AppDomain.CurrentDomain.BaseDirectory;
+            string projectRoot = Path.GetFullPath(Path.Combine(baseDir, @"..\..\..\"));
+            string filesRoot = Path.Combine(projectRoot, "Files");
+            string subPath = input.DepartmentID.ToString() + "/" + input.TargetID;
+            string targetFolder = Path.Combine(filesRoot, subPath);
+            string filePath = Path.Combine(targetFolder, "SummaryFeedbackResponse.txt");
+            string summaryJSON = await System.IO.File.ReadAllTextAsync(filePath);
+            summaryResponse.SummaryFeedbackJSON = summaryJSON;
+
+            filePath = Path.Combine(targetFolder, "RotationResponse.txt");
+            summaryJSON = await System.IO.File.ReadAllTextAsync(filePath);
+            summaryResponse.SummaryJSON = summaryJSON;
+            summaryResponse.SummaryID = 3;
+
+            summaryResponse.SummaryJSON = Regex.Replace(summaryResponse.SummaryJSON, @"\r\n?|\n", "");      
+            
+            aiResponse.Add(summaryResponse);
+
+            DataSet dsData = BackEndService.SaveMyInsightsFromJson(_context, input, summaryResponse);
+            return aiResponse;
+        }
+
+        [HttpPost("ACGMESurveyInsights1")]
+        [AllowAnonymous]
+        public async Task<ActionResult<IEnumerable<MyInsightsSurveyResponse>>> ACGMESurveyInsights1([FromBody] MyInsightsSurveyRequest input)
+        {
+            List<MyInsightsSurveyResponse> aiResponse = new List<MyInsightsSurveyResponse>();
             try
             {                
-                string prompt = await BackEndService.GetRotationMyInsightsNarrativeResponse(input, _context, _config);
-                string systemMessage = "You are an automated educational feedback formatter. " +
-                    "You must return output strictly in the JSON structure provided below — with the same keys, order, and nesting. " +
-                    "Do not include any rotation names or program identifiers inside Actionable Feedback values. " +
-                    "Each feedback item must be a plain, rotation-neutral, and actionable statement.\n\n### NON-NEGOTIABLE RULES\n" +
-                    "1. Output **only JSON**, never markdown, text, or explanation.\n" +
-                    "2. The JSON structure, keys, and order must match exactly the template below.\n" +
-                    "3. All keys are required — none may be omitted or renamed.\n" +
-                    "4. The output must be syntactically valid JSON (parsable by standard JSON parsers).\n" +
-                    "5. Actionable Feedback arrays must contain multiple feedback statements, **without any rotation name prefix or label** (e.g., “Consult Service:” or “Urology:” are strictly forbidden inside Actionable Feedback text).\n" +
-                    "6. Replace placeholder tokens ({{...}}) with real, contextually generated text based on provided evaluation data.\n" +
-                    "7. If data is missing, set the Summary field exactly to: \"Insufficient Data to Assess.\".\n" +
-                    "8. Keep a professional, neutral tone; never include identifying details, names, or departments.\n" +
-                    "9. Do not add any additional keys, sections, or metadata.\n10. Never add rotation names, program identifiers, or prefixes inside feedback text.\n" +
-                    "11. Dates must appear in MM/DD/YYYY format when applicable.\n12. Output only the JSON object — no wrapping quotes, markdown, or code fences.\n\n### EXACT JSON STRUCTURE TO RETURN " +
-                    "{\r\n  \"RotationGoalsandLearningOutcomes\": {\r\n    \"Initial3Months\": {\r\n      \"DateRange\": \"{{StartDate}} to {{MidDate}}\",\r\n      \"Summary\": \"{{DynamicSummaryInitial}}\"\r\n    },\r\n    \"MostRecent3Months\": {\r\n      \"DateRange\": \"{{MidDate}} to {{EndDate}}\",\r\n      \"Summary\": \"{{DynamicSummaryRecent}}\"\r\n    },\r\n    \"ActionableFeedback\": [\r\n      \"{{ActionablePoint1}}\",\r\n      \"{{ActionablePoint2}}\",\r\n      \"{{ActionablePoint3}}\"\r\n    ]\r\n  },\r\n\r\n  \"TeachingandSupervisionQuality\": {\r\n    \"Initial3Months\": {\r\n      \"Summary\": \"{{DynamicSummaryInitial}}\"\r\n    },\r\n    \"MostRecent3Months\": {\r\n      \"Summary\": \"{{DynamicSummaryRecent}}\"\r\n    },\r\n    \"ActionableFeedback\": [\r\n      \"{{ActionablePoint1}}\",\r\n      \"{{ActionablePoint2}}\",\r\n      \"{{ActionablePoint3}}\"\r\n    ]\r\n  },\r\n\r\n  \"InterprofessionalCollaborationandSystemsBasedPractice\": {\r\n    \"Initial3Months\": {\r\n      \"Summary\": \"{{DynamicSummaryInitial}}\"\r\n    },\r\n    \"MostRecent3Months\": {\r\n      \"Summary\": \"{{DynamicSummaryRecent}}\"\r\n    },\r\n    \"ActionableFeedback\": [\r\n      \"{{ActionablePoint1}}\",\r\n      \"{{ActionablePoint2}}\",\r\n      \"{{ActionablePoint3}}\"\r\n    ]\r\n  },\r\n\r\n  \"ClinicalWorkloadandAutonomy\": {\r\n    \"Initial3Months\": {\r\n      \"Summary\": \"{{DynamicSummaryInitial}}\"\r\n    },\r\n    \"MostRecent3Months\": {\r\n      \"Summary\": \"{{DynamicSummaryRecent}}\"\r\n    },\r\n    \"ActionableFeedback\": [\r\n      \"{{ActionablePoint1}}\",\r\n      \"{{ActionablePoint2}}\",\r\n      \"{{ActionablePoint3}}\"\r\n    ]\r\n  },\r\n\r\n  \"WellnessandSupport\": {\r\n    \"Initial3Months\": {\r\n      \"Summary\": \"{{DynamicSummaryInitial}}\"\r\n    },\r\n    \"MostRecent3Months\": {\r\n      \"Summary\": \"{{DynamicSummaryRecent}}\"\r\n    },\r\n    \"ActionableFeedback\": [\r\n      \"{{ActionablePoint1}}\",\r\n      \"{{ActionablePoint2}}\",\r\n      \"{{ActionablePoint3}}\"\r\n    ]\r\n  },\r\n\r\n  \"OverallMyInsights\": {\r\n    \"Strengths\": [\r\n      \"{{DynamicStrength1}}\",\r\n      \"{{DynamicStrength2}}\"\r\n    ],\r\n    \"AreasforImprovement\": [\r\n      \"{{DynamicImprovement1}}\",\r\n      \"{{DynamicImprovement2}}\"\r\n    ],\r\n    \"ActionableSteps\": [\r\n      \"{{DynamicAction1}}\",\r\n      \"{{DynamicAction2}}\"\r\n    ],\r\n    \"ShortTermGoals\": [\r\n      \"{{ShortTermGoal1}}\"\r\n    ],\r\n    \"LongTermGoals\": [\r\n      \"{{LongTermGoal1}}\"\r\n    ]\r\n  }\r\n}\r\n";
-                string insightResponse = await MyInsightsGPT5Response(systemMessage, prompt + "\n Important: Please return Expected JSON Output Format");
-                MyInsightsResponse summaryResponse = new MyInsightsResponse();
-                summaryResponse.SummaryJSON = insightResponse;
-                input.SummaryJSON = insightResponse;
-                aiResponse.Add(summaryResponse);
-                DataSet dsData = BackEndService.SaveMyInsightsFromJson(_context, input);
+                MyInsightsSurveyResponse summaryResponse = new MyInsightsSurveyResponse();
+                string baseDir = AppDomain.CurrentDomain.BaseDirectory;
+                string projectRoot = Path.GetFullPath(Path.Combine(baseDir, @"..\..\..\"));
+                string filesRoot = Path.Combine(projectRoot, "Files");
+                string subPath = input.DepartmentID.ToString() + "/" + input.IsResident;
+                string targetFolder = Path.Combine(filesRoot, subPath);
+                string filePath = Path.Combine(targetFolder, "Stage1Json.txt");
+                string summaryJSON = await System.IO.File.ReadAllTextAsync(filePath);
+                summaryResponse.Part1JSON = summaryJSON;
+                summaryResponse.Part1Prompt = "";
+                summaryResponse.Part2Prompt = "";
+                filePath = Path.Combine(targetFolder, "Stage2Json.txt");
+                summaryJSON = await System.IO.File.ReadAllTextAsync(filePath);
 
+                summaryResponse.Part2JSON = summaryJSON;
+                DataSet dtData = BackEndService.SaveSurveyInsights(_context, input, summaryResponse);
             }
             catch (System.Exception ex)
             {
-                MyInsightsResponse summaryResponse = new MyInsightsResponse();
-                summaryResponse.SummaryJSON = "[]";                
+                MyInsightsSurveyResponse surveyResponse = new MyInsightsSurveyResponse();
+                surveyResponse.Part1JSON = $"[\"error\":\"{ex.Message}\"]";
+                aiResponse.Add(surveyResponse);
+                _logger.LogError(ex, "An error occurred while making the OpenAI API request");
+
+            }
+
+            return aiResponse;
+
+        }
+
+        [HttpPost("ACGMESurveyInsights")]
+        [AllowAnonymous]
+        public async Task<ActionResult<IEnumerable<MyInsightsSurveyResponse>>> ACGMESurveyInsights([FromBody] MyInsightsSurveyRequest input)
+        {
+            List<MyInsightsSurveyResponse> aiResponse = new List<MyInsightsSurveyResponse>();
+            try
+            {
+                MyInsightsSurveyResponse surveyResponse = new MyInsightsSurveyResponse();
+                string response = await BackEndService.GetACGMESurveyImportingDataForInsights(input, surveyResponse, _context, _openAIAPEMyInsightsClient);
+
+                aiResponse.Add(surveyResponse);
+            }
+            catch (System.Exception ex)
+            {
+                MyInsightsSurveyResponse surveyResponse = new MyInsightsSurveyResponse();
+                surveyResponse.Part1JSON = $"[\"error\":\"{ex.Message}\"]";
+                aiResponse.Add(surveyResponse);
+                _logger.LogError(ex, "An error occurred while making the OpenAI API request");
+
+            }
+            return aiResponse;
+        }
+
+        [HttpPost("MyInsightsRotations")]
+        [AllowAnonymous]
+        public async Task<ActionResult<IEnumerable<MyInsightsRotationSummaryResponse>>> MyInsightsSummary([FromBody] MyInsightsRotationSummary input)
+        {
+            List<MyInsightsRotationSummaryResponse> aiResponse = new List<MyInsightsRotationSummaryResponse>();
+            MyInsightsRotationSummaryResponse summaryResponse = new MyInsightsRotationSummaryResponse();
+            try
+            {                
+                string prompt = await BackEndService.GetRotationMyInsightsNarrativeResponse1(input, summaryResponse, _context, _config, _openAIAPEMyInsightsClient);
+                
+                string insightResponse = string.Empty;
+                //string insightResponse = await MyInsightsGPT5Response1(systemMessage, prompt + "\n Important: Please return Expected JSON Output Format");
+
+                summaryResponse.SummaryFeedbackPrompt = Regex.Replace(summaryResponse.SummaryFeedbackPrompt, @"\r\n?|\n", "");
+                StringBuilder summaryJSON = new StringBuilder();
+                foreach(var lstSummary in  summaryResponse.SummaryIDs)
+                {
+                    input.TargetID = lstSummary.Key;
+                    summaryResponse.SummaryID = lstSummary.Value;
+                    var item = summaryResponse.Prompts.FirstOrDefault(p => p.Key == lstSummary.Key);
+                    if (!item.Equals(default(KeyValuePair<Int16, string>)))
+                    {
+                        summaryResponse.Prompt = item.Value;                       
+                    }
+
+                    item = summaryResponse.SummaryJSONs.FirstOrDefault(p => p.Key == lstSummary.Key);
+                    if (!item.Equals(default(KeyValuePair<Int16, string>)))
+                    {
+                        summaryResponse.SummaryJSON = item.Value;
+                    }
+
+                    if(summaryResponse.SummaryID > 0 && !string.IsNullOrEmpty(summaryResponse.Prompt) && !string.IsNullOrEmpty(summaryResponse.SummaryJSON))
+                    {
+                        switch(input.TargetID)
+                        {
+                            case 1:
+                                summaryJSON.Append("Resident Evaluator Feedback:");                                
+                                break;
+                            case 7:
+                                summaryJSON.Append("Fellow Evaluator Feedback:");                                
+                                break;
+                            case 3:
+                                summaryJSON.Append("Attending Evaluator Feedback:");
+                                break;
+                            case 6:
+                                summaryJSON.Append("Nurse Evaluator Feedback:");
+                                break;
+                            case 9:
+                                summaryJSON.Append("Other Evaluator Feedback:");
+                                break;
+                        }
+                        summaryJSON.AppendLine();
+                        summaryJSON.Append(summaryResponse.SummaryJSON);
+                        summaryJSON.AppendLine();
+                        DataSet dsData = BackEndService.SaveMyInsightsFromJson(_context, input, summaryResponse);
+                    }
+
+                }
+                
+                summaryResponse.SummaryFeedbackPrompt = summaryResponse.SummaryFeedbackPrompt.Replace("[MyInsights Rotation Feedback]", summaryJSON.ToString());
+                aiResponse.Add(summaryResponse);
+
+                string baseDir = AppDomain.CurrentDomain.BaseDirectory;
+                string projectRoot = Path.GetFullPath(Path.Combine(baseDir, @"..\..\..\"));
+                string filesRoot = Path.Combine(projectRoot, "Files");
+                string subPath = input.DepartmentID.ToString();
+
+                string targetFolder = Path.Combine(filesRoot, subPath);
+                Directory.CreateDirectory(targetFolder);
+
+                string filePath = Path.Combine(targetFolder, "SummaryFeedbackPrompt.txt");
+   
+                await System.IO.File.WriteAllTextAsync(filePath, summaryResponse.SummaryFeedbackPrompt);
+
+                string summarySystemMessage = "You are an expert educational data analyst and narrative synthesis specialist in Graduate Medical Education (GME) serving on a Program Evaluation Committee (PEC)." +
+                    "\r\nYour purpose is to generate high-fidelity, accreditation-ready summaries from complex narrative evaluation data." +
+                    "\r\n\r\nYour outputs must always:\r\n\r\nFollow all structures, formatting, and JSON schemas provided in the user’s message." +
+                    "\r\n\r\nMaintain professional, precise, and accreditation-aligned tone.\r\n\r\nTreat all information as confidential and de-identified." +
+                    "\r\n\r\nProduce final, publication-ready text — not drafts, outlines, or previews.\r\n\r\nOmit all commentary, validation requests, or meta explanations." +
+                    "\r\n\r\nStop after the final required output (e.g., JSON, HTML, or narrative)." +
+                    "\r\n\r\nYou interpret all user prompts as formal analytic instructions from a PEC Chair requesting a complete departmental synthesis." +
+                    "\r\nYou must analyze, interpret, and write as a GME domain expert, not as a generic summarizer or AI assistant." +
+                    "\r\n\r\nYour work should:\r\n\r\nIntegrate ACGME Faculty and Institutional Requirements accurately." +
+                    "\r\n\r\nHighlight meaningful differences between evaluator groups (faculty vs. trainees)." +
+                    "\r\n\r\nAttribute findings to specific rotations or specialty clusters when present." +
+                    "\r\n\r\nIdentify trends, developmental progress, and actionable PEC follow-ups." +
+                    "\r\n\r\nUse coherent academic phrasing suitable for direct inclusion in an Annual Program Evaluation (APE) report." +
+                    "\r\n\r\nWhen producing PEC schedules, apply status and priority rules exactly as defined in the user’s instructions." +
+                    "\r\n\r\nIf the user provides narrative data (e.g., MyInsights feedback), you must synthesize, interpret, " +
+                    "and output the complete PEC-ready JSON report according to the provided structure — with no additional explanation or deviation.";
+
+                insightResponse = await MyInsightsGPT5Response1(summarySystemMessage, summaryResponse.SummaryFeedbackPrompt + "\n Important: Please return Expected JSON Output Format");
+                summaryResponse.SummaryFeedbackJSON = Regex.Replace(insightResponse, @"\r\n?|\n", "");
+
+                filePath = Path.Combine(targetFolder, "SummaryFeedbackResponse.txt");
+
+                await System.IO.File.WriteAllTextAsync(filePath, summaryResponse.SummaryFeedbackJSON);
+
+                DataSet dsSummaryData = BackEndService.SaveDepartmentalSummaryFromJson(_context, input, summaryResponse);
+
+            }
+            catch (System.Exception ex)
+            {                
+                summaryResponse.SummaryFeedbackJSON = $"[\"error\":\"{ex.Message}\"]";               
                 aiResponse.Add(summaryResponse);
                 _logger.LogError(ex, "An error occurred while making the OpenAI API request");
                
             }
             return aiResponse;
-        }     
-                  
-       
+        }
+
+
 
         [HttpPost("MyInsightsSummary")]
         [AllowAnonymous]
-        public async Task<ActionResult<IEnumerable<MyInsightsResponse>>> MyInsightsSummary([FromBody] AIRequest input)
+        public async Task<ActionResult<IEnumerable<MyInsightsResponse>>> MyInsightsSummary([FromBody] MyInsightsSummary input)
         {
+            string myInsightPrompt = "";
+            string systemMessage = "";
             List<MyInsightsResponse> aiResponse = new List<MyInsightsResponse>();
             DataSet dsComments = BackEndService.GetMyInsightsSummaryComments(_context, input);
-            string myInsightPrompt = PromptService.GetMyInsightsSummaryPrompt();
-            //string myInsightComments = await PromptService.GetMyInsightsComments(dsComments, _openAIMyInsightsClient);
-            string myInsightComments = await InsightsSummarizer.GetMyInsightsComments(dsComments, _openAIMyInsightsClient);
-            string systemMessage = "You are ChatGPT, a helpful, structured, and expert assistant.\r\nYou produce polished, thematic, well-organized summaries.\r\nWrite as if your output will be directly pasted into a professional report.\r\nUse clear section headers, confident academic language, and smooth narrative structure." +
-                "\r\nNever ask follow-up questions. Output should be final.\nFor every competency, you MUST include a property named `ProgressionByPGY`\n`ProgressionByPGY` MUST be a non-empty array.";
-            string insightResponse = await MyInsightsGPT5Response(systemMessage, myInsightPrompt + "\n" + myInsightComments);
+            if (input.IsFaculty == 0)
+            {
+                myInsightPrompt = PromptService.GetMyInsightsSummaryPrompt();
+            }
+            else
+            {
+                myInsightPrompt = PromptService.GetGetMyInsightsFacultySummaryPrompt();
+            }
+            //string myInsightComments = await PromptService.GetMyInsightsComments(dsComments, _openAIAPEMyInsightsClient);
+            string myInsightComments = await InsightsSummarizer.GetMyInsightsComments(input.IsFaculty, dsComments, _openAIAPEMyInsightsClient);
+            if (input.IsFaculty == 0)
+            {
+                //systemMessage = "You are ChatGPT, a helpful, structured, and expert assistant.\r\nYou produce polished, thematic, well-organized summaries.\r\nWrite as if your output will be directly pasted into a professional report.\r\nUse clear section headers, confident academic language, and smooth narrative structure." +
+                //"\r\nNever ask follow-up questions. Output should be final.\nFor every competency, you MUST include a property named `ProgressionByPGY`\n`ProgressionByPGY` MUST be a non-empty array.";
+                systemMessage = "You are an expert AI specialized in Graduate Medical Education (GME) analytics and Program Evaluation Committee (PEC) reporting.  \r\nYour primary task is to convert de-identified MyInsights trainee feedback into a structured, PEC-ready JSON summary that adheres exactly to the schema provided in the user prompt.\r\n\r\nFollow these rules precisely:\r\n\r\n1. **Output Format**\r\n   - You must output a single, complete, valid **JSON object only**.\r\n   - Do not include Markdown, explanations, commentary, text outside the JSON, or code block syntax (no backticks or ```json markers).\r\n   - Every key and subkey from the user-provided JSON schema must appear in the final output.\r\n   - Preserve exact field names, structure, and hierarchy.\r\n   - Maintain correct JSON syntax — all strings quoted, arrays properly closed, and commas placed correctly.\r\n\r\n2. **Population Rules**\r\n   - Populate all fields meaningfully based on the narrative context; never use placeholders like “example,” “N/A,” “TBD,” or “null.”\r\n   - For array fields (e.g., `DepartmentLevelStrengths`, `GuidanceForPEC`), provide at least one item with text if data supports it; otherwise, output an empty array (`[]`).\r\n   - Ensure that `\"ProgressionByPGY\"` is always represented as an array of objects, even when only one PGY level is available.\r\n   - Do not omit or rename any competency or section.\r\n\r\n3. **Content Guidance**\r\n   - The content of your JSON values must reflect evidence-based, faculty-style academic analysis aligned with ACGME Core Competencies.\r\n   - Ensure that all justifications and summaries are written in professional, concise, and constructive PEC report tone.\r\n   - Do not repeat content; synthesize themes and present them as cohesive program-level findings.\r\n   - Integrate examples naturally without using “Example:” or bullet points unless specified.\r\n\r\n4. **Validation Rules**\r\n   - Before finalizing, verify that:\r\n     • Every section in the schema exists and is complete.  \r\n     • All keys contain either text or empty arrays — no missing elements.  \r\n     • JSON is syntactically valid.  \r\n     • The hierarchy matches the structure defined in the user’s prompt.  \r\n   - If any validation check fails, regenerate the full JSON until compliant.\r\n\r\n5. **Behavioral Restrictions**\r\n   - Do not ask for user confirmation, show drafts, or output partial JSON.\r\n   - Do not include explanations or summaries after the closing brace.\r\n   - Stop immediately after the final `}` of the JSON output.\r\n\r\n6. **Interpretation Priority**\r\n   - If any ambiguity arises, prioritize:  \r\n     (a) JSON validity and structure,  \r\n     (b) Full schema compliance,  \r\n     (c) Professional GME-style synthesis.\r\n\r\nFinal Output Rule:\r\n→ Return only one valid JSON object that matches the exact schema and field order defined in the user message.  \r\nNo markdown, no commentary, and no deviation from structure are permitted.\r\n";
+            }
+            else
+            {
+                systemMessage = "You are an expert AI designed to generate structured JSON reports from Graduate Medical Education (GME) narrative data. \r\n\r\nYour responses must strictly follow JSON syntax and schema fidelity. The user will provide a detailed analytic prompt describing the reporting task, structure, and context. You must:\r\n\r\n1. Output **only valid JSON** — no markdown, no prose, no explanations, and no commentary before or after the JSON.\r\n2. Ensure that every required key, nesting, and data element described in the user’s prompt is present in the final output.\r\n3. Populate all string fields with meaningful text based on the user’s content (never placeholders like “example”, “N/A”, or “TBD”).\r\n4. Preserve the exact field names, hierarchy, and order from the JSON schema defined in the user’s prompt.\r\n5. When arrays are expected, provide at least one populated item if data supports it, or an empty array (`[]`) if not.\r\n6. Do not include formatting such as backticks, code blocks, or indentation symbols.\r\n7. Validate JSON integrity before completing your output — there must be no missing commas, quotes, or brackets.\r\n8. The JSON should represent the final, complete deliverable that aligns with the ACGME Faculty and Institutional Requirements as described in the user’s input.\r\n9. Never include explanations, summaries, or reasoning outside the JSON.\r\n\r\nIf the user prompt includes sections, domain mappings, or examples, use them to infer structure and content.  \r\nIf ambiguity exists, prioritize adherence to structure and JSON validity over verbosity.\r\n\r\nFinal Output Rule:  \r\n→ Respond only with the fully populated JSON object that matches the required schema.\r\n";
+            }
+                string insightResponse = await MyInsightsGPT5Response(systemMessage, myInsightPrompt + "\n" + myInsightComments);
             MyInsightsResponse summaryResponse = new MyInsightsResponse();
             summaryResponse.SummaryJSON = insightResponse;
             aiResponse.Add(summaryResponse);
@@ -471,6 +656,7 @@ namespace SystemComments.Controllers
             int apiAttempts = 0;
             TimeHistory timeHistory = new TimeHistory();
             List<SAGEResponse> aiSavedResponse = new List<SAGEResponse>();
+            Int16 isEnable5Model = 0;
             try
             {
                 if (input.EvaluationID > 0)
@@ -496,12 +682,14 @@ namespace SystemComments.Controllers
                         //DataTable dtDefaultJSON = dsSageData.Tables[3];
                         Int64 settingsID = 0;
                         string apiFileContent = "";
+                        
                         if (dtPrompt.Rows.Count > 0)
                         {
                             defaultJSON = dtPrompt.Rows[0]["DefaultJSON"].ToString();
                             input.SageRequest = dtPrompt.Rows[0]["AIJSON"].ToString();
                             settingsID = Convert.ToInt64(dtPrompt.Rows[0]["SettingsID"].ToString());
                             apiFileContent = dtPrompt.Rows[0]["APIFileContent"].ToString();
+                            isEnable5Model = Convert.ToInt16(dtPrompt.Rows[0]["IsEnable5Model"].ToString());
                         }
                         if (dtResponses.Rows.Count > 0 && input.SageRequest.Length > 2)
                         {
@@ -602,7 +790,8 @@ namespace SystemComments.Controllers
                     //string aiComments = await GetAISAGEChatGptResponse1(comments + "\n" + sageQuestions + "\n include <section> tag between the tag <sections></sections>");
                     apiAttempts++;
                     Stopwatch aiResponseWatch = Stopwatch.StartNew();
-                    string aiComments = await GetFastOpenAIResponse3(sageQuestions + "\n" + comments + "\n include <mainsection></mainsection> without fail. \n Answer is always empty in the response for example <answer></answer>" , lastSection, totalSections);
+                    string aiComments = await GetFastOpenAIResponse3(comments + "\n include <mainsection></mainsection> without fail. \n Answer is always empty in the response for example <answer></answer>" 
+                        , lastSection, totalSections, sageQuestions, ((isEnable5Model == 1) ? true : false), input.SageRequest);
                     aiResponseWatch.Stop();
                     timeHistory.AIResponseSeconds = aiResponseWatch.Elapsed.TotalSeconds;
                     string extractJSON = SageExtractData(aiComments);
@@ -624,7 +813,7 @@ namespace SystemComments.Controllers
                     }
                     if (sectionCount == 0)
                     {
-                        aiComments = await GetFastOpenAIResponse2(comments + "\n" + sageQuestions + "\nSections are missed in the tag <sections></sections>, Please include." + allSectionsPrompt + "\n include <section> tag between the tag <sections></sections>");
+                        aiComments = await GetFastOpenAIResponse2(comments + "\n" + sageQuestions + "\nSections are missed in the tag <sections></sections>, Please include." + allSectionsPrompt + "\n include <section> tag between the tag <sections></sections>", isEnable5Model);
                         apiAttempts++;
                         extractJSON = SageExtractData(aiComments);
                         sectionCount = GetSectionsCount(extractJSON);
@@ -845,7 +1034,7 @@ namespace SystemComments.Controllers
                 client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", aiKey);
                 var requestBody = new
                 {
-                    model = "gpt-4o",
+                    model = "gpt-5",
                     messages = messages,
                     max_tokens = 9000,
                     temperature = 0,
@@ -970,16 +1159,16 @@ namespace SystemComments.Controllers
             // commentsType = 1; // 1 = MyInsights, 2 = NPV, 3 = SAGE
             try
             {                
-                string aiKey = _config.GetSection("AppSettings:NPVToken").Value;
-                string model = "gpt-4-turbo";
+                string aiKey = _config.GetSection("AppSettings:MyInsightsToken").Value;
+                string model = "gpt-4.1";
                 switch (commentsType)
                 {
                     case 2:
-                        model = "gpt-4-turbo";
+                        model = "gpt-4.1";
                         aiKey = _config.GetSection("AppSettings:NPVToken").Value;
                         break;
                     case 1:
-                        model = "gpt-3.5-turbo";
+                        model = "gpt-4.1";
                         aiKey = _config.GetSection("AppSettings:MyInsightsToken").Value;
                         break;
                     case 3:
@@ -987,8 +1176,8 @@ namespace SystemComments.Controllers
                         aiKey = _config.GetSection("AppSettings:SAGEToken").Value;
                         break;
                     default:
-                        model = "gpt-4-turbo";
-                        aiKey = _config.GetSection("AppSettings:NPVToken").Value;
+                        model = "gpt-4.1";
+                        aiKey = _config.GetSection("AppSettings:MyInsightsToken").Value;
                         break;
                 }
 
@@ -1009,13 +1198,19 @@ namespace SystemComments.Controllers
                         MaxTokens = 4000
                         //MaxTokens = 4000                        
                     };
-
+                    string systemMessage = "You are a helpful assistant.";
+                    if(commentsType == 1)
+                    {
+                        systemMessage = "You are an expert medical educator and GME performance analyst.\r\nYour goal is to generate structured HTML narrative feedback that compares trainee " +
+                            "performance over a dynamic evaluation date range.\r\nYour response must strictly follow the Expected Output Format and include all evaluator data, " +
+                            "including positive, neutral, and negative comments.\r\nYou will never use people name when responding and only use the word 'Resident' instead of people name\r\n\r\n---\r\n\r\n1. REQUIRED STRUCTURE\r\n\r\nEach competency must use the exact HTML header pattern shown below.\r\nDo not deviate or omit the “Initial 3 Months” and “Most Recent 3 Months” labels.\r\n\r\nExample template for every competency section:\r\n\r\n<h1>[Competency Name]</h1>  \r\n<h2>Initial 3 Months: (Performance from [Start Date] to [Mid Date])</h2>  \r\n<p>[Summary of early performance, including strengths and weaknesses]</p>  \r\n<h2>Most Recent 3 Months: (Performance from [Mid Date] to [End Date])</h2>  \r\n<p>[Summary of recent performance, including improvements or regressions]</p>  \r\n<h3>Actionable Feedback:</h3>  \r\n<ul>  \r\n<li>[Specific, behavioral, actionable steps based on evaluator comments]</li>  \r\n</ul>  \r\n\r\nAll <h2> headings must begin exactly with:\r\nInitial 3 Months: for the first period, and\r\nMost Recent 3 Months: for the second period.\r\n\r\nDo not omit or rephrase these labels under any circumstance.\r\n\r\n---\r\n\r\n2. DYNAMIC DATE SUBSTITUTION\r\n\r\nAlways substitute the user-provided dates dynamically inside parentheses.\r\n\r\nExample:\r\n\r\n<h2>Initial 3 Months: (Performance from 05/01/2025 to 08/01/2025)</h2>  \r\n<h2>Most Recent 3 Months: (Performance from 08/01/2025 to 10/31/2025)</h2>  \r\n\r\n---\r\n\r\n3. DATA COMPLETENESS AND NEGATIVE FEEDBACK INCLUSION\r\n\r\nInclude all evaluator comments, positive, neutral, and negative.\r\nExplicitly reflect negative or critical feedback under the correct competency.\r\nIf early evaluations contain negative comments, describe them accurately and note whether improvement occurred later.\r\nNever omit or soften negative feedback.\r\nEnsure that the analysis represents all comments from the provided evaluation period.\r\n\r\n---\r\n\r\n4. COMPETENCY STRUCTURE\r\n\r\nFollow this order and include every competency:\r\n\r\n1. Patient Care\r\n2. Medical Knowledge\r\n3. Systems-Based Practice\r\n4. Practice-Based Learning & Improvement\r\n5. Professionalism\r\n6. Interpersonal & Communication Skills\r\n7. Overall MyInsights\r\n\r\nThe Overall MyInsights section must include:\r\nStrengths\r\nAreas for Improvement\r\nActionable Steps\r\nShort-Term Goals (Next 3–6 months)\r\nLong-Term Goals (6–12 months)\r\n\r\n---\r\n\r\n5. OUTPUT VALIDATION RULES\r\n\r\nBefore finalizing the response, ensure that:\r\nEach competency has both <h2> subheaders labeled Initial 3 Months and Most Recent 3 Months.\r\nAll HTML is valid and well-formed.\r\nEvery competency includes a <h3>Actionable Feedback:</h3> block with at least one <li> item.\r\nFeedback tone remains professional, gender-neutral, and narrative in nature.\r\nNo placeholder text, “N/A,” or omitted sections are included.\r\n\r\n---\r\n\r\n6. DO NOT\r\n\r\nDo not use headings like “Performance from …” without the required prefix.\r\nDo not collapse both 3-month summaries into one section.\r\nDo not summarize outside the HTML structure.\r\nDo not include text outside competency sections.\r\n";
+                    }
                     request.Messages = new RequestMessage[]
                        {
                                         new RequestMessage()
                                         {
                                              Role = "system",
-                                             Content = "You are a helpful assistant."
+                                             Content = systemMessage
                                         },
                                         new RequestMessage()
                                         {
@@ -1328,6 +1523,52 @@ namespace SystemComments.Controllers
             }
         }
 
+        private async Task<string> MyInsightsGPT5Response1(string prompt, string comments)
+        {
+            Stopwatch sw = Stopwatch.StartNew();
+
+            //int maxTokens = Convert.ToInt32(_config.GetSection("AppSettings:MaxTokens").Value ?? "4000");
+            string systemMessages = prompt;
+
+            var messages = new List<ChatMessage>
+            {
+                ChatMessage.CreateSystemMessage(systemMessages),
+                ChatMessage.CreateUserMessage(comments)
+            };
+
+            var chatClient = _openAIAPEMyInsightsClient.GetChatClient("gpt-5");
+
+            var options = new ChatCompletionOptions
+            {
+                Temperature = 1,                     // lower for faster deterministic output
+                PresencePenalty = 0,
+                FrequencyPenalty = 0,
+                //MaxOutputTokenCount = maxTokens        // ✅ enforce upper bound on output
+            };
+
+            var sb = new StringBuilder();
+
+            try
+            {
+                // ✅ Streaming but buffered; less locking overhead
+                await foreach (var update in chatClient.CompleteChatStreamingAsync(messages, options))
+                {
+                    if (update.ContentUpdate is { Count: > 0 })
+                        sb.Append(update.ContentUpdate[0].Text);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in MyInsightsGPT5Response");
+            }
+
+            sw.Stop();
+            _logger.LogInformation($"MyInsightsGPT5Response completed in {sw.Elapsed.TotalSeconds:N2}s");
+
+            return sb.ToString();
+        }
+
+
         private async Task<string> MyInsightsGPT5Response(string prompt, string comments)
         {
             string time = "0";
@@ -1343,7 +1584,7 @@ namespace SystemComments.Controllers
             };
 
             StringBuilder sb = new StringBuilder();
-            var chatClient = _openAIClient.GetChatClient("gpt-5");
+            var chatClient = _openAIAPEMyInsightsClient.GetChatClient("gpt-5");
             var options = new ChatCompletionOptions
             {
                 Temperature = 1,
@@ -1394,7 +1635,7 @@ namespace SystemComments.Controllers
             };
 
             StringBuilder sb = new StringBuilder();
-            var chatClient = _openAIClient.GetChatClient("gpt-5");
+            var chatClient = _openAIAPEMyInsightsClient.GetChatClient("gpt-5");
             var options = new ChatCompletionOptions
             {
                 Temperature = 1,
@@ -1430,8 +1671,13 @@ namespace SystemComments.Controllers
 
         }
 
-        private async Task<string> GetFastOpenAIResponse3(string prompt, int currentSection = 1, int totalSections = 4)
+        private async Task<string> GetFastOpenAIResponse3(string prompt, int currentSection = 1, int totalSections = 4 
+            ,string userResponse = "" ,bool isEnable5model = false, string previousResponse = "")
         {
+            if (isEnable5model)
+            {
+                chatClient = _openAIClient.GetChatClient("gpt-5.1");
+            }
             prompt = prompt.Replace("```xml", "").Replace("<!-- Include follow-up only if response is vague -->", "");
             string time = "0";
             Stopwatch sw = Stopwatch.StartNew();
@@ -1445,62 +1691,84 @@ namespace SystemComments.Controllers
 
             string systemMessages = "You are an expert assessment designer. \nGoal: Respond concisely and completely within 2–3 seconds.\n" +
             "Always return strict valid XML as a single line (no spaces/newlines), ≤400 tokens. " +
-            "Always include <totalsections>. Fill <sectionfullname> as: 'Section {N} of {Total}: {SectionName}'. " +
+            "Always include <ts>. Fill <sfn> as: 'Section {N} of {Total}: {SectionName}'. " +
             //((currentSection == 1)
             //    ? "Also include <allsections> with every section name+fullname. "
             //    : "Exclude <allsections>. ") +
-            "<sections> must contain ONLY the sections listed in the user request. " +
+            "<ss> must contain ONLY the sections listed in the user request. " +
             "Never skip explicitly requested sections. " +
-            "Do not add summaries or extra text. ";
+            "Do not add summaries or extra text.\n Don't include <root> tag.\n Must read Evaluator Response for generating <followupsection>. \n";
 
            
             var options = new ChatCompletionOptions
             {
                 Temperature = 0,
-                TopP = 1,
-                PresencePenalty = 0,
-                FrequencyPenalty = 0,
-                MaxOutputTokenCount = 500,            
-                StopSequences = { "<endmessage>", "</endmessage>", "<em>", "</em>" }
+                //MaxOutputTokenCount = 500,
+                //TopP = 1,
+                //PresencePenalty = 0,
+                //FrequencyPenalty = 0,                        
+                //StopSequences = { "<endmessage>", "</endmessage>", "<em>", "</em>" }
             };
+            if (!isEnable5model)
+            {
+                options.TopP = 1;
+                options.PresencePenalty = 0;
+                options.FrequencyPenalty = 0;
+
+                options.StopSequences.Add("<endmessage>");
+                options.StopSequences.Add("</endmessage>");
+                options.StopSequences.Add("<em>");
+                options.StopSequences.Add("</em>");
+            }
 
             // 🔹 Helper: request one section
             async Task<string> GenerateSectionAsync(string sectionPrompt)
             {
-                //var chatClient = _openAIClient.GetChatClient("gpt-4o-mini");
-                var messages = new List<ChatMessage>
-                {
-                    ChatMessage.CreateSystemMessage(UpdateXMLTags(systemMessages, true)),
-                    ChatMessage.CreateUserMessage(UpdateXMLTags(sectionPrompt, true))
-                };
-
                 StringBuilder sb = new();
-                List<string> tokenBuffer = new();
-
-                await foreach (var update in chatClient.CompleteChatStreamingAsync(messages, options).ConfigureAwait(false))
+                try
                 {
-                    if (update.ContentUpdate.Count > 0)
+                    //var chatClient = _openAIClient.GetChatClient("gpt-4o-mini");
+                    var messages = new List<ChatMessage>
+                {
+                    ChatMessage.CreateSystemMessage(UpdateXMLTags(sectionPrompt, true)),
+                    ChatMessage.CreateUserMessage(UpdateXMLTags(userResponse, true))
+                    //ChatMessage.CreateAssistantMessage(UpdateXMLTags(SageExtraction.ConvertJsonToXmlContext(previousResponse), true))
+                };
+                    if (previousResponse.Length > 2)
                     {
-                        string token = update.ContentUpdate[0].Text;
-                        tokenBuffer.Add(token);
+                        messages.Add(ChatMessage.CreateAssistantMessage(UpdateXMLTags(SageExtraction.ConvertJsonToXmlContext(previousResponse), true)));
+                    }
+                    List<string> tokenBuffer = new();
 
-                        if (tokenBuffer.Count >= 20)
+                    await foreach (var update in chatClient.CompleteChatStreamingAsync(messages, options).ConfigureAwait(false))
+                    {
+                        if (update.ContentUpdate.Count > 0)
                         {
-                            sb.Append(string.Join("", tokenBuffer));
-                            tokenBuffer.Clear();
-                        }
+                            string token = update.ContentUpdate[0].Text;
+                            tokenBuffer.Add(token);
 
-                        if (token.Contains("</sc>") || token.Contains("</em>"))
-                            break;
+                            if (tokenBuffer.Count >= 20)
+                            {
+                                sb.Append(string.Join("", tokenBuffer));
+                                tokenBuffer.Clear();
+                            }
+
+                            if (token.Contains("</sc>") || token.Contains("</em>"))
+                                break;
+                        }
+                    }
+
+                    if (tokenBuffer.Count > 0)
+                    {
+                        sb.Append(string.Join("", tokenBuffer));
+                        tokenBuffer.Clear();
                     }
                 }
-
-                if (tokenBuffer.Count > 0)
+                catch (Exception ex)
                 {
-                    sb.Append(string.Join("", tokenBuffer));
-                    tokenBuffer.Clear();
-                }
 
+                }
+                sb.Replace("<root>", "").Replace("</root>", "");
                 return UpdateXMLTags(sb.ToString(), false);
             }
             string followupQuestionRule = "\r\n- If Section {currentsection} Main Question Answer is not empty and vague (<30 words, e.g., “good”), include exactly one <followupsection> with a <followupquestion>.\r\n- If <answer> is clear and >30 words, skip <followupsection>.";
@@ -1532,7 +1800,7 @@ namespace SystemComments.Controllers
             return xml;
         }
 
-        private async Task<string> GetFastOpenAIResponse2(string prompt, int currentSection = 1)
+        private async Task<string> GetFastOpenAIResponse2(string prompt, int currentSection = 1, bool isEnable5model = false)
         {
             string time = "0";
             Stopwatch sw = Stopwatch.StartNew();
@@ -1567,6 +1835,10 @@ namespace SystemComments.Controllers
 
             StringBuilder sb = new StringBuilder();
             var chatClient = _openAIClient.GetChatClient("gpt-4o-mini");
+            if (isEnable5model)
+            {
+                chatClient = _openAIClient.GetChatClient("gpt-5.1");
+            }
             var options = new ChatCompletionOptions
             {
                 Temperature = 0,

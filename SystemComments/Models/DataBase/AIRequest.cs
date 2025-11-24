@@ -70,13 +70,34 @@ namespace SystemComments.Models.DataBase
         public Int32 AcademicYear { get; set; } 
         public Int16 TargetID { get; set; } = 1;
 
-        public Int64 SummaryID { get; set; } = 0;
+        public Int64 UserID { get; set; } = 1;       
 
-        public string SummaryJSON { get; set; } = "";
+    }
+
+    public class MyInsightsSummary
+    {
+        public Int64 DepartmentID { get; set; }
+
+        public Int32 AcademicYear { get; set; }
+        public Int16 IsFaculty { get; set; } = 0;
 
         public Int64 UserID { get; set; } = 1;
 
-        public string Prompt { get; set; } = "";
-
     }
+
+    public class MyInsightsSurveyRequest
+    {
+        public Int64 DepartmentID { get; set; }
+
+        public Int32 AcademicYear { get; set; }
+        public Int16 IsResident { get; set; } = 1;
+
+        public Int64 UserID { get; set; }
+
+        public Int64 SurveyID { get; set; }
+
+        public string SurveyAssessmentType { get; set; } = "annual-program-evaluation";
+    }
+    
+
 }

@@ -165,4 +165,35 @@ namespace SystemComments.Models.DataBase
 
         public int ApiAttempts { get; set; } = 1;
     }
+
+    public class MyInsightsRotationSummaryResponse
+    {
+        public List<KeyValuePair<Int16, string>> Prompts { get; set; } = new();
+
+        public List<KeyValuePair<Int16, string>> SummaryJSONs { get; set; } = new();
+        
+        public string SummaryFeedbackJSON { get; set; } = "";
+
+        public string SummaryFeedbackPrompt { get; set; } = "";
+
+        public List<KeyValuePair<Int16, Int64>> SummaryIDs { get; set; } = new();
+
+        public Int64 SummaryID { get; set; }
+
+        public string Prompt { get; set; }
+
+        public string SummaryJSON { get; set; }
+
+    }
+
+    public class MyInsightsSurveyResponse
+    {
+        public string Part1Prompt { get; set; }
+
+        public string Part2Prompt { get; set; }
+
+        public string Part1JSON { get; set; }
+
+        public string Part2JSON { get; set; }
+    }
 }

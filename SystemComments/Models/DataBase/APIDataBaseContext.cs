@@ -52,7 +52,7 @@ namespace SystemComments.Models.DataBase
                     using (SqlCommand cmd = new SqlCommand(storedProcedureName, connection))
                     {
                         cmd.CommandType = CommandType.StoredProcedure;
-                        cmd.CommandTimeout = 200;
+                        cmd.CommandTimeout = 1200;
                         if (parameters != null) cmd.Parameters.AddRange(parameters);
 
                         using (SqlDataAdapter adapter = new SqlDataAdapter(cmd))
