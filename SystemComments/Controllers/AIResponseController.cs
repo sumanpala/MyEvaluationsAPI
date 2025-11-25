@@ -657,6 +657,7 @@ namespace SystemComments.Controllers
             TimeHistory timeHistory = new TimeHistory();
             List<SAGEResponse> aiSavedResponse = new List<SAGEResponse>();
             Int16 isEnable5Model = 0;
+            Int64 templateDepartmentID = input.DepartmentID;
             try
             {
                 if (input.EvaluationID > 0)
@@ -690,6 +691,7 @@ namespace SystemComments.Controllers
                             settingsID = Convert.ToInt64(dtPrompt.Rows[0]["SettingsID"].ToString());
                             apiFileContent = dtPrompt.Rows[0]["APIFileContent"].ToString();
                             isEnable5Model = Convert.ToInt16(dtPrompt.Rows[0]["IsEnable5Model"].ToString());
+                            templateDepartmentID = Convert.ToInt64(dtPrompt.Rows[0]["TemplateDepartmentID"].ToString());
                         }
                         if (dtResponses.Rows.Count > 0 && input.SageRequest.Length > 2)
                         {
@@ -790,16 +792,26 @@ namespace SystemComments.Controllers
                     //string aiComments = await GetAISAGEChatGptResponse1(comments + "\n" + sageQuestions + "\n include <section> tag between the tag <sections></sections>");
                     apiAttempts++;
                     Stopwatch aiResponseWatch = Stopwatch.StartNew();
-                    string aiComments = await GetFastOpenAIResponse3(comments + "\n include <mainsection></mainsection> without fail. \n Answer is always empty in the response for example <answer></answer>" 
-                        , lastSection, totalSections, sageQuestions, ((isEnable5Model == 1) ? true : false), input.SageRequest);
+                    string aiComments = "";
+                    if (templateDepartmentID == 1677)
+                    {
+                        aiComments = await GetFastOpenAIResponse3(comments + "\n include <mainsection></mainsection> without fail. \n Answer is always empty in the response for example <answer></answer>"
+                            , lastSection, totalSections, sageQuestions, ((isEnable5Model == 1) ? true : false), input.SageRequest);
+                    }
+                    else
+                    {
+                        aiComments = await GetFastOpenAIResponse4(comments + "\n include <mainsection></mainsection> without fail. \n Answer is always empty in the response for example <answer></answer>"
+                            , lastSection, totalSections);
+                    }
                     aiResponseWatch.Stop();
                     timeHistory.AIResponseSeconds = aiResponseWatch.Elapsed.TotalSeconds;
                     string extractJSON = SageExtractData(aiComments);
                     JToken parsedJson = JToken.Parse(extractJSON);
                     minifiedJson = JsonConvert.SerializeObject(parsedJson, Formatting.None);
+                    bool isNewFollowup = false;
                     if (input.SageRequest.Length > 0 && minifiedJson.Length > 0)
                     {
-                        minifiedJson = SageExtraction.MergeJson(input.SageRequest, minifiedJson);
+                        minifiedJson = SageExtraction.MergeJson(input.SageRequest, minifiedJson, ref isNewFollowup);
                         extractJSON = minifiedJson;
                     }
                     minifiedJson = UpdateRequestJSON(minifiedJson, input.SageRequest);
@@ -823,10 +835,10 @@ namespace SystemComments.Controllers
                         }
                         else if (input.SageRequest.Length > 0 && minifiedJson.Length > 0)
                         {
-                            extractJSON = SageExtraction.MergeJson(input.SageRequest, minifiedJson);
+                            extractJSON = SageExtraction.MergeJson(input.SageRequest, minifiedJson, ref isNewFollowup);
                         }
                     }
-                    else if (lastSection > sectionCount && lastSection <= totalSections)
+                    else if (lastSection > sectionCount && lastSection <= totalSections && !isNewFollowup)
                     {
                         string updatedPrompt = $"{comments} \n{sageQuestions} \n Section {lastSection} of {totalSections} is missed, please include. {allSectionsPrompt}\n include <section> tag between the tag <sections></sections>";
                         aiComments = await GetFastOpenAIResponse1(updatedPrompt);
@@ -839,12 +851,12 @@ namespace SystemComments.Controllers
                         }
                         else if (input.SageRequest.Length > 0 && minifiedJson.Length > 0)
                         {
-                            extractJSON = SageExtraction.MergeJson(input.SageRequest, minifiedJson);
+                            extractJSON = SageExtraction.MergeJson(input.SageRequest, minifiedJson, ref isNewFollowup);
                         }
                     }
 
                     sectionCount = GetSectionsCount(extractJSON);
-                    if (lastSection > sectionCount && lastSection <= totalSections && defaultJSON.Length > 0)
+                    if (lastSection > sectionCount && lastSection <= totalSections && defaultJSON.Length > 0 && !isNewFollowup)
                     {
                         // Include sections manually if API returns invalid data
                         extractJSON = InsertSection(extractJSON, defaultJSON, (lastSection - 1));
@@ -1671,6 +1683,102 @@ namespace SystemComments.Controllers
 
         }
 
+        private async Task<string> GetFastOpenAIResponse4(string prompt, int currentSection = 1, int totalSections = 4)
+        {
+            prompt = prompt.Replace("```xml", "").Replace("<!-- Include follow-up only if response is vague -->", "");
+            string time = "0";
+            Stopwatch sw = Stopwatch.StartNew();
+            string allSectionsBlock = SageExtraction.ExtractAndRemoveAllSections(ref prompt);
+            string finalXml = "";
+
+            // Split the prompt into static and dynamic parts           
+            //var parts = prompt.Split(new[] { "Inputs:" }, StringSplitOptions.RemoveEmptyEntries);
+            //string systemPart = parts.Length > 1 ? parts[0] : "";
+            //string userInputPart = parts.Length > 1 ? "Inputs:" + parts[1] : prompt;
+
+            string systemMessages = "You are an expert assessment designer. \nGoal: Respond concisely and completely within 2–3 seconds.\n" +
+            "Always return strict valid XML as a single line (no spaces/newlines), ≤400 tokens. " +
+            "Always include <totalsections>. Fill <sectionfullname> as: 'Section {N} of {Total}: {SectionName}'. " +
+            //((currentSection == 1)
+            //    ? "Also include <allsections> with every section name+fullname. "
+            //    : "Exclude <allsections>. ") +
+            "<sections> must contain ONLY the sections listed in the user request. " +
+            "Never skip explicitly requested sections. " +
+            "Do not add summaries or extra text. ";
+
+
+            var options = new ChatCompletionOptions
+            {
+                Temperature = 0,
+                TopP = 1,
+                PresencePenalty = 0,
+                FrequencyPenalty = 0,
+                MaxOutputTokenCount = 500,
+                StopSequences = { "<endmessage>", "</endmessage>", "<em>", "</em>" }
+            };
+
+            // 🔹 Helper: request one section
+            async Task<string> GenerateSectionAsync(string sectionPrompt)
+            {
+                //var chatClient = _openAIClient.GetChatClient("gpt-4o-mini");
+                var messages = new List<ChatMessage>
+                {
+                    ChatMessage.CreateSystemMessage(UpdateXMLTags(systemMessages, true)),
+                    ChatMessage.CreateUserMessage(UpdateXMLTags(sectionPrompt, true))
+                };
+
+                StringBuilder sb = new();
+                List<string> tokenBuffer = new();
+
+                await foreach (var update in chatClient.CompleteChatStreamingAsync(messages, options).ConfigureAwait(false))
+                {
+                    if (update.ContentUpdate.Count > 0)
+                    {
+                        string token = update.ContentUpdate[0].Text;
+                        tokenBuffer.Add(token);
+
+                        if (tokenBuffer.Count >= 20)
+                        {
+                            sb.Append(string.Join("", tokenBuffer));
+                            tokenBuffer.Clear();
+                        }
+
+                        if (token.Contains("</sc>") || token.Contains("</em>"))
+                            break;
+                    }
+                }
+
+                if (tokenBuffer.Count > 0)
+                {
+                    sb.Append(string.Join("", tokenBuffer));
+                    tokenBuffer.Clear();
+                }
+
+                return UpdateXMLTags(sb.ToString(), false);
+            }
+            string followupQuestionRule = "\r\n- If Section {currentsection} Main Question Answer is not empty and vague (<30 words, e.g., “good”), include exactly one <followupsection> with a <followupquestion>.\r\n- If <answer> is clear and >30 words, skip <followupsection>.";
+            if (currentSection <= 1)
+            {
+                var task1 = GenerateSectionAsync($"Important: Include only Section 1 and exclude <followupsection>. \n" + prompt);
+                await Task.WhenAll(task1);
+                finalXml = $"{allSectionsBlock}{task1.Result}";
+            }
+            else
+            {
+                var task1 = GenerateSectionAsync(prompt + $"\nImportant: Include only Section {currentSection - 1} of {totalSections}.\n{followupQuestionRule.Replace("{currentsection}", (currentSection - 1).ToString())}\n- Exclude <allsections> from response.\n");
+                var task2 = GenerateSectionAsync(prompt + $"\nImportant: Include only Section {currentSection} of {totalSections}.\n{followupQuestionRule.Replace("{currentsection}", (currentSection).ToString())}\n- Exclude <allsections> from response.\n");
+                await Task.WhenAll(task1, task2);
+                finalXml = $"{allSectionsBlock}{task1.Result}{ReplaceSecondSectionAsyncTags(task2.Result)}";
+            }
+
+
+            sw.Stop();
+            string timeTaken = sw.Elapsed.TotalSeconds.ToString("0.00");
+            return UpdateXMLTags(finalXml, false);
+
+
+        }
+
         private async Task<string> GetFastOpenAIResponse3(string prompt, int currentSection = 1, int totalSections = 4 
             ,string userResponse = "" ,bool isEnable5model = false, string previousResponse = "")
         {
@@ -1774,14 +1882,14 @@ namespace SystemComments.Controllers
             string followupQuestionRule = "\r\n- If Section {currentsection} Main Question Answer is not empty and vague (<30 words, e.g., “good”), include exactly one <followupsection> with a <followupquestion>.\r\n- If <answer> is clear and >30 words, skip <followupsection>.";
             if (currentSection <= 1)
             {
-                var task1 = GenerateSectionAsync($"Important: Include only Section 1 and exclude <followupsection>. \n" + prompt);
+                var task1 = GenerateSectionAsync($"Important: Include only Section 1 and exclude <followupsection>. \n -Exclude <allsections> from response.\n" + prompt);
                 await Task.WhenAll(task1);
                 finalXml = $"{allSectionsBlock}{task1.Result}";
             }
             else
             {
-                var task1 = GenerateSectionAsync(prompt + $"\nImportant: Include only Section {currentSection - 1} of {totalSections}.\n{followupQuestionRule.Replace("{currentsection}", (currentSection - 1).ToString())}\n- Exclude <allsections> from response.\n");
-                var task2 = GenerateSectionAsync(prompt + $"\nImportant: Include only Section {currentSection} of {totalSections}.\n{followupQuestionRule.Replace("{currentsection}", (currentSection).ToString())}\n- Exclude <allsections> from response.\n");
+                var task1 = GenerateSectionAsync($"\nImportant: Include only Section {currentSection - 1} of {totalSections}.\n{followupQuestionRule.Replace("{currentsection}", (currentSection - 1).ToString())}\n- Exclude <allsections> from response.\n" + prompt);
+                var task2 = GenerateSectionAsync(prompt + $"\nImportant: Include only Section {currentSection} of {totalSections}.\n{followupQuestionRule.Replace("{currentsection}", (currentSection).ToString())}\n- Exclude <allsections> from response.\n" + prompt);
                 await Task.WhenAll(task1, task2);
                 finalXml = $"{allSectionsBlock}{task1.Result}{ReplaceSecondSectionAsyncTags(task2.Result)}";
             }          

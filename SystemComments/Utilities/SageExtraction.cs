@@ -1268,7 +1268,7 @@ namespace SystemComments.Utilities
 
             return tableLookup[tableName];
         }
-        public static string MergeJson(string json1, string json2)
+        public static string MergeJson(string json1, string json2, ref bool isNewFollowup)
         {
             try
             {
@@ -1317,6 +1317,7 @@ namespace SystemComments.Utilities
                 var sections1 = (JArray)obj1["sections"];
                 var sections2 = (JArray)obj2["sections"];
                 int sectionsCount = sections1.Count;
+                isNewFollowup = false;
                 // Merge sections from JSON 2 if sectionnum not in JSON 1
                 foreach (var section2 in sections2)
                 {
@@ -1350,11 +1351,17 @@ namespace SystemComments.Utilities
                         if ((followup2 == null || followup2.Count == 0) && followup1 != null)
                         {
                             existingSection["followupsections"] = followup1;
+                            if (followup1.Count > 0)
+                            {
+                                isNewFollowup = true;
+                                break;
+                            }
                         }
                         else 
                         {
                             if (followup2 != null && followup2.Count > 0)
                             {
+                                int followupIndex = 1;
                                 foreach (var f2 in followup1)
                                 {
                                     string f2Id = f2["id"]?.ToString();
@@ -1365,13 +1372,20 @@ namespace SystemComments.Utilities
                                         (f1["id"]?.ToString() == f2Id && !string.IsNullOrEmpty(f2Id)) ||
                                         f1["question"]?.ToString() == f2Question);
 
-                                    if (!exists)
+                                    if (!exists && followupIndex <= 3)
                                     {
                                         followup2.Add(f2.DeepClone()); // add missing follow-up
+                                        isNewFollowup = true;
+                                        break;
                                     }
+                                    followupIndex++;
                                 }
                             }
                         }
+                    }
+                    if(isNewFollowup)
+                    {
+                        break;
                     }
                 }
 

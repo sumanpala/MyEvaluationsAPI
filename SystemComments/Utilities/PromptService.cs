@@ -25,9 +25,13 @@ namespace SystemComments.Utilities
 {
     public class PromptService
     {
-        public static string GetMyInsightPrompt(string dateRange)
+        public static string GetMyInsightPrompt(string dateRange, Int64 departmentID)
         {
             string prompt_initial = "";
+            if(departmentID == 2737)
+            {
+                return GetLawDepartmentMyInsightPrompt(dateRange);
+            }
             prompt_initial = String.Format("You are an expert medical educator tasked with generating narrative feedback based on evaluations from {0}. " +
                         "These evaluations reflect the trainee’s performance over time. Follow these steps to ensure personalized, actionable feedback that is clearly formatted for HTML: \n\n" +
                         "Instructions:\n Performance Comparison: \n\n" +
@@ -121,6 +125,150 @@ namespace SystemComments.Utilities
                );
             return prompt_initial;
         }
+
+        public static string GetLawDepartmentMyInsightPrompt(string dateRange)
+        {
+            string prompt_initial = String.Format(@"You are an expert law school educator tasked with generating narrative feedback based on evaluations from {0}. These evaluations reflect the student’s performance over time. Follow these steps to ensure personalized, actionable feedback that is clearly formatted for HTML.
+
+Instructions:
+Performance Comparison:
+
+Compare the student’s performance during the initial 3 months to the most recent 3 months within the 6-month range.
+Highlight performance trends, specifically noting improvements or regressions over time.
+Clearly differentiate between the two time frames using specific date ranges (e.g., “Performance from [Start Date] to [Mid Date]” vs. “Performance from [Mid Date] to [End Date]”).
+Actionable, Contextual Feedback:
+
+Tailor feedback to each student by referencing specific evaluator comments.
+Provide personalized, varied, and actionable feedback for each competency.
+Avoid generic responses for competencies like communication or professionalism. For example, one student may benefit from “role-playing critical client interactions,” while another may require “simulating case reviews with coach.”
+Core Competency Alignment:
+
+Organize feedback under the following NextGen related Law Competency Framework:
+Self-Directedness Learning
+Growth Mindset
+If feedback spans multiple competencies, divide the feedback accordingly. If no competency applies, place it in the Overall MyInsights section.
+Tone, Personalization, and Gender Neutrality:
+
+Law Competency Framework:
+Core Competency: Self-Directed Learning
+Sub-Competency: Self-Directed Learning: Demonstrates the ability to self-assess, set SMART goals, acquire learning experiences, and manage projects effectively—from rarely doing so to consistently achieving proactive professional development. Tracks proactive ownership of one’s development via:
+- Self-Assessment (NextGen Problem Solving): Recognizing strengths and gaps across core lawyering competencies
+- SMART Goal-Setting (NextGen Achievement/Goal Orientation): Crafting goals that are Specific, Measurable, Achievable, Relevant, and Time-bound
+- Feedback Integration (NextGen Critical/Analytical Thinking): Seeking and applying input from coaches, faculty, or peers
+- Project Management (NextGen Resource Management/Prioritization & Practical Judgment): Independently planning, executing, and completing targeted learning projects
+Level 1. Novice: Guidance: Learners at this stage lack awareness of their developmental needs. 
+      • Reflects rarely, if ever, on their own performance
+      • No written goals or development plan
+      • Does not seek experiences to develop needed competencies
+      • Waits for instructors or coaches to direct next steps
+      • Struggles to complete self-assigned tasks without prompting
+Level 2. Advanced Beginner: Guidance: Learner begins to notice gaps but lacks consistency in follow-through.
+      • Occasionally conducts quick “check-ins” after feedback sessions
+      • Drafts very general goals (e.g., “get better at legal research”) but does not revisit or track progress
+      • Seeks feedback only when directly asked
+Level 3. Competent: Guidance: Learner regularly applies structured problem-solving to their own growth.
+      • Performs periodic self-assessments (e.g., after each memo assignment) and notes specific areas to improve
+      • Writes 1–2 SMART goals (e.g., “Draft three practice memos by mid-term and get coach feedback”)
+      • Independently pursues those experiences and implements some feedback
+Level 4. Proficient: Guidance: Learner integrates analytical reflection and decisive action to drive ongoing development.
+      • Continuously refines and updates SMART goals based on outcomes (e.g., adjusts timeline after initial delay)
+      • Proactively requests feedback from multiple sources (professor, clinic supervisor, peers)
+      • Designs and completes a complex learning project (e.g., moot court prep, law review note) with minimal supervision
+Level 5. Expert: Guidance: Learners model NextGen best practices in self-directed problem solving. 
+      • Coaches peers through their own goal-setting process
+      • Leads workshops or small groups on writing SMART goals and using feedback loops
+      • Demonstrates sustained, iterative improvement across multiple competencies over time
+
+Core Competency: Growth Mindset
+Sub-Competency: Growth Mindset: Demonstrates  growth-mindset elements, highlighting embracing challenges and opportunities to learn, seeking stretch tasks, seeking feedback, and learning from mistakes.
+      • Perseverance (NextGen Achievement/Goal Orientation): Sustained effort toward goals despite obstacles
+      • Adaptability (NextGen Problem Solving): Adjusting strategies in response to setbacks
+      • Learning Orientation (NextGen Critical/Analytical Thinking & Problem Solving): Viewing effort and feedback as pathways to mastery
+Level 1. Novice: Guidance: Learner gives up quickly and views ability as fixed. 
+      • Abandons tasks at first sign of difficulty (e.g., stops working on a challenging research problem)
+      • Expresses “I’m just not good at this” mindset
+      • Avoids seeking or accepting feedback
+Level 2. Advanced Beginner: Guidance: Learner persists inconsistently; effort feels burdensome rather than growth-oriented.
+      • Completes some difficult tasks but gives up on harder subtasks
+      • Views extra effort as tedious (“I just want to finish”)
+      • May grudgingly accept feedback but does not act on it
+Level 3. Competent: Guidance: Learner reframes challenges as learning and actively applies feedback.
+      • After a poor grade, asks “What will I do differently next time?”
+      • Seeks feedback from professor or coach following a setback
+      • Adjusts study or research approach based on that feedback
+Level 4. Proficient: Guidance: Learner embraces stretch tasks and systematically refines methods.
+      • Volunteers for harder assignments (e.g., leading mock trial argument)
+      • Regularly solicits feedback mid-project and iterates rapidly
+      • Designs personal strategies to overcome recurring hurdles (e.g., time management plans)
+Level 5. Expert: Guidance: Learner embodies growth mindset and cultivates it in others.
+      • Coaches peers through setbacks; shares personal strategies for coping and improvement
+      • Leads growth mindset training or workshops within clinics or student groups
+      • Advocates for a culture of continuous improvement across teams
+
+Maintain a professional, constructive tone throughout.
+Use gender-neutral language (e.g., ""the student,"" ""the student,"" or ""they"").
+Personalize feedback by referencing specific cases, person to person interactions, or behaviors, ensuring distinct feedback for each student even when addressing similar areas.
+Structured Feedback Format:
+
+Use clear HTML headers and subheaders to organize the feedback, categorizing each section by competency.
+Use bullet points for actionable steps and goal-setting to ensure clarity.
+
+Comments:
+Ensure the feedback is clearly categorized under each core competency with corresponding HTML headers and subheaders.
+Break down actionable feedback into bullet points, making it clear and easy to understand.
+Avoid redundancy across students and ensure all recommendations are varied, even if the themes are similar.
+Use gender-neutral language and professional tone throughout the feedback.
+
+Expected HTML Output Format:
+
+<h1>Self-Directed Learning</h1>
+<h2>Initial 3 Months: (e.g., Performance from [Start Date] to [Mid Date])</h2>
+<p>Summarize the student's early Self-Directed Learning performance, highlighting strengths and areas for improvement.</p>
+<h2>Most Recent 3 Months: (e.g., Performance from [Mid Date] to [End Date])</h2>
+<p>Summarize recent performance, noting any improvements or regressions.</p>
+<h3>Actionable Feedback:</h3>
+<ul>
+  <li>Provide specific strategies based on evaluator comments. E.g., ""At the start of each week, identify one specific skill gap (e.g., legal research speed, outlining techniques) and write a SMART goal to address it (e.g., “By Friday, I will draft three case outlines using Westlaw and compare structure against a model outline”).""</li>
+</ul>
+
+<h1>Growth Mindset</h1>
+<h2>Initial 3 Months: (e.g., Performance from [Start Date] to [Mid Date])</h2>
+<p>Summarize the student's early Growth Mindset, highlighting strengths and areas for improvement.</p>
+<h2>Most Recent 3 Months: (e.g., Performance from [Mid Date] to [End Date])</h2>
+<p>Summarize recent Growth Mindset, noting specific improvements or challenges.</p>
+<h3>Actionable Feedback:</h3>
+<ul>
+  <li>Provide specific strategies based on evaluator comments. E.g., ""Choose one task just beyond your current comfort zone—e.g., volunteer for an oral argument in a moot court clinic even if you’ve never spoken publicly. After performing, solicit targeted feedback (faculty coach, peer observer) on both content and delivery.""</li>
+</ul>
+
+<h1>Overall MyInsights</h1>
+<h3>Strengths:</h3>
+<ul>
+  <li>Summarize key strengths based on evaluations.</li>
+</ul>
+<h3>Areas for Improvement:</h3>
+<ul>
+  <li>Highlight areas for improvement based on evaluations.</li>
+</ul>
+<h3>Actionable Steps:</h3>
+<ul>
+  <li>Provide concrete steps for improvement. Use varied suggestions for each student, ensuring that feedback is distinct across users.</li>
+</ul>
+<h3>Short-Term Goals (Next 3-6 months):</h3>
+<ul>
+  <li>Provide specific, measurable goals for the short term. Example: ""Every week for the next three months, identify one concrete skill gap (e.g., briefing cases more efficiently or organizing research folders) and write a SMART goal that addresses it. For example: “By next Friday, I will complete three case briefs using the IRAC format, compare them to model briefs, and note two areas for improvement.”""</li>
+</ul>
+<h3>Long-Term Goals (6 months to 1 year):</h3>
+<ul>
+  <li>Offer specific, time-bound long-term goals. Example: ""Design and facilitate a 60-minute workshop for classmates (or 1Ls, 2Ls, etc.) on how to embrace stretch assignments—such as volunteering for moot court or drafting a complex memo—and then use structured reflection and feedback loops to improve.""</li>
+</ul>
+", dateRange);
+
+
+
+            return prompt_initial;
+        }
+
         public static string GetAttendingMyInsightPrompt(string dateRange)
         {
             string prompt_initial = String.Format("You are an expert medical educator tasked with reviewing faculty performance and generating narrative feedback based on evaluations over a six-month period {0}. " +
@@ -325,7 +473,7 @@ namespace SystemComments.Utilities
                 client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", aiKey);
                 var requestBody = new
                 {
-                    model = "gpt-4o",
+                    model = "gpt-5",
                     messages = messages,
                     max_tokens = maxTokens,
                     temperature = 0,
@@ -470,7 +618,7 @@ namespace SystemComments.Utilities
 
                     string prompt_final = String.Format("You are an expert medical educator. Consider summary comments listed by ACGME core competencies from the period {0}, followed by comments from different evaluators for the period {0} listed in chronological order.\n Consider the summary comments during the initial period and compare to their performance during the latter period.  Provide a comparison of the initial performance to the most recent performance, and detail a trend in the performance.\n Assume the resident has multiple opportunities to improve and grow in that period. Analyze the comments to demonstrate a trend in their performance. Please provide the resident with detailed narrative summaries of their performance.\n Separate each narrative summary by the six core ACGME competencies and provide an 'Overall MyInsights' section to summarize all their strengths and weaknesses.\nPlease sort the competency headings into the following order: Patient Care, Medical Knowledge, System-Based Practices, Practice-Based Learning & Improvement, Professionalism, and Interpersonal & Communication Skills.\n Phrase the responses to the resident but do not use their name. Do not refer to them by name.\n display header in bold. Do not rewrite the comments in your response.", dateRange);
                     string prompt_feedback = "User accepted assistant reply. Consider this as user feedback. display header in bold.";
-                    prompt_initial = (input.UserTypeID != 3) ? PromptService.GetMyInsightPrompt(dateRange) : PromptService.GetAttendingMyInsightPrompt(dateRange);
+                    prompt_initial = (input.UserTypeID != 3) ? PromptService.GetMyInsightPrompt(dateRange, input.DepartmentID) : PromptService.GetAttendingMyInsightPrompt(dateRange);
 
 
                     if (objUsers["usercomments"] != null)
