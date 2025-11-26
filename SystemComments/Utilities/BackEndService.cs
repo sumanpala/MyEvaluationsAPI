@@ -707,7 +707,7 @@ namespace SystemComments.Utilities
                 DataTable dtComments = dsHistory.Tables[1];
 
                 userComments += "\n Evaluation comments and feedback from various rotations and activities: \"\"\" \n";
-                userComments += string.Format("\n Use the following narratives for {0} ", DateTime.Now.AddYears(-1).ToString("mm/dd/yyyy") + "-" + DateTime.Now.ToString("mm/dd/yyyy"));
+                userComments += string.Format("\n Use the following narratives for {0} ", DateTime.Now.AddYears(-1).ToString("MM/dd/yyyy") + "-" + DateTime.Now.ToString("MM/dd/yyyy"));
 
                 // Dictionary to map each CommentsType to relevant fields
                 var commentsTypeFields = new Dictionary<string, List<string>>()
