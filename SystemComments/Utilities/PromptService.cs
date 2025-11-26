@@ -213,7 +213,7 @@ Structured Feedback Format:
 Use clear HTML headers and subheaders to organize the feedback, categorizing each section by competency.
 Use bullet points for actionable steps and goal-setting to ensure clarity.
 
-Comments:
+Instructions:
 Ensure the feedback is clearly categorized under each core competency with corresponding HTML headers and subheaders.
 Break down actionable feedback into bullet points, making it clear and easy to understand.
 Avoid redundancy across students and ensure all recommendations are varied, even if the themes are similar.

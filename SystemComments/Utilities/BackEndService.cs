@@ -696,7 +696,8 @@ namespace SystemComments.Utilities
                             new SqlParameter("@RotationID", "0"),
                             new SqlParameter("@EvaluatorID", "0"),
                             new SqlParameter("@InCludedCommnets", "Evaluation,EvaluateeAcknowledgement,EvaluatorAcknowledgement,ProgramDirector,FreeFormResponses,EarlyWarningComments,ExceedExpectationComments\r\n\t,ConfidentialComments,CMEEvaluations,ConferenceEvaluations,CAWComments,ProceduresComments,PatientLogsComments,LearningAssignmentsComments,MyPortfolio"),
-                            new SqlParameter("@IsDeletedRotations","0")
+                            new SqlParameter("@IsDeletedRotations","0"),
+                            new SqlParameter("@EvaluationID",input.EvaluationID)
 
                     };
 

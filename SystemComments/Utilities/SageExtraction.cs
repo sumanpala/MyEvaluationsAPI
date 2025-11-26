@@ -815,6 +815,11 @@ namespace SystemComments.Utilities
                 {
                     totalSections = int.Parse(jsonObject["totalsections"].ToString());
                 }
+                if(totalSections == 1 && jsonObject["allsections"] != null)
+                {
+                    var allSections = jsonObject["allsections"];
+                    totalSections = allSections.Count();
+                }
 
                 var sections = jsonObject["sections"];
                 // Find last section with non-empty mainsection.answer
