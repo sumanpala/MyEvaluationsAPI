@@ -53,6 +53,9 @@ namespace SystemComments.Controllers
         private readonly HttpClient _httpClient; // Sage
         private readonly OpenAIClient _openAIClient; // Sage
         private readonly OpenAIClient _openAIMyInsightsClient; //MyInsights
+        private readonly OpenAIClient _openAIAttendingMyInsightsClient; //Attending MyInsights
+
+        private readonly OpenAIClient _openAINPVClient; //NPV
         private readonly OpenAIClient _openAIAPEMyInsightsClient; // APE MyInsights
         private readonly OpenAIClient _openAIAzureClient;
 
@@ -79,6 +82,22 @@ namespace SystemComments.Controllers
                  NetworkTimeout = TimeSpan.FromSeconds(500)
              }
             );
+
+            _openAIAttendingMyInsightsClient = new OpenAIClient(
+            new ApiKeyCredential(config["AppSettings:MyInsightsAttendingToken"]),
+            new OpenAIClientOptions
+            {
+                NetworkTimeout = TimeSpan.FromSeconds(500)
+            }
+           );
+
+            _openAINPVClient = new OpenAIClient(
+            new ApiKeyCredential(config["AppSettings:NPVToken"]),
+            new OpenAIClientOptions
+            {
+                NetworkTimeout = TimeSpan.FromSeconds(500)
+            }
+           );
 
             _openAIAPEMyInsightsClient = new OpenAIClient(
              new ApiKeyCredential(config["AppSettings:MyInsightsAPEToken"]),
@@ -189,19 +208,20 @@ namespace SystemComments.Controllers
             try
             {
                 string comments = "";
+                string userComments = "";
                 string aiResponse = "";
                 if (input.IsNPV == 1)
                 {
                     Comments objComments = new Comments();
                     objComments.InputComments = input.InputPrompt;
                     comments = objComments.InputComments;
-                    AIResponse response = SendCustomComments(objComments, 2);
+                    AIResponse response = await SendCustomComments(objComments, userComments, 2, input.UserTypeID);
                     aiResponse = response.OutputResponse;
                 }
                 else if (input.IsSage == 1)
                 {
                     comments = PromptService.GetSagePrompt(input);
-                    aiResponse = GetChatGptResponse(comments, 3);
+                    aiResponse = await GetChatGptResponse(comments, userComments, 3);
                 }                
                 //else if (input.InputPrompt.Length > 0) -- Update Existing Comments
                 //{
@@ -210,8 +230,8 @@ namespace SystemComments.Controllers
                 //}
                 else
                 {
-                    comments = PromptService.GetComments(input);
-                    aiResponse = GetChatGptResponse(comments, 1);
+                    (comments, userComments) = await PromptService.GetComments(input, ((input.UserTypeID == 3) ? _openAIAttendingMyInsightsClient : _openAIMyInsightsClient));
+                    aiResponse = await GetChatGptResponse(comments, userComments, 1);
                 }
                
                 string aiComments = "";
@@ -349,63 +369,117 @@ namespace SystemComments.Controllers
                      
         
 
-        [HttpPost("TestModel5")]
-        [AllowAnonymous]
-        public async Task<string> TestGPT5Model()
-        {
-            return await GetGPT5Response("");
-        }
+        //[HttpPost("TestModel5")]
+        //[AllowAnonymous]
+        //public async Task<string> TestGPT5Model()
+        //{
+        //    return await GetGPT5Response("");
+        //}
 
-        [HttpPost("TestAzureDomain")]
-        [AllowAnonymous]
-        public async Task<string> TestAzureDomain()
-        {
-            string time = "0";
-            Stopwatch sw = Stopwatch.StartNew();
-            int maxTokens = Convert.ToInt32(_config.GetSection("AppSettings:MaxTokens").Value);
+        //[HttpPost("TestAzureDomain")]
+        //[AllowAnonymous]
+        //public async Task<string> TestAzureDomain()
+        //{
+        //    string time = "0";
+        //    Stopwatch sw = Stopwatch.StartNew();
+        //    int maxTokens = Convert.ToInt32(_config.GetSection("AppSettings:MaxTokens").Value);
 
-            string systemMessages = "You are good at poetry.\n Return result in 2 to 3 seconds.";
+        //    string systemMessages = "You are good at poetry.\n Return result in 2 to 3 seconds.";
 
-            var messages = new List<ChatMessage>
-            {
-                ChatMessage.CreateSystemMessage(systemMessages),
-                ChatMessage.CreateUserMessage("Plese provide one good poetry.")
-            };
+        //    var messages = new List<ChatMessage>
+        //    {
+        //        ChatMessage.CreateSystemMessage(systemMessages),
+        //        ChatMessage.CreateUserMessage("Plese provide one good poetry.")
+        //    };
 
-            StringBuilder sb = new StringBuilder();           
-            var options = new ChatCompletionOptions
-            {
-                Temperature = 1,
-                TopP = 1,
-                PresencePenalty = 0,
-                FrequencyPenalty = 0,
-                MaxOutputTokenCount = 400
-            };
+        //    StringBuilder sb = new StringBuilder();           
+        //    var options = new ChatCompletionOptions
+        //    {
+        //        Temperature = 1,
+        //        TopP = 1,
+        //        PresencePenalty = 0,
+        //        FrequencyPenalty = 0,
+        //        MaxOutputTokenCount = 400
+        //    };
 
-            try
-            {
-                // ✅ Streaming response from OpenAI
-                await foreach (var update in chatAzureClient.CompleteChatStreamingAsync(messages, options))
-                {
-                    if (update.ContentUpdate.Count > 0)
-                    {
-                        string token = update.ContentUpdate[0].Text;
-                        sb.Append(token);
+        //    try
+        //    {
+        //        // ✅ Streaming response from OpenAI
+        //        await foreach (var update in chatAzureClient.CompleteChatStreamingAsync(messages, options))
+        //        {
+        //            if (update.ContentUpdate.Count > 0)
+        //            {
+        //                string token = update.ContentUpdate[0].Text;
+        //                sb.Append(token);
 
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
+        //            }
+        //        }
+        //    }
+        //    catch (Exception ex)
+        //    {
 
-            }
+        //    }
 
-            sw.Stop();
-            time = sw.Elapsed.TotalSeconds.ToString();
-            // let prefetch complete in background
-            // _ = prefetchTask;
-            return sb.ToString(); 
-        }
+        //    sw.Stop();
+        //    time = sw.Elapsed.TotalSeconds.ToString();
+        //    // let prefetch complete in background
+        //    // _ = prefetchTask;
+        //    return sb.ToString(); 
+        //}
+
+        //[HttpPost("GetTokenUsage")]
+        //[AllowAnonymous]
+        //public async Task<string> GetTokenUsage([FromBody] TokenUsage input)
+        //{
+        //    TokenName token = (TokenName)input.TokenName;
+        //    string apiKey = "";
+        //    switch (token.ToString())
+        //    {
+        //        case "MyInsightsToken":
+        //            apiKey = _config.GetSection("AppSettings:MyInsightsToken").Value;
+        //            break;
+        //        case "NPVToken":
+        //            apiKey = _config.GetSection("AppSettings:NPVToken").Value;
+        //            break;
+        //        case "AIToken":
+        //            apiKey = _config.GetSection("AppSettings:AIToken").Value;
+        //            break;
+        //        case "SAGEToken":
+        //            apiKey = _config.GetSection("AppSettings:SAGEToken").Value;
+        //            break;
+        //        case "MyInsightsAPEToken":
+        //            apiKey = _config.GetSection("AppSettings:MyInsightsAPEToken").Value;
+        //            break;
+        //        case "MyInsightsAttendingToken":
+        //            apiKey = _config.GetSection("AppSettings:MyInsightsAttendingToken").Value;
+        //            break;
+        //    }
+        //    if (apiKey.Length > 0)
+        //    {
+
+
+        //        using var http = new HttpClient();
+        //        http.DefaultRequestHeaders.Authorization =
+        //            new AuthenticationHeaderValue("Bearer", apiKey);
+        //        http.DefaultRequestHeaders.Accept.Add(
+        //            new MediaTypeWithQualityHeaderValue("application/json"));
+
+        //        string url = $"https://api.openai.com/v1/usage?date={input.StartDate}&end_date={input.EndDate}";
+
+        //        HttpResponseMessage response = await http.GetAsync(url);
+
+        //        if (!response.IsSuccessStatusCode)
+        //        {
+        //            Console.WriteLine($"Error: {response.StatusCode}");
+        //            Console.WriteLine(await response.Content.ReadAsStringAsync());                   
+        //        }
+
+        //        string content = await response.Content.ReadAsStringAsync();
+        //        Console.WriteLine("Usage response:");
+        //        Console.WriteLine(content);
+        //    }
+        //    return token.ToString();
+        //}
 
         [HttpPost("MyInsightsRotations1")]
         [AllowAnonymous]
@@ -1031,7 +1105,7 @@ namespace SystemComments.Controllers
 
         private async Task<string> GetAPEAIResponse(string prompt, Int16 promptType = 1)
         {
-            string time = "0";            
+            //string time = "0";            
             StringBuilder delta = new StringBuilder();           
             List<object> messages = new List<object>
             {
@@ -1132,7 +1206,7 @@ namespace SystemComments.Controllers
             //    }
 
             //}
-            return delta.ToString();
+            //return delta.ToString();
         }
 
         private async Task<string> SummarizeCommentsWithGPT(string comments)
@@ -1166,12 +1240,16 @@ namespace SystemComments.Controllers
         }
 
 
-        private string GetChatGptResponse(string comments, Int16 commentsType = 1)
+        private async Task<string> GetChatGptResponse(string comments, string userComments, Int16 commentsType = 1, Int32 userType = 0)
         {
             // commentsType = 1; // 1 = MyInsights, 2 = NPV, 3 = SAGE
             try
             {                
                 string aiKey = _config.GetSection("AppSettings:MyInsightsToken").Value;
+                if(commentsType != 3 && userType == 3)
+                {
+                    aiKey = _config.GetSection("AppSettings:MyInsightsAttendingToken").Value;
+                }
                 string model = "gpt-4.1";
                 switch (commentsType)
                 {
@@ -1211,35 +1289,50 @@ namespace SystemComments.Controllers
                         //MaxTokens = 4000                        
                     };
                     string systemMessage = "You are a helpful assistant.";
+                    
+
                     if(commentsType == 1)
                     {
                         systemMessage = "You are an expert medical educator and GME performance analyst.\r\nYour goal is to generate structured HTML narrative feedback that compares trainee " +
                             "performance over a dynamic evaluation date range.\r\nYour response must strictly follow the Expected Output Format and include all evaluator data, " +
                             "including positive, neutral, and negative comments.\r\nYou will never use people name when responding and only use the word 'Resident' instead of people name\r\n\r\n---\r\n\r\n1. REQUIRED STRUCTURE\r\n\r\nEach competency must use the exact HTML header pattern shown below.\r\nDo not deviate or omit the “Initial 3 Months” and “Most Recent 3 Months” labels.\r\n\r\nExample template for every competency section:\r\n\r\n<h1>[Competency Name]</h1>  \r\n<h2>Initial 3 Months: (Performance from [Start Date] to [Mid Date])</h2>  \r\n<p>[Summary of early performance, including strengths and weaknesses]</p>  \r\n<h2>Most Recent 3 Months: (Performance from [Mid Date] to [End Date])</h2>  \r\n<p>[Summary of recent performance, including improvements or regressions]</p>  \r\n<h3>Actionable Feedback:</h3>  \r\n<ul>  \r\n<li>[Specific, behavioral, actionable steps based on evaluator comments]</li>  \r\n</ul>  \r\n\r\nAll <h2> headings must begin exactly with:\r\nInitial 3 Months: for the first period, and\r\nMost Recent 3 Months: for the second period.\r\n\r\nDo not omit or rephrase these labels under any circumstance.\r\n\r\n---\r\n\r\n2. DYNAMIC DATE SUBSTITUTION\r\n\r\nAlways substitute the user-provided dates dynamically inside parentheses.\r\n\r\nExample:\r\n\r\n<h2>Initial 3 Months: (Performance from 05/01/2025 to 08/01/2025)</h2>  \r\n<h2>Most Recent 3 Months: (Performance from 08/01/2025 to 10/31/2025)</h2>  \r\n\r\n---\r\n\r\n3. DATA COMPLETENESS AND NEGATIVE FEEDBACK INCLUSION\r\n\r\nInclude all evaluator comments, positive, neutral, and negative.\r\nExplicitly reflect negative or critical feedback under the correct competency.\r\nIf early evaluations contain negative comments, describe them accurately and note whether improvement occurred later.\r\nNever omit or soften negative feedback.\r\nEnsure that the analysis represents all comments from the provided evaluation period.\r\n\r\n---\r\n\r\n4. COMPETENCY STRUCTURE\r\n\r\nFollow this order and include every competency:\r\n\r\n1. Patient Care\r\n2. Medical Knowledge\r\n3. Systems-Based Practice\r\n4. Practice-Based Learning & Improvement\r\n5. Professionalism\r\n6. Interpersonal & Communication Skills\r\n7. Overall MyInsights\r\n\r\nThe Overall MyInsights section must include:\r\nStrengths\r\nAreas for Improvement\r\nActionable Steps\r\nShort-Term Goals (Next 3–6 months)\r\nLong-Term Goals (6–12 months)\r\n\r\n---\r\n\r\n5. OUTPUT VALIDATION RULES\r\n\r\nBefore finalizing the response, ensure that:\r\nEach competency has both <h2> subheaders labeled Initial 3 Months and Most Recent 3 Months.\r\nAll HTML is valid and well-formed.\r\nEvery competency includes a <h3>Actionable Feedback:</h3> block with at least one <li> item.\r\nFeedback tone remains professional, gender-neutral, and narrative in nature.\r\nNo placeholder text, “N/A,” or omitted sections are included.\r\n\r\n---\r\n\r\n6. DO NOT\r\n\r\nDo not use headings like “Performance from …” without the required prefix.\r\nDo not collapse both 3-month summaries into one section.\r\nDo not summarize outside the HTML structure.\r\nDo not include text outside competency sections.\r\n";
                     }
-                    request.Messages = new RequestMessage[]
+                    else if (commentsType == 2)
+                    {
+                       string[] splitPrompt = comments.Split("##Summarized Comments:##");
+                        if (splitPrompt.Length > 1)
+                        {
+                            userComments = splitPrompt[1];
+                            userComments = await PromptService.SummarizeComments(comments, "gpt-4.1", _openAINPVClient);
+                            if (userComments.Length > 0)
+                            {
+                                comments = splitPrompt[0];
+                            }
+                        }
+                    }
+                     request.Messages = new RequestMessage[]
                        {
                                         new RequestMessage()
                                         {
                                              Role = "system",
-                                             Content = systemMessage
+                                             Content = systemMessage + "\n" + comments
                                         },
+                                        //new RequestMessage()
+                                        //{
+                                        //     Role = "user",
+                                        //     Content = "You will never use people name when responding and only use the word 'Resident' instead of people name"
+                                        //},
                                         new RequestMessage()
                                         {
                                              Role = "user",
-                                             Content = "You will never use people name when responding and only use the word 'Resident' instead of people name"
-                                        },
-                                        new RequestMessage()
-                                        {
-                                             Role = "user",
-                                             Content = comments
+                                             Content = userComments
                                         }
                        };
 
                     var json = System.Text.Json.JsonSerializer.Serialize(request);
                     var content = new StringContent(json, Encoding.UTF8, "application/json");
-                    var response = client.PostAsync("https://api.openai.com/v1/chat/completions", content);
-                    var resjson = response.Result.Content.ReadAsStringAsync();
+                    var response = await client.PostAsync("https://api.openai.com/v1/chat/completions", content);
+                    var resjson = response.Content.ReadAsStringAsync();
                     aiResponse = resjson.Result;
                 }
                 else
@@ -1787,7 +1880,7 @@ namespace SystemComments.Controllers
                 chatClient = _openAIClient.GetChatClient("gpt-5.1");
             }
             prompt = prompt.Replace("```xml", "").Replace("<!-- Include follow-up only if response is vague -->", "");
-            string time = "0";
+            //string time = "0";
             Stopwatch sw = Stopwatch.StartNew();
             string allSectionsBlock = SageExtraction.ExtractAndRemoveAllSections(ref prompt);
             string finalXml = "";
@@ -1797,15 +1890,12 @@ namespace SystemComments.Controllers
             //string systemPart = parts.Length > 1 ? parts[0] : "";
             //string userInputPart = parts.Length > 1 ? "Inputs:" + parts[1] : prompt;
 
-            string systemMessages = "You are an expert assessment designer. \nGoal: Respond concisely and completely within 2–3 seconds.\n" +
-            "Always return strict valid XML as a single line (no spaces/newlines), ≤400 tokens. " +
-            "Always include <ts>. Fill <sfn> as: 'Section {N} of {Total}: {SectionName}'. " +
-            //((currentSection == 1)
-            //    ? "Also include <allsections> with every section name+fullname. "
-            //    : "Exclude <allsections>. ") +
-            "<ss> must contain ONLY the sections listed in the user request. " +
-            "Never skip explicitly requested sections. " +
-            "Do not add summaries or extra text.\n Don't include <root> tag.\n Must read Evaluator Response for generating <followupsection>. \n";
+            //string systemMessages = "You are an expert assessment designer. \nGoal: Respond concisely and completely within 2–3 seconds.\n" +
+            //"Always return strict valid XML as a single line (no spaces/newlines), ≤400 tokens. " +
+            //"Always include <ts>. Fill <sfn> as: 'Section {N} of {Total}: {SectionName}'. " +            
+            //"<ss> must contain ONLY the sections listed in the user request. " +
+            //"Never skip explicitly requested sections. " +
+            //"Do not add summaries or extra text.\n Don't include <root> tag.\n Must read Evaluator Response for generating <followupsection>. \n";
 
            
             var options = new ChatCompletionOptions
@@ -2363,8 +2453,8 @@ namespace SystemComments.Controllers
                     return $"[]"; // Handle errors
                 }
             }
-            sw.Stop();
-            string time = sw.ElapsedMilliseconds.ToString();
+            //sw.Stop();
+            //string time = sw.ElapsedMilliseconds.ToString();
         }
 
         private string GetAISAGEChatGptResponse(string comments)
@@ -2675,12 +2765,12 @@ namespace SystemComments.Controllers
 
         [HttpPost("sendcustomcomments")]
         [Authorize]        
-        public AIResponse SendCustomComments(Comments comments, Int16 commentsType = 1)
+        public async Task<AIResponse> SendCustomComments(Comments comments, string userComments, Int16 commentsType = 1, Int32 userType = 0)
         {
             List<AIResponse> aiSavedResponse = new List<AIResponse>();
             try
             {
-                string response = GetChatGptResponse(comments.InputComments, commentsType);
+                string response = await GetChatGptResponse(comments.InputComments, userComments, commentsType, userType);
                 AIResponse aiMessage = new AIResponse();
                 aiMessage.AIResponseID = "";
                 aiMessage.UserID = 0;

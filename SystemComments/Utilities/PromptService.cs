@@ -20,6 +20,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Xml.Linq;
 using SystemComments.Models.DataBase;
+using static System.Collections.Specialized.BitVector32;
 
 namespace SystemComments.Utilities
 {
@@ -205,6 +206,32 @@ Level 5. Expert: Guidance: Learner embodies growth mindset and cultivates it in 
       • Leads growth mindset training or workshops within clinics or student groups
       • Advocates for a culture of continuous improvement across teams
 
+Core Competency: Reflective Practice
+Demonstrates how learners progress from rarely identifying and analyzing their own thoughts and actions to consistently engaging in reflective practice that informs future improvement.
+	- Awareness (NextGen Critical/Analytical Thinking): Identifying specific thoughts, decisions, and behaviors in real contexts
+	- Analysis (NextGen Critical/Analytical Thinking): Exploring underlying assumptions, biases, or gaps in reasoning
+	- Application (NextGen Problem Solving & Practical Judgment): Turning insights into concrete adjustments in future tasks
+Level 1 (Novice):
+      • Cannot articulate what they did or why after an assignment or exercise
+      • Feedback discussions are perfunctory (“I did okay”) without deeper thought
+      • Shows little sign of internal critique or follow-through	Guidance: Learner occasionally reflects but with insufficient depth or structure.
+Level 2 (Advanced Beginner):
+      • Journals or discusses a single event but only describes “what happened,” without exploring “why”
+      • Reflection is sporadic and unstructured (e.g., jotting one-off notes)
+      • Action plans are generic (“I need to participate more”)	Guidance: Learner uses structured reflection to inform future practice.
+Level 3 (Competent): 
+      • Regularly completes “what–so what–now what” entries in a reflection log
+      • Analyzes factors behind successes or mistakes (e.g., “I interrupted because I listened too quickly”)
+      • Experiments with targeted adjustments in next tasks	Guidance: Reflection is habitual, systematic, and linked to measurable outcomes.
+Level 4 (Proficient): 
+      • Maintains a detailed reflection journal or debrief worksheet after each key activity
+      • Tracks progress (e.g., fewer interruptions in client interviews after reflecting)
+      • Seeks peer/faculty feedback on reflections	Guidance: Learner leads reflective practice for others and influences curriculum.
+Level 5 (Expert): 
+      • Facilitates team or clinic debriefs, guiding peers through structured reflection
+      • Mentors others in applying “what–so what–now what” frameworks
+      • Contributes aggregated reflection insights to improve course design or assessment
+
 Maintain a professional, constructive tone throughout.
 Use gender-neutral language (e.g., ""the student,"" ""the student,"" or ""they"").
 Personalize feedback by referencing specific cases, person to person interactions, or behaviors, ensuring distinct feedback for each student even when addressing similar areas.
@@ -239,6 +266,16 @@ Expected HTML Output Format:
 <h3>Actionable Feedback:</h3>
 <ul>
   <li>Provide specific strategies based on evaluator comments. E.g., ""Choose one task just beyond your current comfort zone—e.g., volunteer for an oral argument in a moot court clinic even if you’ve never spoken publicly. After performing, solicit targeted feedback (faculty coach, peer observer) on both content and delivery.""</li>
+</ul>
+
+<h1>Reflective Practice & Commitment</h1>
+<h2>Initial 3 Months: (e.g., Performance from [Start Date] to [Mid Date])</h2>
+<p>Summarize the student's early Reflective Practice, highlighting strengths and areas for improvement.</p>
+<h2>Most Recent 3 Months: (e.g., Performance from [Mid Date] to [End Date])</h2>
+<p>Summarize recent Reflective Practice, noting specific improvements or challenges.</p>
+<h3>Actionable Feedback:</h3>
+<ul>
+  <li>Provide specific strategies based on evaluator comments. E.g., ""[what the student will do — e.g., rewrite memo introductions]; Timeline: [by when — e.g., two weeks]; Measure: [how improvement will be checked — e.g., coach review of 1 revised memo].""</li>
 </ul>
 
 <h1>Overall MyInsights</h1>
@@ -293,6 +330,53 @@ Expected HTML Output Format:
 
             return prompt_initial;
         }
+
+        public static async Task<string> SummarizeComments(string comments, string model, OpenAIClient _openMyInsightsClient)
+        {
+            try
+            {               
+               
+                var systemPrompt =
+            "You are a summarization engine for GME evaluator comments. " +
+            "Your job is to compress ALL evaluator comments into a concise, structured summary. " +
+            "Keep 100% of the meaning but remove repetition, names, timestamps, rotation labels, or administrative text. " +
+            "Always replace person names with 'Resident'. " +
+            "Keep negative feedback fully intact. " +
+            "Do NOT generate HTML. Do NOT generate headings outside required competency names. " 
+            //"Output MUST be grouped exactly into:\n" +
+            //"Patient Care\nMedical Knowledge\nSystems-Based Practice\nPractice-Based Learning & Improvement\nProfessionalism\nInterpersonal & Communication Skills\nOverall Summary\n" +
+            //"Within each category: write 3–6 bullet points only."
+            ;
+
+                var userPrompt =
+                    "Summarize the following evaluator COMMENTS into bullet points. " +
+                    "Do NOT include anything outside of comments. " +
+                    "Comments:\n\n" +
+                    comments;
+
+
+                var chatClient = _openMyInsightsClient.GetChatClient(model);
+                var messages = new List<ChatMessage>
+                {
+                    ChatMessage.CreateSystemMessage(systemPrompt),
+                    ChatMessage.CreateUserMessage(userPrompt)
+                };
+
+                var sb = new StringBuilder();
+                await foreach (var update in chatClient.CompleteChatStreamingAsync(messages))
+                {
+                    if (update.ContentUpdate.Count > 0)
+                        sb.Append(update.ContentUpdate[0].Text);
+                }
+
+                return sb.ToString();
+            }
+            catch (Exception ex)
+            {               
+                return comments;
+            }
+        }
+
 
         private static async Task<string> GenerateSectionAsync(OpenAIClient _openAIMyInsightsClient, string section, string systemMessage, string comments)
         {
@@ -589,9 +673,10 @@ Expected HTML Output Format:
             }
         }
 
-        public static string GetComments(AIRequest input)
+        public async static Task<(string, string)> GetComments(AIRequest input, OpenAIClient _openAINPVClient)
         {
             string comments = string.Empty;
+            string userComments = string.Empty;
             Int64 attemptNumber = input.AttemptNumber;
             string inputJSON = input.InputPrompt;
             inputJSON = inputJSON.Replace("#DQuote#", "\\\"");
@@ -629,26 +714,36 @@ Expected HTML Output Format:
                             comments += comment["comments"].ToString() + "\n\n";
                         }
                     }
+                    userComments = "User Comments:\n" + comments;
                     if (comments.Length > 0)
                     {
+
+                        string updatedComments = await PromptService.SummarizeComments(comments, "gpt-4.1", _openAINPVClient);
+                        if (updatedComments.Trim().Length > 0)
+                        {
+                            comments = updatedComments;
+                        }
+
                         //Accept Feedback
                         if (input.RequestType == 2)
                         {
-                            comments = prompt_initial + "\n\n" + input.Output + "\n\n" + "Comments:\n" + comments + "\n" + input.Feedback + "\n\n" + prompt_feedback;
+                            comments = prompt_initial + "\n\n" + input.Output + "\n\n" + userComments + "\n" + input.Feedback + "\n\n" + prompt_feedback;
                         }
                         else if (input.RequestType == 1)
                         {
-                            comments = prompt_initial + input.Feedback + "\n\n" + input.Output + "\n\nComments:\n" + comments;
+                            comments = prompt_initial + input.Feedback + "\n\n" + input.Output + "\n\n" + userComments;
                             //comments = prompt_initial + "\n\nComments:\n" + comments;
                         }
                         else
                         {
-                            comments = prompt_initial + "\n\nComments:\n" + comments;
+                            //comments = prompt_initial + "\n\n" + userComments;
+                            comments = prompt_initial;
                         }
                     }
                     else
                     {
-                        comments = prompt_initial + "\n\nComments:\n" + comments;
+                        //comments = prompt_initial + "\n\n" + userComments;
+                        comments = prompt_initial;
                     }
 
                 }
@@ -657,7 +752,7 @@ Expected HTML Output Format:
             {
 
             }
-            return comments;
+            return (comments, userComments);
         }
 
         public static string GetSagePrompt(AIRequest input)

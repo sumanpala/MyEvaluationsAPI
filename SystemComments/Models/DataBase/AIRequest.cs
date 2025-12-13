@@ -74,6 +74,23 @@ namespace SystemComments.Models.DataBase
 
     }
 
+    public enum TokenName
+    {
+        MyInsightsToken = 1,
+        NPVToken = 2,
+        AIToken = 3,
+        SAGEToken = 4,
+        MyInsightsAPEToken = 5,
+        MyInsightsAttendingToken = 6
+    }
+
+    public class TokenUsage
+    {
+        public string StartDate { get; set; }
+        public string EndDate { get; set; }
+        public TokenName TokenName { get; set; }
+    }
+
     public class MyInsightsSummary
     {
         public Int64 DepartmentID { get; set; }
