@@ -114,6 +114,8 @@ namespace SystemComments.Models.DataBase
         public Int64 SurveyID { get; set; }
 
         public string SurveyAssessmentType { get; set; } = "annual-program-evaluation";
+
+        public Int64 HistoryID { get; set; }
     }
     
 

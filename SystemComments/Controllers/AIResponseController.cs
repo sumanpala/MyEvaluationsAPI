@@ -571,7 +571,7 @@ namespace SystemComments.Controllers
 
         [HttpPost("MyInsightsRotations")]
         [AllowAnonymous]
-        public async Task<ActionResult<IEnumerable<MyInsightsRotationSummaryResponse>>> MyInsightsSummary([FromBody] MyInsightsRotationSummary input)
+        public async Task<ActionResult<IEnumerable<MyInsightsRotationSummaryResponse>>> MyInsightsRotations([FromBody] MyInsightsRotationSummary input)
         {
             List<MyInsightsRotationSummaryResponse> aiResponse = new List<MyInsightsRotationSummaryResponse>();
             MyInsightsRotationSummaryResponse summaryResponse = new MyInsightsRotationSummaryResponse();
@@ -689,32 +689,42 @@ namespace SystemComments.Controllers
             string myInsightPrompt = "";
             string systemMessage = "";
             List<MyInsightsResponse> aiResponse = new List<MyInsightsResponse>();
-            DataSet dsComments = BackEndService.GetMyInsightsSummaryComments(_context, input);
-            if (input.IsFaculty == 0)
+            try
             {
-                myInsightPrompt = PromptService.GetMyInsightsSummaryPrompt();
-            }
-            else
-            {
-                myInsightPrompt = PromptService.GetGetMyInsightsFacultySummaryPrompt();
-            }
-            //string myInsightComments = await PromptService.GetMyInsightsComments(dsComments, _openAIAPEMyInsightsClient);
-            string myInsightComments = await InsightsSummarizer.GetMyInsightsComments(input.IsFaculty, dsComments, _openAIAPEMyInsightsClient);
-            if (input.IsFaculty == 0)
-            {
-                //systemMessage = "You are ChatGPT, a helpful, structured, and expert assistant.\r\nYou produce polished, thematic, well-organized summaries.\r\nWrite as if your output will be directly pasted into a professional report.\r\nUse clear section headers, confident academic language, and smooth narrative structure." +
-                //"\r\nNever ask follow-up questions. Output should be final.\nFor every competency, you MUST include a property named `ProgressionByPGY`\n`ProgressionByPGY` MUST be a non-empty array.";
-                systemMessage = "You are an expert AI specialized in Graduate Medical Education (GME) analytics and Program Evaluation Committee (PEC) reporting.  \r\nYour primary task is to convert de-identified MyInsights trainee feedback into a structured, PEC-ready JSON summary that adheres exactly to the schema provided in the user prompt.\r\n\r\nFollow these rules precisely:\r\n\r\n1. **Output Format**\r\n   - You must output a single, complete, valid **JSON object only**.\r\n   - Do not include Markdown, explanations, commentary, text outside the JSON, or code block syntax (no backticks or ```json markers).\r\n   - Every key and subkey from the user-provided JSON schema must appear in the final output.\r\n   - Preserve exact field names, structure, and hierarchy.\r\n   - Maintain correct JSON syntax — all strings quoted, arrays properly closed, and commas placed correctly.\r\n\r\n2. **Population Rules**\r\n   - Populate all fields meaningfully based on the narrative context; never use placeholders like “example,” “N/A,” “TBD,” or “null.”\r\n   - For array fields (e.g., `DepartmentLevelStrengths`, `GuidanceForPEC`), provide at least one item with text if data supports it; otherwise, output an empty array (`[]`).\r\n   - Ensure that `\"ProgressionByPGY\"` is always represented as an array of objects, even when only one PGY level is available.\r\n   - Do not omit or rename any competency or section.\r\n\r\n3. **Content Guidance**\r\n   - The content of your JSON values must reflect evidence-based, faculty-style academic analysis aligned with ACGME Core Competencies.\r\n   - Ensure that all justifications and summaries are written in professional, concise, and constructive PEC report tone.\r\n   - Do not repeat content; synthesize themes and present them as cohesive program-level findings.\r\n   - Integrate examples naturally without using “Example:” or bullet points unless specified.\r\n\r\n4. **Validation Rules**\r\n   - Before finalizing, verify that:\r\n     • Every section in the schema exists and is complete.  \r\n     • All keys contain either text or empty arrays — no missing elements.  \r\n     • JSON is syntactically valid.  \r\n     • The hierarchy matches the structure defined in the user’s prompt.  \r\n   - If any validation check fails, regenerate the full JSON until compliant.\r\n\r\n5. **Behavioral Restrictions**\r\n   - Do not ask for user confirmation, show drafts, or output partial JSON.\r\n   - Do not include explanations or summaries after the closing brace.\r\n   - Stop immediately after the final `}` of the JSON output.\r\n\r\n6. **Interpretation Priority**\r\n   - If any ambiguity arises, prioritize:  \r\n     (a) JSON validity and structure,  \r\n     (b) Full schema compliance,  \r\n     (c) Professional GME-style synthesis.\r\n\r\nFinal Output Rule:\r\n→ Return only one valid JSON object that matches the exact schema and field order defined in the user message.  \r\nNo markdown, no commentary, and no deviation from structure are permitted.\r\n";
-            }
-            else
-            {
-                systemMessage = "You are an expert AI designed to generate structured JSON reports from Graduate Medical Education (GME) narrative data. \r\n\r\nYour responses must strictly follow JSON syntax and schema fidelity. The user will provide a detailed analytic prompt describing the reporting task, structure, and context. You must:\r\n\r\n1. Output **only valid JSON** — no markdown, no prose, no explanations, and no commentary before or after the JSON.\r\n2. Ensure that every required key, nesting, and data element described in the user’s prompt is present in the final output.\r\n3. Populate all string fields with meaningful text based on the user’s content (never placeholders like “example”, “N/A”, or “TBD”).\r\n4. Preserve the exact field names, hierarchy, and order from the JSON schema defined in the user’s prompt.\r\n5. When arrays are expected, provide at least one populated item if data supports it, or an empty array (`[]`) if not.\r\n6. Do not include formatting such as backticks, code blocks, or indentation symbols.\r\n7. Validate JSON integrity before completing your output — there must be no missing commas, quotes, or brackets.\r\n8. The JSON should represent the final, complete deliverable that aligns with the ACGME Faculty and Institutional Requirements as described in the user’s input.\r\n9. Never include explanations, summaries, or reasoning outside the JSON.\r\n\r\nIf the user prompt includes sections, domain mappings, or examples, use them to infer structure and content.  \r\nIf ambiguity exists, prioritize adherence to structure and JSON validity over verbosity.\r\n\r\nFinal Output Rule:  \r\n→ Respond only with the fully populated JSON object that matches the required schema.\r\n";
-            }
+                DataSet dsComments = BackEndService.GetMyInsightsSummaryComments(_context, input);
+                if (input.IsFaculty == 0)
+                {
+                    myInsightPrompt = PromptService.GetMyInsightsSummaryPrompt();
+                }
+                else
+                {
+                    myInsightPrompt = PromptService.GetGetMyInsightsFacultySummaryPrompt();
+                }
+                //string myInsightComments = await PromptService.GetMyInsightsComments(dsComments, _openAIAPEMyInsightsClient);
+                string myInsightComments = await InsightsSummarizer.GetMyInsightsComments(input.IsFaculty, dsComments, _openAIAPEMyInsightsClient);
+                if (input.IsFaculty == 0)
+                {
+                    //systemMessage = "You are ChatGPT, a helpful, structured, and expert assistant.\r\nYou produce polished, thematic, well-organized summaries.\r\nWrite as if your output will be directly pasted into a professional report.\r\nUse clear section headers, confident academic language, and smooth narrative structure." +
+                    //"\r\nNever ask follow-up questions. Output should be final.\nFor every competency, you MUST include a property named `ProgressionByPGY`\n`ProgressionByPGY` MUST be a non-empty array.";
+                    systemMessage = "You are an expert AI specialized in Graduate Medical Education (GME) analytics and Program Evaluation Committee (PEC) reporting.  \r\nYour primary task is to convert de-identified MyInsights trainee feedback into a structured, PEC-ready JSON summary that adheres exactly to the schema provided in the user prompt.\r\n\r\nFollow these rules precisely:\r\n\r\n1. **Output Format**\r\n   - You must output a single, complete, valid **JSON object only**.\r\n   - Do not include Markdown, explanations, commentary, text outside the JSON, or code block syntax (no backticks or ```json markers).\r\n   - Every key and subkey from the user-provided JSON schema must appear in the final output.\r\n   - Preserve exact field names, structure, and hierarchy.\r\n   - Maintain correct JSON syntax — all strings quoted, arrays properly closed, and commas placed correctly.\r\n\r\n2. **Population Rules**\r\n   - Populate all fields meaningfully based on the narrative context; never use placeholders like “example,” “N/A,” “TBD,” or “null.”\r\n   - For array fields (e.g., `DepartmentLevelStrengths`, `GuidanceForPEC`), provide at least one item with text if data supports it; otherwise, output an empty array (`[]`).\r\n   - Ensure that `\"ProgressionByPGY\"` is always represented as an array of objects, even when only one PGY level is available.\r\n   - Do not omit or rename any competency or section.\r\n\r\n3. **Content Guidance**\r\n   - The content of your JSON values must reflect evidence-based, faculty-style academic analysis aligned with ACGME Core Competencies.\r\n   - Ensure that all justifications and summaries are written in professional, concise, and constructive PEC report tone.\r\n   - Do not repeat content; synthesize themes and present them as cohesive program-level findings.\r\n   - Integrate examples naturally without using “Example:” or bullet points unless specified.\r\n\r\n4. **Validation Rules**\r\n   - Before finalizing, verify that:\r\n     • Every section in the schema exists and is complete.  \r\n     • All keys contain either text or empty arrays — no missing elements.  \r\n     • JSON is syntactically valid.  \r\n     • The hierarchy matches the structure defined in the user’s prompt.  \r\n   - If any validation check fails, regenerate the full JSON until compliant.\r\n\r\n5. **Behavioral Restrictions**\r\n   - Do not ask for user confirmation, show drafts, or output partial JSON.\r\n   - Do not include explanations or summaries after the closing brace.\r\n   - Stop immediately after the final `}` of the JSON output.\r\n\r\n6. **Interpretation Priority**\r\n   - If any ambiguity arises, prioritize:  \r\n     (a) JSON validity and structure,  \r\n     (b) Full schema compliance,  \r\n     (c) Professional GME-style synthesis.\r\n\r\nFinal Output Rule:\r\n→ Return only one valid JSON object that matches the exact schema and field order defined in the user message.  \r\nNo markdown, no commentary, and no deviation from structure are permitted.\r\n";
+                }
+                else
+                {
+                    systemMessage = "You are an expert AI designed to generate structured JSON reports from Graduate Medical Education (GME) narrative data. \r\n\r\nYour responses must strictly follow JSON syntax and schema fidelity. The user will provide a detailed analytic prompt describing the reporting task, structure, and context. You must:\r\n\r\n1. Output **only valid JSON** — no markdown, no prose, no explanations, and no commentary before or after the JSON.\r\n2. Ensure that every required key, nesting, and data element described in the user’s prompt is present in the final output.\r\n3. Populate all string fields with meaningful text based on the user’s content (never placeholders like “example”, “N/A”, or “TBD”).\r\n4. Preserve the exact field names, hierarchy, and order from the JSON schema defined in the user’s prompt.\r\n5. When arrays are expected, provide at least one populated item if data supports it, or an empty array (`[]`) if not.\r\n6. Do not include formatting such as backticks, code blocks, or indentation symbols.\r\n7. Validate JSON integrity before completing your output — there must be no missing commas, quotes, or brackets.\r\n8. The JSON should represent the final, complete deliverable that aligns with the ACGME Faculty and Institutional Requirements as described in the user’s input.\r\n9. Never include explanations, summaries, or reasoning outside the JSON.\r\n\r\nIf the user prompt includes sections, domain mappings, or examples, use them to infer structure and content.  \r\nIf ambiguity exists, prioritize adherence to structure and JSON validity over verbosity.\r\n\r\nFinal Output Rule:  \r\n→ Respond only with the fully populated JSON object that matches the required schema.\r\n";
+                }
                 string insightResponse = await MyInsightsGPT5Response(systemMessage, myInsightPrompt + "\n" + myInsightComments);
-            MyInsightsResponse summaryResponse = new MyInsightsResponse();
-            summaryResponse.SummaryJSON = insightResponse;
-            aiResponse.Add(summaryResponse);
-            DataSet dsResult = BackEndService.InsertDepartmentalSummaryFromJson(_context, input, summaryResponse);
+                MyInsightsResponse summaryResponse = new MyInsightsResponse();
+                summaryResponse.SummaryJSON = insightResponse;
+                aiResponse.Add(summaryResponse);
+                DataSet dsResult = BackEndService.InsertDepartmentalSummaryFromJson(_context, input, summaryResponse);
+            }
+            catch(Exception ex)
+            {
+                MyInsightsResponse summaryResponse = new MyInsightsResponse();
+                summaryResponse.SummaryJSON = "";
+                summaryResponse.ErrorMessage = ex.Message;
+                DataSet dsResult = BackEndService.InsertDepartmentalSummaryFromJson(_context, input, summaryResponse);
+            }
             return aiResponse;
         }
 

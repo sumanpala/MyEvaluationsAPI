@@ -46,6 +46,7 @@ namespace SystemComments.Utilities
             audiences.Add(1);
             audiences.Add(7);
             audiences.Add(3);
+            audiences.Add(5);
             audiences.Add(6);
             audiences.Add(9);
             return audiences;
@@ -942,7 +943,8 @@ namespace SystemComments.Utilities
                         new SqlParameter("@Stage1Prompt", insightResponse.Part1Prompt),
                         new SqlParameter("@Stage2Prompt", insightResponse.Part2Prompt),
                         new SqlParameter("@JsonPITs", insightResponse.Part1JSON),
-                        new SqlParameter("@JsonActionPlans", insightResponse.Part2JSON)
+                        new SqlParameter("@JsonActionPlans", insightResponse.Part2JSON),
+                        new SqlParameter("@HistoryID", input.HistoryID)
 
                     };
             dsResultSet = _context.ExecuteStoredProcedure("usp_SaveSurveyInsights", parameters);
@@ -996,8 +998,8 @@ namespace SystemComments.Utilities
                         new SqlParameter("@DepartmentID", input.DepartmentID),
                         new SqlParameter("@Academicyear", input.AcademicYear),
                         new SqlParameter("@IsFaculty", input.IsFaculty),
-                        new SqlParameter("@Json", sumamryResponse.SummaryJSON)
-
+                        new SqlParameter("@Json", sumamryResponse.SummaryJSON),
+                        new SqlParameter("@ErrorMessage", sumamryResponse.ErrorMessage)
                     };
             dsResultSet = _context.ExecuteStoredProcedure("usp_InsertDepartmentalSummaryFromJson", parameters);
             return dsResultSet;

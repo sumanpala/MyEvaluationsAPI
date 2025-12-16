@@ -49,7 +49,9 @@ namespace SystemComments.Models.DataBase
 
     public class MyInsightsResponse
     {
-        public string SummaryJSON { get; set; }       
+        public string SummaryJSON { get; set; }     
+        
+        public string ErrorMessage {  get; set; }
 
     }
 
