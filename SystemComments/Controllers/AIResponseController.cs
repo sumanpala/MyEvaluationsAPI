@@ -61,6 +61,8 @@ namespace SystemComments.Controllers
 
         private ChatClient chatClient;        
         private readonly ChatClient chatAzureClient;
+        private static readonly HashSet<long> departmentsWith5Model =
+        new HashSet<long> { 1677, 58 };
         public AIResponseController(APIDataBaseContext context,IJwtAuth jwtAuth, IConfiguration config, ILogger<AIResponseController> logger)
         {
             _context = context;
@@ -877,7 +879,7 @@ namespace SystemComments.Controllers
                     apiAttempts++;
                     Stopwatch aiResponseWatch = Stopwatch.StartNew();
                     string aiComments = "";
-                    if (templateDepartmentID == 1677 && isEnable5Model == 1)
+                    if (departmentsWith5Model.Contains(templateDepartmentID) && isEnable5Model == 1)
                     {
                         aiComments = await GetFastOpenAIResponse3(comments + "\n include <mainsection></mainsection> without fail. \n Answer is always empty in the response for example <answer></answer>"
                             , lastSection, totalSections, sageQuestions, ((isEnable5Model == 1) ? true : false), input.SageRequest);

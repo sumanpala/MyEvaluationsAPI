@@ -236,6 +236,11 @@ namespace SystemComments.Controllers
                     errorMessages += "End Date must be greater than Start Date. ";
                 }
             }
+            if (input.PageSize > 10000)
+            {
+                errorMessages += "Page Size cannot be greater than 10000.";
+            }
+
             return errorMessages;
 
         }
