@@ -879,7 +879,8 @@ namespace SystemComments.Controllers
                     apiAttempts++;
                     Stopwatch aiResponseWatch = Stopwatch.StartNew();
                     string aiComments = "";
-                    if (departmentsWith5Model.Contains(templateDepartmentID) && isEnable5Model == 1)
+                    //if (departmentsWith5Model.Contains(templateDepartmentID) && isEnable5Model == 1)
+                    if (isEnable5Model == 1)
                     {
                         aiComments = await GetFastOpenAIResponse3(comments + "\n include <mainsection></mainsection> without fail. \n Answer is always empty in the response for example <answer></answer>"
                             , lastSection, totalSections, sageQuestions, ((isEnable5Model == 1) ? true : false), input.SageRequest);
