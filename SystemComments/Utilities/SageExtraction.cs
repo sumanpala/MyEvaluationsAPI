@@ -399,7 +399,14 @@ namespace SystemComments.Utilities
                 {
                     string questionText = question[fieldName].ToString();
                     DataRow[] foundRows = dt.Select("QuestionDescription = '" + questionText.Replace("'", "''") + "'");
-
+                    if(foundRows.Length > 1 && questionText.Length == 0)
+                    {
+                        foundRows = dt.Select("HeaderTypeID = " + headerType + " AND QuestionIndex=" + questionIndex + " AND SectionNumber=" + sectionNum);
+                    }
+                    if(foundRows.Length == 0)
+                    {
+                        foundRows = dt.Select("QuestionDescription = '" + questionText.Replace("'", "''") + "'");
+                    }
                     if (foundRows.Length > 0)
                     {
                         question["id"] = foundRows[0]["QuestionID"].ToString();
