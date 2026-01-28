@@ -1490,7 +1490,7 @@ namespace SystemComments.Controllers
                 {
                     prompt = prompt.Replace($"<{kvp.Value}>", $"<{kvp.Key}>")
                              .Replace($"</{kvp.Value}>", $"</{kvp.Key}>");
-                }
+                }                
             }
             return prompt;
         }
@@ -1994,7 +1994,13 @@ namespace SystemComments.Controllers
                 var task1 = GenerateSectionAsync($"\nImportant: Include only Section {currentSection - 1} of {totalSections}.\n{followupQuestionRule.Replace("{currentsection}", (currentSection - 1).ToString())}\n- Exclude <allsections> from response.\n" + prompt);
                 var task2 = GenerateSectionAsync(prompt + $"\nImportant: Include only Section {currentSection} of {totalSections}.\n{followupQuestionRule.Replace("{currentsection}", (currentSection).ToString())}\n- Exclude <allsections> from response.\n" + prompt);
                 await Task.WhenAll(task1, task2);
-                finalXml = $"{allSectionsBlock}{task1.Result}{ReplaceSecondSectionAsyncTags(task2.Result)}";
+                finalXml = $"{task1.Result}{ReplaceSecondSectionAsyncTags(task2.Result)}";
+                if (!finalXml.Contains("<sections"))
+                {
+                    finalXml = $"<sections>{finalXml}</sections>";
+                }
+
+                finalXml = $"{allSectionsBlock}{finalXml}";
             }          
            
 

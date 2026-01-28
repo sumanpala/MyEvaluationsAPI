@@ -1400,6 +1400,42 @@ The narrative must be fully self-contained, without requiring tables, graphs, or
         {
            return Regex.Replace(html, "<.*?>", string.Empty);
         }
+
+        public static string EnsureSectionsRoot(string xmlFragment)
+        {
+            // Wrap fragment in a temporary root so it can be parsed safely
+            var wrapped = $"<__root__>{xmlFragment}</__root__>";
+            var doc = XDocument.Parse(wrapped, LoadOptions.PreserveWhitespace);
+
+            var root = doc.Root!;
+            var sectionElements = root.Elements("section").ToList();
+            var sectionsElement = root.Element("sections");
+
+            // If <sections> already exists as a root-level element, do nothing
+            if (sectionsElement != null)
+            {
+                return string.Concat(root.Nodes());
+            }
+
+            // If one or more <section> elements exist, wrap them
+            if (sectionElements.Any())
+            {
+                var newSections = new XElement("sections");
+
+                foreach (var section in sectionElements)
+                {
+                    section.Remove();
+                    newSections.Add(section);
+                }
+
+                // Insert <sections> at the position of the first <section>
+                var insertPosition = root.Nodes().OfType<XElement>().FirstOrDefault();
+                insertPosition?.AddBeforeSelf(newSections);
+            }
+
+            // Return fragment without the temporary root
+            return string.Concat(root.Nodes());
+        }
     }   
 
 }
