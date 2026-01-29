@@ -970,7 +970,31 @@ namespace SystemComments.Utilities
                     if (!string.IsNullOrEmpty(answer))
                         xmlBuilder.Append($"<answer>{answer}</answer>");
 
-                    xmlBuilder.Append("</section>");
+                    if (lastSection["followupsections"] is JArray followups && followups.Any())
+                    {
+                        xmlBuilder.Append("<followupsection>");
+
+                        foreach (var followup in followups)
+                        {
+                            xmlBuilder.Append("<question>");
+
+                            var followupQuestion = followup["question"]?.ToString();
+                            if (!string.IsNullOrEmpty(followupQuestion))
+                                xmlBuilder.Append($"<followupquestion>{followupQuestion}</followupquestion>");
+
+                            var followupAnswer = followup["answer"]?.ToString();
+                            if (!string.IsNullOrEmpty(followupAnswer))
+                                xmlBuilder.Append($"<answer>{followupAnswer}</answer>");
+
+                            xmlBuilder.Append("</question>");
+                        }
+
+                        xmlBuilder.Append("</followupsection>");
+                    }
+
+                    xmlBuilder.Append("</section>");                  
+
+
                 }
             }
 

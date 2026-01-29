@@ -1936,18 +1936,21 @@ namespace SystemComments.Controllers
             async Task<string> GenerateSectionAsync(string sectionPrompt)
             {
                 StringBuilder sb = new();
+                string systemPrompt = UpdateXMLTags(sectionPrompt, true);
+                string userUpdatedResponse = UpdateXMLTags(userResponse, true);
                 try
                 {
                     //var chatClient = _openAIClient.GetChatClient("gpt-4o-mini");
                     var messages = new List<ChatMessage>
                 {
-                    ChatMessage.CreateSystemMessage(UpdateXMLTags(sectionPrompt, true)),
-                    ChatMessage.CreateUserMessage(UpdateXMLTags(userResponse, true))
+                    ChatMessage.CreateSystemMessage(systemPrompt),
+                    ChatMessage.CreateUserMessage(userUpdatedResponse)
                     //ChatMessage.CreateAssistantMessage(UpdateXMLTags(SageExtraction.ConvertJsonToXmlContext(previousResponse), true))
                 };
                     if (previousResponse.Length > 2)
                     {
-                        messages.Add(ChatMessage.CreateAssistantMessage(UpdateXMLTags(SageExtraction.ConvertJsonToXmlContext(previousResponse), true)));
+                        string previousUpdatedResponse = UpdateXMLTags(SageExtraction.ConvertJsonToXmlContext(previousResponse), true);
+                        messages.Add(ChatMessage.CreateAssistantMessage(previousUpdatedResponse));
                     }
                     List<string> tokenBuffer = new();
 
@@ -1982,17 +1985,18 @@ namespace SystemComments.Controllers
                 sb.Replace("<root>", "").Replace("</root>", "");
                 return UpdateXMLTags(sb.ToString(), false);
             }
-            string followupQuestionRule = "\r\n- If Section {currentsection} Main Question Answer is not empty and vague (<30 words, e.g., “good”), include exactly one <followupsection> with a <followupquestion>.\r\n- If <answer> is clear and >30 words, skip <followupsection>.";
+            string followupQuestionRule = "\r\n- If <answer> is clear and >30 words or Followup Question generated, skip <followupsection>.\r\n- If Section {currentsection} Main Question Answer is not empty and vague (<30 words, e.g., \"good\") and Followup Question is not generated, include exactly one <followupsection> with a <question>.\r\n";
             if (currentSection <= 1)
             {
-                var task1 = GenerateSectionAsync($"Important: Include only Section 1 and exclude <followupsection>. \n -Exclude <allsections> from response.\n" + prompt);
+                var task1 = GenerateSectionAsync($"{prompt} \n Important: Include only Section 1 and skip <followupsection>. \n -Exclude <allsections> from response.\n");
                 await Task.WhenAll(task1);
                 finalXml = $"{allSectionsBlock}{task1.Result}";
             }
             else
             {
-                var task1 = GenerateSectionAsync($"\nImportant: Include only Section {currentSection - 1} of {totalSections}.\n{followupQuestionRule.Replace("{currentsection}", (currentSection - 1).ToString())}\n- Exclude <allsections> from response.\n" + prompt);
-                var task2 = GenerateSectionAsync(prompt + $"\nImportant: Include only Section {currentSection} of {totalSections}.\n{followupQuestionRule.Replace("{currentsection}", (currentSection).ToString())}\n- Exclude <allsections> from response.\n" + prompt);
+                var task1 = GenerateSectionAsync($"{prompt}\nImportant Rule: Include only Section {currentSection - 1} of {totalSections}.\n{followupQuestionRule.Replace("{currentsection}", (currentSection - 1).ToString())}\n- Exclude <allsections> from response.\n");
+                //var task2 = GenerateSectionAsync( $"{prompt}\nImportant Rule: Include only Section {currentSection} of {totalSections}.\n{followupQuestionRule.Replace("{currentsection}", (currentSection).ToString())}\n- Exclude <allsections> from response.\n");
+                var task2 = GenerateSectionAsync($"{prompt}\nImportant Rule: Include only Section {currentSection} of {totalSections}. and skip <followupsection>\n- Exclude <allsections> from response.\n");
                 await Task.WhenAll(task1, task2);
                 finalXml = $"{task1.Result}{ReplaceSecondSectionAsyncTags(task2.Result)}";
                 if (!finalXml.Contains("<sections"))
