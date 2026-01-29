@@ -1988,15 +1988,15 @@ namespace SystemComments.Controllers
             string followupQuestionRule = "\r\n- If <answer> is clear and >30 words or Followup Question generated, skip <followupsection>.\r\n- If Section {currentsection} Main Question Answer is not empty and vague (<30 words, e.g., \"good\") and Followup Question is not generated, include exactly one <followupsection> with a <question>.\r\n";
             if (currentSection <= 1)
             {
-                var task1 = GenerateSectionAsync($"{prompt} \n Important: Include only Section 1 and skip <followupsection>. \n -Exclude <allsections> from response.\n");
+                var task1 = GenerateSectionAsync($"{prompt.Replace("{currentsection}", "1")} \n Important: Include only Section 1 and skip <followupsection>. \n -Exclude <allsections> from response.\n");
                 await Task.WhenAll(task1);
                 finalXml = $"{allSectionsBlock}{task1.Result}";
             }
             else
             {
-                var task1 = GenerateSectionAsync($"{prompt}\nImportant Rule: Include only Section {currentSection - 1} of {totalSections}.\n{followupQuestionRule.Replace("{currentsection}", (currentSection - 1).ToString())}\n- Exclude <allsections> from response.\n");
-                //var task2 = GenerateSectionAsync( $"{prompt}\nImportant Rule: Include only Section {currentSection} of {totalSections}.\n{followupQuestionRule.Replace("{currentsection}", (currentSection).ToString())}\n- Exclude <allsections> from response.\n");
-                var task2 = GenerateSectionAsync($"{prompt}\nImportant Rule: Include only Section {currentSection} of {totalSections}. and skip <followupsection>\n- Exclude <allsections> from response.\n");
+                var task1 = GenerateSectionAsync($"{prompt.Replace("{currentsection}", (currentSection - 1).ToString())}\nImportant Rule: Include only Section {currentSection - 1} of {totalSections}.\n{followupQuestionRule.Replace("{currentsection}", (currentSection - 1).ToString())}\n- Exclude <allsections> from response.\n");
+                //var task2 = GenerateSectionAsync( $"{prompt.Replace("{currentsection}", currentSection.ToString())}\nImportant Rule: Include only Section {currentSection} of {totalSections}.\n{followupQuestionRule.Replace("{currentsection}", (currentSection).ToString())}\n- Exclude <allsections> from response.\n");
+                var task2 = GenerateSectionAsync($"{prompt.Replace("{currentsection}", currentSection.ToString())}\nImportant Rule: Include only Section {currentSection} of {totalSections}. and skip <followupsection>\n- Exclude <allsections> from response.\n");
                 await Task.WhenAll(task1, task2);
                 finalXml = $"{task1.Result}{ReplaceSecondSectionAsyncTags(task2.Result)}";
                 if (!finalXml.Contains("<sections"))
