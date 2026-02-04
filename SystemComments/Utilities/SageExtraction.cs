@@ -25,18 +25,38 @@ namespace SystemComments.Utilities
         static int idCounter = 1;
 
         public static string ExtractData(string airesponse)
-        {           
-            airesponse = Regex.Replace(airesponse, @"\t|\n|\r", "");
-            airesponse = Regex.Replace(airesponse, @"<(/?)(\w+)\s+(\w+)>", "<$1$2_$3>");
-            airesponse = Regex.Replace(airesponse, @"[^\x09\x0A\x0D\x20-\uD7FF\uE000-\uFFFD]", "");
+        {
             airesponse = airesponse.Replace("```", "");
+
+            airesponse = Regex.Replace(airesponse, @"\t|\n|\r", " ");
+
+            // Remove illegal unicode
+            airesponse = Regex.Replace(airesponse, @"[^\x09\x0A\x0D\x20-\uD7FF\uE000-\uFFFD]", "");
+
+            // Remove malformed closing tags
+            airesponse = Regex.Replace(airesponse, @"</\s+[^>]*>", "");
+
+            // Trim junk outside XML
             airesponse = Regex.Replace(airesponse, @"^[^<]*|[^>]*$", "", RegexOptions.Singleline);
-            airesponse = Regex.Replace(airesponse, @"<(\w+)>([^<]+)<\1>", "<$1>$2</$1>");
-            airesponse = SanitizeXml(airesponse);
+
+            // ✅ PHASE 1: Escape ONLY naked ampersands so XML can parse
+            airesponse = Regex.Replace(airesponse, @"&(?!amp;|lt;|gt;|apos;|quot;)", "&amp;");
+
             string wrappedXml = "<root>" + airesponse + "</root>";
-            XDocument xmlDoc = XDocument.Parse(wrappedXml);
-            return ConvertXmlToJson(xmlDoc);
+
+            XDocument doc = XDocument.Parse(wrappedXml, LoadOptions.PreserveWhitespace);
+
+            // ✅ PHASE 2: Escape text nodes safely
+            foreach (var node in doc.DescendantNodes().OfType<XText>())
+            {
+                node.Value = SecurityElement.Escape(node.Value);
+            }
+
+            return ConvertXmlToJson(doc);
         }
+
+
+
 
         public static Int32 GetSectionsCount(string aiJSON)
         {
@@ -910,9 +930,16 @@ namespace SystemComments.Utilities
                             //    }
                                 if (followup["answer"] != null && followup["answer"]?.ToString().Length > 0)
                                 {
-                                    //sb.Append("Answer: User Completed this question.\n");
-                                    sb.Append($"Followup Section is already generated for the section {currentSection}.\n Followup Question Evaluator Response: " + followup["answer"]?.ToString() + "\n");
-                                    //sb.Append("Followup Question Answer: " + ((followup["answer"].ToString().Length > 50) ? followup["answer"].ToString().Substring(0, 50) + "..." : followup["answer"].ToString()) + "\n");
+                                    if (isEnableModel5)
+                                    {
+                                        sb.Append($"Followup Section is already generated for the section {currentSection}.\n Followup Question Evaluator Response: " + followup["answer"]?.ToString() + "\n Exclude Followup Section from XML response.");
+                                    }
+                                    else
+                                    {
+                                        //sb.Append("Answer: User Completed this question.\n");
+                                        sb.Append($"Followup Question Evaluator Response: " + followup["answer"]?.ToString());
+                                        //sb.Append("Followup Question Answer: " + ((followup["answer"].ToString().Length > 50) ? followup["answer"].ToString().Substring(0, 50) + "..." : followup["answer"].ToString()) + "\n");
+                                    }
                                 }                               
                             }                            
 
