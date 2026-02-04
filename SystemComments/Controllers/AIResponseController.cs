@@ -862,7 +862,7 @@ namespace SystemComments.Controllers
                     Int32 totalSections = 1;
                     if (input.SageRequest != null && input.SageRequest.Length > 2)
                     {
-                        sageQuestions = SageExtraction.ConvertLastJsonToFormattedText(input.SageRequest, ref lastSection, ref totalSections);
+                        sageQuestions = SageExtraction.ConvertLastJsonToFormattedText(input.SageRequest, ((isEnable5Model == 1) ? true: false), ref lastSection, ref totalSections);
                         if (sageQuestions.Length > 0)
                         {
 
@@ -912,7 +912,15 @@ namespace SystemComments.Controllers
                     }
                     if (sectionCount == 0)
                     {
-                        aiComments = await GetFastOpenAIResponse2(comments + "\n" + sageQuestions + "\nSections are missed in the tag <sections></sections>, Please include." + allSectionsPrompt + "\n include <section> tag between the tag <sections></sections>", isEnable5Model);
+                        if (isEnable5Model == 1)
+                        {
+                            aiComments = await GetFastOpenAIResponse3(comments + "\n include <mainsection></mainsection> without fail. \n Answer is always empty in the response for example <answer></answer>"
+                                , lastSection, totalSections, sageQuestions, ((isEnable5Model == 1) ? true : false), input.SageRequest);
+                        }
+                        else
+                        {
+                            aiComments = await GetFastOpenAIResponse2(comments + "\n" + sageQuestions + "\nSections are missed in the tag <sections></sections>, Please include." + allSectionsPrompt + "\n include <section> tag between the tag <sections></sections>", isEnable5Model);
+                        }
                         apiAttempts++;
                         extractJSON = SageExtractData(aiComments);
                         sectionCount = GetSectionsCount(extractJSON);
@@ -928,7 +936,15 @@ namespace SystemComments.Controllers
                     else if (lastSection > sectionCount && lastSection <= totalSections && !isNewFollowup)
                     {
                         string updatedPrompt = $"{comments} \n{sageQuestions} \n Section {lastSection} of {totalSections} is missed, please include. {allSectionsPrompt}\n include <section> tag between the tag <sections></sections>";
-                        aiComments = await GetFastOpenAIResponse1(updatedPrompt);
+                        if (isEnable5Model == 1)
+                        {
+                            aiComments = await GetFastOpenAIResponse3(comments + "\n include <mainsection></mainsection> without fail. \n Answer is always empty in the response for example <answer></answer>"
+                                , lastSection, totalSections, sageQuestions, ((isEnable5Model == 1) ? true : false), input.SageRequest);
+                        }
+                        else
+                        {
+                            aiComments = await GetFastOpenAIResponse1(updatedPrompt);
+                        }
                         apiAttempts++;
                         extractJSON = SageExtractData(aiComments);
                         sectionCount = GetSectionsCount(extractJSON);
@@ -945,8 +961,16 @@ namespace SystemComments.Controllers
                     sectionCount = GetSectionsCount(extractJSON);
                     if (lastSection > sectionCount && lastSection <= totalSections && defaultJSON.Length > 0 && !isNewFollowup)
                     {
-                        // Include sections manually if API returns invalid data
-                        extractJSON = InsertSection(extractJSON, defaultJSON, (lastSection - 1));
+                        if (isEnable5Model == 1)
+                        {
+                            aiComments = await GetFastOpenAIResponse3(comments + "\n include <mainsection></mainsection> without fail. \n Answer is always empty in the response for example <answer></answer>"
+                                , lastSection, totalSections, sageQuestions, ((isEnable5Model == 1) ? true : false), input.SageRequest);
+                        }
+                        else
+                        {
+                            // Include sections manually if API returns invalid data
+                            extractJSON = InsertSection(extractJSON, defaultJSON, (lastSection - 1));
+                        }
                     }
 
                     parsedJson = JToken.Parse(extractJSON);
@@ -1995,8 +2019,8 @@ namespace SystemComments.Controllers
             else
             {
                 var task1 = GenerateSectionAsync($"{prompt.Replace("{currentsection}", (currentSection - 1).ToString())}\nImportant Rule: Include only Section {currentSection - 1} of {totalSections}.\n{followupQuestionRule.Replace("{currentsection}", (currentSection - 1).ToString())}\n- Exclude <allsections> from response.\n");
-                //var task2 = GenerateSectionAsync( $"{prompt.Replace("{currentsection}", currentSection.ToString())}\nImportant Rule: Include only Section {currentSection} of {totalSections}.\n{followupQuestionRule.Replace("{currentsection}", (currentSection).ToString())}\n- Exclude <allsections> from response.\n");
-                var task2 = GenerateSectionAsync($"{prompt.Replace("{currentsection}", currentSection.ToString())}\nImportant Rule: Include only Section {currentSection} of {totalSections}. and skip <followupsection>\n- Exclude <allsections> from response.\n");
+                var task2 = GenerateSectionAsync( $"{prompt.Replace("{currentsection}", currentSection.ToString())}\nImportant Rule: Include only Section {currentSection} of {totalSections}.\n{followupQuestionRule.Replace("{currentsection}", (currentSection).ToString())}\n- Exclude <allsections> from response.\n");
+                //var task2 = GenerateSectionAsync($"{prompt.Replace("{currentsection}", currentSection.ToString())}\nImportant Rule: Include only Section {currentSection} of {totalSections}. and skip <followupsection>\n- Exclude <allsections> from response.\n");
                 await Task.WhenAll(task1, task2);
                 finalXml = $"{task1.Result}{ReplaceSecondSectionAsyncTags(task2.Result)}";
                 if (!finalXml.Contains("<sections"))

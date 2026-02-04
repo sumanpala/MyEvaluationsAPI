@@ -808,7 +808,7 @@ namespace SystemComments.Utilities
             table.Rows.Add(row);
         }
 
-        public static string ConvertLastJsonToFormattedText(string json, ref Int32 lastSection, ref Int32 noOfSections)
+        public static string ConvertLastJsonToFormattedText(string json, bool isEnableModel5, ref Int32 lastSection, ref Int32 noOfSections)
         {
             StringBuilder sb = new StringBuilder();
             string includedSteps = "IMPORTANT: For this response, generate exactly the following sections::\n\t\t";
@@ -883,7 +883,11 @@ namespace SystemComments.Utilities
                                 if (mainSection?["answer"] != null && mainSection["answer"].ToString().Length > 0)
                                 {
                                     //sb.Append($"Section {currentSection}:\nMain Question Answer: " + ((mainSection["answer"].ToString().Length > 50) ? mainSection["answer"].ToString().Substring(0, 50) + "..." : mainSection["answer"].ToString())  + "\n");
-                                    sb.Append($"Section {currentSection}:\nEvaluator Response: " + mainSection["answer"].ToString() + "\n" + $"<answer>{mainSection["answer"].ToString()}</answer>" + "\n");                                  
+                                    sb.Append($"Section {currentSection}:\nEvaluator Response: " + mainSection["answer"].ToString() + "\n" + $"<answer>{mainSection["answer"].ToString()}</answer>" + "\n");
+                                    if (isEnableModel5)
+                                    {
+                                        sb.Append("IMPORTANT: Followup Section Rule: \n if Followup Section not generated and any Evaluator Response that:\r\n• Contains fewer than 30 words, OR\r\n• Uses generic terms (e.g., \"good\", \"ok\", \"fine\", \"no concerns\")\n then include Followup Section");
+                                    }
                                 }
                             }                           
                         }
@@ -907,7 +911,7 @@ namespace SystemComments.Utilities
                                 if (followup["answer"] != null && followup["answer"]?.ToString().Length > 0)
                                 {
                                     //sb.Append("Answer: User Completed this question.\n");
-                                    sb.Append("Followup Question Evaluator Response: " + followup["answer"]?.ToString() + "\n");
+                                    sb.Append($"Followup Section is already generated for the section {currentSection}.\n Followup Question Evaluator Response: " + followup["answer"]?.ToString() + "\n");
                                     //sb.Append("Followup Question Answer: " + ((followup["answer"].ToString().Length > 50) ? followup["answer"].ToString().Substring(0, 50) + "..." : followup["answer"].ToString()) + "\n");
                                 }                               
                             }                            
