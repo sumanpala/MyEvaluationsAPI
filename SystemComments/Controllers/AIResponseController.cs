@@ -2018,11 +2018,11 @@ namespace SystemComments.Controllers
             }
             else
             {
-                var task1 = GenerateSectionAsync($"{prompt.Replace("{currentsection}", (currentSection - 1).ToString())}\nImportant Rule: Include only Section {currentSection - 1} of {totalSections}.\n{followupQuestionRule.Replace("{currentsection}", (currentSection - 1).ToString())}\n- Exclude <allsections> from response.\n");
-                var task2 = GenerateSectionAsync( $"{prompt.Replace("{currentsection}", currentSection.ToString())}\nImportant Rule: Include only Section {currentSection} of {totalSections}.\n{followupQuestionRule.Replace("{currentsection}", (currentSection).ToString())}\n- Exclude <allsections> from response.\n");
+                var task1 = GenerateSectionAsync($"{prompt.Replace("{currentsection}", (currentSection - 1).ToString())}\nImportant Rule: Include only Section {currentSection - 1} of {totalSections}.\n{followupQuestionRule.Replace("{currentsection}", (currentSection - 1).ToString())}\n- Exclude <allsections> from response.\n- Exclude <sessioncontrol> from response.\n");
+                var task2 = GenerateSectionAsync( $"{prompt.Replace("{currentsection}", currentSection.ToString())}\nImportant Rule: Include only Section {currentSection} of {totalSections}.\n{followupQuestionRule.Replace("{currentsection}", (currentSection).ToString())}\n- Exclude <allsections> from response.\n- Exclude <sessioncontrol> from response.\n");
                 //var task2 = GenerateSectionAsync($"{prompt.Replace("{currentsection}", currentSection.ToString())}\nImportant Rule: Include only Section {currentSection} of {totalSections}. and skip <followupsection>\n- Exclude <allsections> from response.\n");
                 await Task.WhenAll(task1, task2);
-                finalXml = $"{task1.Result}{ReplaceSecondSectionAsyncTags(task2.Result)}";
+                finalXml = $"{task1.Result.Replace("<sections>", "").Replace("</sections>","")}{ReplaceSecondSectionAsyncTags(task2.Result.Replace("<sections>", "").Replace("</sections>", ""))}";
                 if (!finalXml.Contains("<sections"))
                 {
                     finalXml = $"<sections>{finalXml}</sections>";
@@ -2042,6 +2042,7 @@ namespace SystemComments.Controllers
         private string ReplaceSecondSectionAsyncTags(string xml)
         {
             xml = xml.Replace("<ss>", "").Replace("</ss>", "").Replace("<ts>", "").Replace("</ts>", "");
+            xml = xml.Replace("<sections>", "").Replace("</sections>", "").Replace("<totalsections>", "").Replace("</totalsections>", "");
             return xml;
         }
 
