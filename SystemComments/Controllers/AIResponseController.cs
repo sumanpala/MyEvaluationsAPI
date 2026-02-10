@@ -1898,7 +1898,14 @@ namespace SystemComments.Controllers
                 var task1 = GenerateSectionAsync(prompt + $"\nImportant: Include only Section {currentSection - 1} of {totalSections}.\n{followupQuestionRule.Replace("{currentsection}", (currentSection - 1).ToString())}\n- Exclude <allsections> from response.\n");
                 var task2 = GenerateSectionAsync(prompt + $"\nImportant: Include only Section {currentSection} of {totalSections}.\n{followupQuestionRule.Replace("{currentsection}", (currentSection).ToString())}\n- Exclude <allsections> from response.\n");
                 await Task.WhenAll(task1, task2);
-                finalXml = $"{allSectionsBlock}{task1.Result}{ReplaceSecondSectionAsyncTags(task2.Result)}";
+                //finalXml = $"{allSectionsBlock}{task1.Result.Replace("<sections>", "").Replace("</sections>", "")}{ReplaceSecondSectionAsyncTags(task2.Result.Replace("<sections>", "").Replace("</sections>", ""))}";
+                finalXml = $"{task1.Result.Replace("<sections>", "").Replace("</sections>", "")}{ReplaceSecondSectionAsyncTags(task2.Result.Replace("<sections>", "").Replace("</sections>", ""))}";
+                if (!finalXml.Contains("<sections"))
+                {
+                    finalXml = $"<sections>{finalXml}</sections>";
+                }
+
+                finalXml = $"{allSectionsBlock}{finalXml}";
             }
 
 
@@ -2041,8 +2048,8 @@ namespace SystemComments.Controllers
 
         private string ReplaceSecondSectionAsyncTags(string xml)
         {
-            xml = xml.Replace("<ss>", "").Replace("</ss>", "").Replace("<ts>", "").Replace("</ts>", "");
-            xml = xml.Replace("<sections>", "").Replace("</sections>", "").Replace("<totalsections>", "").Replace("</totalsections>", "");
+            xml = xml.Replace("<ss>", "").Replace("</ss>", "");
+            xml = xml.Replace("<sections>", "").Replace("</sections>", "");
             return xml;
         }
 

@@ -108,7 +108,9 @@ namespace SystemComments.Utilities
                     UpdateProperties(objDefaultJSON);
                     JArray sectionsArray = (JArray)jsonObject["sections"];
                     JArray defaultSectionsArray = (JArray)objDefaultJSON["sections"];
-                    if (defaultSectionsArray != null && defaultSectionsArray.Count >= sectionNum)
+                    if (defaultSectionsArray != null &&
+                        sectionNum >= 0 &&
+                        sectionNum < defaultSectionsArray.Count)
                     {
                         JObject selectedSection = (JObject)defaultSectionsArray[sectionNum];
                         if (selectedSection != null && (sectionsArray.Count < sectionNum + 1))
