@@ -65,12 +65,12 @@ namespace SystemComments.Utilities
             {
                 JObject jsonObject = JObject.Parse(aiJSON);
                 JArray? sectionsArray = jsonObject["sections"] as JArray;
-                if(sectionsArray != null)
+                if (sectionsArray != null)
                 {
                     count = sectionsArray.Count;
                 }
             }
-            catch(Exception ex)
+            catch (Exception ex)
             {
                 count = 0;
             }
@@ -124,12 +124,12 @@ namespace SystemComments.Utilities
                         if (jsonObject["allsections"] != null && objDefaultJSON["allsections"] != null)
                         {
                             JArray allSectionsArray = (JArray)jsonObject["allsections"];
-                            if(allSectionsArray.Count == 0)
+                            if (allSectionsArray.Count == 0)
                             {
                                 allSectionsArray = (JArray)objDefaultJSON["allsections"];
                                 jsonObject["allsections"] = allSectionsArray;
                             }
-                            
+
                         }
                         updatedJSON = JsonConvert.SerializeObject(jsonObject, Formatting.None);
                     }
@@ -137,7 +137,7 @@ namespace SystemComments.Utilities
 
                 return updatedJSON;
             }
-            catch(Exception ex)
+            catch (Exception ex)
             {
                 return aiJSON;
             }
@@ -187,15 +187,15 @@ namespace SystemComments.Utilities
                     {
                         // Update JSON2 with "allsections" from JSON1
                         objInputObject["allsections"] = allSectionsFromJson2 ?? new JArray();
-                    }                    
+                    }
                     if (objInputObject != null)
                     {
                         sectionsArray = objInputObject["sections"] as JArray;
-                    }                    
+                    }
 
                     Int32 sectionIndex = 0;
                     foreach (var section in jsonObject["sections"])
-                    {                        
+                    {
                         if (sectionsArray != null && sectionsArray.Count > 0 && sectionsArray.Count > sectionIndex)
                         {
                             JObject tempSectionArray = sectionsArray[sectionIndex] as JObject;
@@ -225,7 +225,7 @@ namespace SystemComments.Utilities
                             if (section["followupsections"] != null)
                             {
                                 if (followupToken != null)
-                                {                                    
+                                {
                                     if (followupToken is JArray followSectionArray)
                                     {
                                         List<JToken> newItems = new List<JToken>();
@@ -240,7 +240,7 @@ namespace SystemComments.Utilities
                                                     newItems.Add(followSection);
                                                 }
                                             }
-                                            else if(followSectionArray != null && followSectionArray.Count == 0)
+                                            else if (followSectionArray != null && followSectionArray.Count == 0)
                                             {
                                                 newItems.Add(followSection);
                                             }
@@ -254,8 +254,8 @@ namespace SystemComments.Utilities
                                 else
                                 {
                                     tempSectionArray.Add(section["followupsections"]);
-                                }                                
-                                                             
+                                }
+
                             }
 
                         }
@@ -280,10 +280,10 @@ namespace SystemComments.Utilities
                     {
                         updatedJSON = inputJSON;
                     }
-                }                
+                }
                 return updatedJSON;
             }
-            catch(Exception ex)
+            catch (Exception ex)
             {
                 return inputJSON;
             }
@@ -300,10 +300,10 @@ namespace SystemComments.Utilities
 
                 // Convert back to JSON string                
                 string updatedJson = JsonConvert.SerializeObject(jsonObject, Formatting.None);
-                int sectionCount = jsonObject["sections"]?.Count() ?? 0;                
+                int sectionCount = jsonObject["sections"]?.Count() ?? 0;
                 return updatedJson;
             }
-            catch(Exception ex)
+            catch (Exception ex)
             {
                 return json;
             }
@@ -330,10 +330,10 @@ namespace SystemComments.Utilities
         static JObject UpdateQuestionIDs(JObject json, DataTable dt)
         {
             try
-            {               
+            {
 
-                Int16 sectionIndex =0;              
-                
+                Int16 sectionIndex = 0;
+
                 // Get all question fields
                 foreach (var section in json["sections"])
                 {
@@ -379,7 +379,7 @@ namespace SystemComments.Utilities
                     //            childFollowSection = followSectionArray[childIndex];
                     //        }
                     //    }
-                        
+
                     //    if (followSection?["question"] is JArray followQuestions && followQuestions.Count > 0)
                     //    {
                     //        JArray? followQuestionArray = null;
@@ -404,7 +404,7 @@ namespace SystemComments.Utilities
                     sectionIndex++;
                 }
             }
-            catch(Exception ex)
+            catch (Exception ex)
             {
                 //return json;
             }
@@ -416,16 +416,16 @@ namespace SystemComments.Utilities
         {
             //headerType 1 => followup; 2 => guide; 3 => main; 4 => wait
             if (question.SelectToken(fieldName) != null)
-            {                
-                if(dt != null)
+            {
+                if (dt != null)
                 {
                     string questionText = question[fieldName].ToString();
                     DataRow[] foundRows = dt.Select("QuestionDescription = '" + questionText.Replace("'", "''") + "'");
-                    if(foundRows.Length > 1 && questionText.Length == 0)
+                    if (foundRows.Length > 1 && questionText.Length == 0)
                     {
                         foundRows = dt.Select("HeaderTypeID = " + headerType + " AND QuestionIndex=" + questionIndex + " AND SectionNumber=" + sectionNum);
                     }
-                    if(foundRows.Length == 0)
+                    if (foundRows.Length == 0)
                     {
                         foundRows = dt.Select("QuestionDescription = '" + questionText.Replace("'", "''") + "'");
                     }
@@ -533,7 +533,7 @@ namespace SystemComments.Utilities
                 }
             }
             //allSections["allsections"] = lstAllSections;
-             if (root.Elements("sections") != null && root.Elements("sections").Count() > 0)
+            if (root.Elements("sections") != null && root.Elements("sections").Count() > 0)
             {
                 if (root.Elements("endmessage") != null)
                 {
@@ -546,17 +546,17 @@ namespace SystemComments.Utilities
                 }
                 else if (root.Elements("sections").Elements("endmessage") != null)
                 {
-                   XElement endmessageElement = root.Elements("sections")
-                                     .Elements("endmessage")
-                                     .FirstOrDefault();
+                    XElement endmessageElement = root.Elements("sections")
+                                      .Elements("endmessage")
+                                      .FirstOrDefault();
                     if (endmessageElement != null)
                     {
                         jsonData["endmessage"] = endmessageElement != null ? (object)endmessageElement.Value : null;
                     }
                 }
-               
-                
-                
+
+
+
                 foreach (XElement section in root.Elements("sections").Elements("section"))
                 {
                     lstMainQuestions = new List<Dictionary<string, object>>();
@@ -588,7 +588,7 @@ namespace SystemComments.Utilities
                                 //    mainSectionData["description"] = mainElement.Value;
                                 //    //mainSectionData["wait"] = waitElement != null ? waitElement.Value : "Please provide an assessment based on the question and guiding prompts.";
                                 //}
-                                XElement guideElement = mainNodeQuestion.Element("guide");                                
+                                XElement guideElement = mainNodeQuestion.Element("guide");
                                 XElement mainQuestion = mainNodeQuestion.Element("mainquestion");
                                 XElement mainQuestionAnswer = mainNodeQuestion.Element("answer");
                                 XElement mainQuestionWait = mainNodeQuestion.Element("wait");
@@ -616,8 +616,8 @@ namespace SystemComments.Utilities
                                 };
                                 lstMainQuestions.Add(questionData);
                             }
-                        }      
-                  
+                        }
+
                         sectionData["mainsection"] = lstMainQuestions;
                     }
 
@@ -636,7 +636,7 @@ namespace SystemComments.Utilities
                             {
                                 XElement followupElement = childElement.Element("followup");
                                 //followUpSections["description"] = HttpUtility.HtmlDecode((followupElement != null) ? followupElement.Value : "Follow-up Question:");
-                               
+
                                 foreach (XElement question in childElement.Elements("question"))
                                 {
                                     XElement followupQuestion = question.Element("followupquestion");
@@ -751,7 +751,7 @@ namespace SystemComments.Utilities
                 string modifiedJson = JsonConvert.SerializeObject(jsonObject, Formatting.Indented);
                 return modifiedJson;
             }
-            catch(Exception ex)
+            catch (Exception ex)
             {
                 return json;
             }
@@ -844,7 +844,7 @@ namespace SystemComments.Utilities
                 {
                     totalSections = int.Parse(jsonObject["totalsections"].ToString());
                 }
-                if(totalSections == 1 && jsonObject["allsections"] != null)
+                if (totalSections == 1 && jsonObject["allsections"] != null)
                 {
                     var allSections = jsonObject["allsections"];
                     totalSections = allSections.Count();
@@ -911,7 +911,7 @@ namespace SystemComments.Utilities
                                         sb.Append("IMPORTANT: Followup Section Rule: \n if Followup Section not generated and any Evaluator Response that:\r\n• Contains fewer than 30 words, OR\r\n• Uses generic terms (e.g., \"good\", \"ok\", \"fine\", \"no concerns\")\n then include Followup Section");
                                     }
                                 }
-                            }                           
+                            }
                         }
                     }
                     if (objLastSection["followupsections"] != null && objLastSection["followupsections"] is JArray followupSections && followupSections.Count > 0)
@@ -920,16 +920,16 @@ namespace SystemComments.Utilities
                         {
                             if (followup["question"]?.ToString().Length > 0)
                             {
-                            //    if (followup["description"] != null)
-                            //    {
-                            //        sb.Append(followup["description"].ToString() + "\n");
-                            //    }
+                                //    if (followup["description"] != null)
+                                //    {
+                                //        sb.Append(followup["description"].ToString() + "\n");
+                                //    }
 
-                            //    sb.Append("• " + followup["question"]?.ToString() + "\n");
-                            //    if (followup["wait"] != null)
-                            //    {
-                            //        sb.Append(followup["wait"]?.ToString() + "\n");
-                            //    }
+                                //    sb.Append("• " + followup["question"]?.ToString() + "\n");
+                                //    if (followup["wait"] != null)
+                                //    {
+                                //        sb.Append(followup["wait"]?.ToString() + "\n");
+                                //    }
                                 if (followup["answer"] != null && followup["answer"]?.ToString().Length > 0)
                                 {
                                     if (isEnableModel5)
@@ -942,8 +942,8 @@ namespace SystemComments.Utilities
                                         sb.Append($"Followup Question Evaluator Response: " + followup["answer"]?.ToString());
                                         //sb.Append("Followup Question Answer: " + ((followup["answer"].ToString().Length > 50) ? followup["answer"].ToString().Substring(0, 50) + "..." : followup["answer"].ToString()) + "\n");
                                     }
-                                }                               
-                            }                            
+                                }
+                            }
 
                         }
                     }
@@ -1025,7 +1025,7 @@ namespace SystemComments.Utilities
                         xmlBuilder.Append("</followupsection>");
                     }
 
-                    xmlBuilder.Append("</section>");                  
+                    xmlBuilder.Append("</section>");
 
 
                 }
@@ -1038,9 +1038,9 @@ namespace SystemComments.Utilities
         {
             StringBuilder sb = new StringBuilder();
             try
-            {                
+            {
                 JObject jsonObject = JObject.Parse(json);
-                
+
                 Int32 totalSections = 1;
                 if (jsonObject["totalsections"] != null && jsonObject["totalsections"].ToString().Length > 0)
                 {
@@ -1058,7 +1058,7 @@ namespace SystemComments.Utilities
                         isCompleteOneAnswer = false;
                         bool isCompletedSection = true;
                         sb.Append($"{section["fullname"]} \n");
-                        
+
 
                         if (section["mainsection"] != null)
                         {
@@ -1113,7 +1113,7 @@ namespace SystemComments.Utilities
                         if (section["followupsections"] is JArray followupSections && followupSections.Count > 0)
                         {
                             foreach (var followup in followupSections)
-                            {                                
+                            {
                                 if (followup["question"]?.ToString().Length > 0)
                                 {
                                     if (followup["description"] != null)
@@ -1159,7 +1159,7 @@ namespace SystemComments.Utilities
                             //    includedSteps += $"\nInclude <endmessage></endmessage>";
                             //}
                         }
-                        
+
                         sb.Append("\n"); // Add spacing between sections
                     }
                     lastSection = sectionNum;
@@ -1168,7 +1168,7 @@ namespace SystemComments.Utilities
                     //sb.AppendLine(((followupInstructions.Length > 0) ? followupInstructions + "\n" : "") +  includedSteps + "\n Don't include next section if new followup questions are included into the current section. \n");
                 }
             }
-            catch(Exception ex)
+            catch (Exception ex)
             {
 
             }
@@ -1398,19 +1398,19 @@ namespace SystemComments.Utilities
                         sections1.Add(section2);
                     }
                     else
-                    {                        
+                    {
 
-                        exists = sections1.Any(s => s["name"].ToString() == sectionName);
-                        if(!exists)
+                        exists = sections1.Any(s => s["name"].ToString().Replace("&", "and") == sectionName.Replace("&", "and"));                        
+                        if (!exists)
                         {
                             sectionsCount++;
                             section2["sectionnum"] = sectionsCount.ToString();
                             sections1.Add(section2);
                         }
-                        var existingSection = sections1.FirstOrDefault(s => s["name"].ToString() == sectionName) as JObject;
+                        var existingSection = sections1.FirstOrDefault(s => s["name"].ToString().Replace("&", "and") == sectionName.Replace("&", "and")) as JObject;
                         // Update Main Section if not available
                         if (existingSection["mainsection"] == null && section2["mainsection"] != null)
-                        {                           
+                        {
                             existingSection["mainsection"] = section2["mainsection"];
                         }
 
@@ -1426,7 +1426,7 @@ namespace SystemComments.Utilities
                                 break;
                             }
                         }
-                        else 
+                        else
                         {
                             if (followup2 != null && followup2.Count > 0)
                             {
@@ -1452,7 +1452,7 @@ namespace SystemComments.Utilities
                             }
                         }
                     }
-                    if(isNewFollowup)
+                    if (isNewFollowup)
                     {
                         break;
                     }
@@ -1472,7 +1472,8 @@ namespace SystemComments.Utilities
         public static async Task<string> FormatHtml(string prompt)
         {
             string result = string.Empty;
-            await Task.Run(() => {
+            await Task.Run(() =>
+            {
                 // Replace opening <ul><li> or <li> with newline + dash
                 result = Regex.Replace(prompt, @"<\s*li\s*>", "\n- ");
 
@@ -1488,23 +1489,6 @@ namespace SystemComments.Utilities
 
         public static string ExtractAndRemoveAllSections(ref string xml)
         {
-            //const string startTag = "<allsections>";
-            //const string endTag = "</allsections>";
-
-            //int start = xml.IndexOf(startTag, StringComparison.OrdinalIgnoreCase);
-            //int end = xml.IndexOf(endTag, StringComparison.OrdinalIgnoreCase);
-
-            //if (start >= 0 && end > start)
-            //{
-            //    // Extract including the wrapper
-            //    string block = xml.Substring(start, (end + endTag.Length) - start);
-
-            //    // Remove it from the original string
-            //    xml = xml.Remove(start, (end + endTag.Length) - start);
-
-            //    return block; // return the extracted block
-            //}
-            // Regex: capture the FIRST <allsections>...</allsections> that contains <section>
             var match = Regex.Match(
                 xml,
                 @"<allsections\s*>\s*<section[\s\S]*?</allsections>",
@@ -1521,6 +1505,26 @@ namespace SystemComments.Utilities
 
             return block; // not found
         }
+
+        public static string ExtractAndRemoveTotalSection(ref string xml)
+        {
+            var match = Regex.Match(
+                xml,
+                @"<totalsections>\s*(\d+)\s*</totalsections>",
+                RegexOptions.IgnoreCase
+            );
+
+            if (!match.Success)
+                return string.Empty;
+
+            string totalSections = match.Groups[1].Value;
+
+            // Remove the full tag from XML
+            xml = xml.Remove(match.Index, match.Length);
+
+            return totalSections;
+        }
+
     }
     // JSON Model Classes
     public class JsonRoot

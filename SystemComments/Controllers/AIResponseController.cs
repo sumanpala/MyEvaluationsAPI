@@ -1905,6 +1905,12 @@ namespace SystemComments.Controllers
                     finalXml = $"<sections>{finalXml}</sections>";
                 }
 
+                bool startsWithTotalSections =
+               finalXml.TrimStart().StartsWith("<totalsections>", StringComparison.OrdinalIgnoreCase);
+                if (!startsWithTotalSections)
+                {
+                    finalXml = $"<totalsections>{totalSections}</totalsections>" + finalXml;
+                }
                 finalXml = $"{allSectionsBlock}{finalXml}";
             }
 
@@ -1926,7 +1932,7 @@ namespace SystemComments.Controllers
             prompt = prompt.Replace("```xml", "").Replace("<!-- Include follow-up only if response is vague -->", "");
             //string time = "0";
             Stopwatch sw = Stopwatch.StartNew();
-            string allSectionsBlock = SageExtraction.ExtractAndRemoveAllSections(ref prompt);
+            string allSectionsBlock = SageExtraction.ExtractAndRemoveAllSections(ref prompt);            
             string finalXml = "";
 
             // Split the prompt into static and dynamic parts           
@@ -2033,6 +2039,13 @@ namespace SystemComments.Controllers
                 if (!finalXml.Contains("<sections"))
                 {
                     finalXml = $"<sections>{finalXml}</sections>";
+                }
+
+                bool startsWithTotalSections =
+                finalXml.TrimStart().StartsWith("<totalsections>", StringComparison.OrdinalIgnoreCase);
+                if(!startsWithTotalSections)
+                {
+                    finalXml = $"<totalsections>{totalSections}</totalsections>" + finalXml;
                 }
 
                 finalXml = $"{allSectionsBlock}{finalXml}";
