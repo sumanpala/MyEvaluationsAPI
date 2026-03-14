@@ -117,6 +117,16 @@ namespace SystemComments.Models.DataBase
 
         public Int64 HistoryID { get; set; }
     }
-    
+
+    public class PECSummary
+    {
+        public Int64 DepartmentID { get; set; }
+
+        public Int32 AcademicYear { get; set; }     
+
+        public Int64 UserID { get; set; } = 1;
+
+    }
+
 
 }

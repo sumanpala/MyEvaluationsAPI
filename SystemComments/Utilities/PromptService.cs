@@ -1436,6 +1436,47 @@ The narrative must be fully self-contained, without requiring tables, graphs, or
             // Return fragment without the temporary root
             return string.Concat(root.Nodes());
         }
+
+        public static string GetSurveyPITS(DataTable dtActionPlans)
+        {
+            StringBuilder promptBuilder = new StringBuilder();
+            try
+            {
+                if (dtActionPlans.Rows.Count > 0)
+                {
+                    DataColumnCollection columns = dtActionPlans.Columns;
+
+                    foreach (DataRow row in dtActionPlans.Rows)
+                    {
+                        foreach (DataColumn column in columns)
+                        {
+                            string value = row[column.ColumnName]?.ToString();
+
+                            if (!string.IsNullOrWhiteSpace(value))
+                            {
+                                promptBuilder.AppendLine($"{column.ColumnName}: {value}");
+                            }
+                        }
+
+                        // separator between records
+                        promptBuilder.AppendLine("----------------------------------------");
+                        promptBuilder.AppendLine();
+                    }
+                }
+                else
+                {
+                    promptBuilder.AppendLine("Not Available.");
+                    promptBuilder.AppendLine();
+                }
+            }
+            catch (Exception ex)
+            {
+                promptBuilder.AppendLine("Not Available.");
+                //Supress Error.
+            }
+
+            return promptBuilder.ToString();
+        }
     }   
 
 }

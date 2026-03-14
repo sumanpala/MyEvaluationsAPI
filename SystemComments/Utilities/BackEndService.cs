@@ -20,7 +20,7 @@ namespace SystemComments.Utilities
 {
     public class BackEndService
     {
-        public static async Task InsertAPEResponses(AIRequest input, APEResponse apeResponse,APIDataBaseContext _context)
+        public static async Task InsertAPEResponses(AIRequest input, APEResponse apeResponse, APIDataBaseContext _context)
         {
             SqlParameter[] parameters = new SqlParameter[]
             {
@@ -160,10 +160,10 @@ namespace SystemComments.Utilities
                     var gptTasks = summaries.Select((summary, index) => Task.Run(async () =>
                     {
                         string newPrompt = prompt.Replace("[Rotation Comments]", summary);
-                        
+
                         string promptFilePath = Path.Combine(targetFolder, $"Part{index + 1}Prompt.txt");
                         await File.WriteAllTextAsync(promptFilePath, newPrompt);
-                        
+
                         return await PromptService.MyInsightsGPT5Response(_openAIMyInsightsClient, newPrompt);
                     })).ToList();
 
@@ -172,7 +172,7 @@ namespace SystemComments.Utilities
                     // Build JSON output
                     var finalJson = new StringBuilder();
                     finalJson.AppendLine("{");
-                    finalJson.AppendLine("  \"Rotations\": [");                    
+                    finalJson.AppendLine("  \"Rotations\": [");
 
                     for (int i = 0; i < jsonResults.Length; i++)
                     {
@@ -239,7 +239,7 @@ namespace SystemComments.Utilities
             string prompt = "", summaryPrompt = "";
             List<Int16> audiences = GetAudiences();
             foreach (Int16 audienceID in audiences)
-            {                
+            {
                 SqlParameter[] parameters = new SqlParameter[]
                 {
                     new SqlParameter("@DepartmentID", input.DepartmentID),
@@ -264,7 +264,7 @@ namespace SystemComments.Utilities
                         string midDate1 = dtPrompt.Rows[0]["MidDate1"].ToString();
 
                         summaryResponse.SummaryIDs.Add(new KeyValuePair<Int16, Int64>(audienceID, Convert.ToInt64(dtPrompt.Rows[0]["SummaryID"].ToString())));
-                                             
+
                         prompt = dtPrompt.Rows[0]["APIFileContent"].ToString();
                         summaryPrompt = dtPrompt.Rows[0]["SummaryAFIContent"].ToString();
                         prompt = prompt.Replace("<br/>", "\n").Replace("</br>", "\n").Replace("<br>", "\n");
@@ -536,7 +536,7 @@ namespace SystemComments.Utilities
                             continue;
 
                         try
-                        {                                                 
+                        {
 
                             // Full file path
                             filePath = Path.Combine(targetFolder, "Part" + (i + 1).ToString() + ".txt");
@@ -555,7 +555,7 @@ namespace SystemComments.Utilities
                         }
                         catch (Exception ex)
                         {
-                            
+
                         }
                     }
 
@@ -772,13 +772,13 @@ namespace SystemComments.Utilities
                 else
                 {
                     surveyList.Add(new
-                    {                        
+                    {
                         QuestionText = row["QuestionText"].ToString(),
                         StronglyAgree = SafeDecimal(row, "StronglyAgree"),
                         Agree = SafeDecimal(row, "Agree"),
                         Disagree = SafeDecimal(row, "Disagree"),
                         StronglyDisagree = SafeDecimal(row, "StronglyDisagree"),
-                        ProgramMean = SafeDecimal(row, "ProgramMean"),                       
+                        ProgramMean = SafeDecimal(row, "ProgramMean"),
                         NationalMean = SafeDecimal(row, "NationalMean")
 
                     });
@@ -818,16 +818,16 @@ namespace SystemComments.Utilities
                     };
 
             DataSet dsData = _context.ExecuteStoredProcedure("GetACGMESurveyImportingDataForInsights", parameters);
-            if(dsData != null && dsData.Tables.Count > 0)
+            if (dsData != null && dsData.Tables.Count > 0)
             {
                 DataTable dtPrompts = dsData.Tables[0];
                 DataView dvSurvey = new DataView(dsData.Tables[1]);
                 DataView dvSurveyQuestions = new DataView(dsData.Tables[2]);
-                if(dtPrompts.Rows.Count > 0)
+                if (dtPrompts.Rows.Count > 0)
                 {
                     prompt = dtPrompts.Rows[0]["APIFileContent"].ToString();
                     stage2Prompt = dtPrompts.Rows[0]["Stage2Prompt"].ToString();
-                    string programName = dtPrompts.Rows[0]["ProgramName"].ToString();                    
+                    string programName = dtPrompts.Rows[0]["ProgramName"].ToString();
                     prompt = prompt.Replace("[Program Type]", programName);
                     stage2Prompt = stage2Prompt.Replace("[Program Type]", programName);
 
@@ -835,18 +835,18 @@ namespace SystemComments.Utilities
                     years[0] = input.AcademicYear;
                     years[1] = input.AcademicYear - 1;
 
-                    foreach(Int32 academicYear in years)
+                    foreach (Int32 academicYear in years)
                     {
                         dvSurvey.RowFilter = $"AcademicYear={academicYear}";
                         dvSurveyQuestions.RowFilter = $"AcademicYear={academicYear}";
-                        if(academicYear == input.AcademicYear && dvSurvey.Count == 0)
+                        if (academicYear == input.AcademicYear && dvSurvey.Count == 0)
                         {
                             break;
                         }
                         if (dvSurvey.Count > 0)
                         {
                             string surveyJSON = ConvertSurveyDataToJson(dvSurvey.ToTable(), dvSurveyQuestions.ToTable(), input.IsResident);
-                            if(surveyJSON.Length <= 2)
+                            if (surveyJSON.Length <= 2)
                             {
                                 surveyJSON = string.Empty;
                             }
@@ -857,11 +857,11 @@ namespace SystemComments.Utilities
                         {
                             prompt = (academicYear == input.AcademicYear) ? prompt.Replace("[ACGME Survey Data]", "") : prompt.Replace("[ACGME Previous Survey Data]", "");
                         }
-                        
+
                     }
 
                     // Get Stage 1 Response 
-                    if(isDataAvailable)
+                    if (isDataAvailable)
                     {
                         string systemMessage = "You are GPT-5, an expert analyst in Graduate Medical Education (GME) accreditation, survey analytics, and program evaluation reporting.\r\n\r\n" +
                             "Your role:\r\n- Interpret and execute all instructions from the user message as a Graduate Medical Education specialist assisting a Program Evaluation Committee (PEC)." +
@@ -908,7 +908,7 @@ namespace SystemComments.Utilities
 
                         string targetFolder = Path.Combine(filesRoot, subPath);
                         Directory.CreateDirectory(targetFolder);
-                        
+
                         string filePath = string.Empty;
 
                         // Full file path
@@ -1011,13 +1011,13 @@ namespace SystemComments.Utilities
             DataSet dsResultSet = new DataSet();
             SqlParameter[] parameters = new SqlParameter[]
                     {
-                        new SqlParameter("@ID", response.SummaryID),                        
+                        new SqlParameter("@ID", response.SummaryID),
                         new SqlParameter("@UserID", input.UserID),
                         new SqlParameter("@DepartmentID", input.DepartmentID),
                         new SqlParameter("@TargetID", input.TargetID),
-                        new SqlParameter("@Academicyear", input.AcademicYear),                       
-                        new SqlParameter("@Json", response.SummaryJSON),                       
-                        new SqlParameter("@Prompt", response.Prompt)                      
+                        new SqlParameter("@Academicyear", input.AcademicYear),
+                        new SqlParameter("@Json", response.SummaryJSON),
+                        new SqlParameter("@Prompt", response.Prompt)
 
                     };
 
@@ -1029,9 +1029,9 @@ namespace SystemComments.Utilities
         {
             DataSet dsResultSet = new DataSet();
             SqlParameter[] parameters = new SqlParameter[]
-                    {                        
+                    {
                         new SqlParameter("@UserID", input.UserID),
-                        new SqlParameter("@DepartmentID", input.DepartmentID),                        
+                        new SqlParameter("@DepartmentID", input.DepartmentID),
                         new SqlParameter("@Academicyear", input.AcademicYear),
                         new SqlParameter("@Json", response.SummaryFeedbackJSON),
                         new SqlParameter("@Prompt", response.SummaryFeedbackPrompt)
@@ -1042,7 +1042,7 @@ namespace SystemComments.Utilities
             return dsResultSet;
         }
 
-        public static DataSet SaveSageResponse(APIDataBaseContext _context,DataSet dsData, AIRequest input, string aiResponse, string aiPrompt, string extractJSON, TimeHistory timeHistory)
+        public static DataSet SaveSageResponse(APIDataBaseContext _context, DataSet dsData, AIRequest input, string aiResponse, string aiPrompt, string extractJSON, TimeHistory timeHistory)
         {
             DataTable dtSections = new DataTable();
             DataTable dtSectionInfo = new DataTable();
@@ -1146,5 +1146,572 @@ namespace SystemComments.Utilities
             }
             return dsResultSet;
         }
+
+        public static DataSet GetACGMESummaryMyInsightsPITS(APIDataBaseContext _context, PECSummary input)
+        {
+            DataSet dsResultSet = new DataSet();
+            SqlParameter[] parameters = new SqlParameter[]
+                    {
+                        new SqlParameter("@AcademicYear", input.AcademicYear),
+                        new SqlParameter("@DepartmentID", input.DepartmentID),
+
+                    };
+            dsResultSet = _context.ExecuteStoredProcedure("GetACGMESummaryMyInsightsPITS", parameters);
+            return dsResultSet;
+        }
+
+        public static string GetRotationSummaryInsights(APIDataBaseContext _context, PECSummary input)
+        {            
+            DataSet dsResultSet = new DataSet();
+            SqlParameter[] parameters = new SqlParameter[]
+                    {
+                        new SqlParameter("@DepartmentID", input.DepartmentID),
+                        new SqlParameter("@UserID", input.UserID),
+                        new SqlParameter("@AcademicYear", input.AcademicYear)
+
+                    };
+            dsResultSet = _context.ExecuteStoredProcedure("GetRotationSummaryInsights", parameters);
+
+            return BuildRotationSummaryComments(dsResultSet);
+        }
+
+        public static string GetMyInsightsSummaryResults(APIDataBaseContext _context, PECSummary input, byte isFaculty)
+        {
+            DataSet dsResultSet = new DataSet();
+            SqlParameter[] parameters = new SqlParameter[]
+                    {
+                        new SqlParameter("@DepartmentID", input.DepartmentID),
+                        new SqlParameter("@UserID", input.UserID),
+                        new SqlParameter("@AcademicYear", input.AcademicYear),
+                        new SqlParameter("@IsFaculty", isFaculty)
+
+                    };
+            dsResultSet = _context.ExecuteStoredProcedure("GetMyInsightsSummaryResults", parameters);
+
+            return BuildMyInsightsPrompt(dsResultSet, isFaculty);
+        }
+
+        public static string GetAPEMyInsights(APIDataBaseContext _context, PECSummary input)
+        {
+            DataSet dsResultSet = new DataSet();
+            SqlParameter[] parameters = new SqlParameter[]
+                    {
+                        new SqlParameter("@DepartmentID", input.DepartmentID),
+                        new SqlParameter("@UserID", input.UserID),
+                        new SqlParameter("@AcademicYear", input.AcademicYear)                      
+
+                    };
+            dsResultSet = _context.ExecuteStoredProcedure("GetAPEMyInsights", parameters);
+
+            return BuildAPEMyInsightsPrompt(dsResultSet);
+        }
+
+        public static DataSet SavePECSummaryInsights(APIDataBaseContext _context, PECSummary input, MyInsightsResponse insightResponse)
+        {
+            DataSet dtResult = new DataSet();
+            SqlParameter[] parameters = new SqlParameter[]
+                    {
+                        new SqlParameter("@DepartmentID", input.DepartmentID),                       
+                        new SqlParameter("@Academicyear", input.AcademicYear),
+                        new SqlParameter("@ProgramType", insightResponse.ProgramType),
+                        new SqlParameter("@Prompt", insightResponse.Prompt),
+                        new SqlParameter("@JsonResult", insightResponse.SummaryJSON)                        
+
+                    };
+            dtResult = _context.ExecuteStoredProcedure("usp_SaveAPE_PECSummaryFromJson", parameters);
+            return dtResult;
+        }
+
+        private static string BuildAPEMyInsightsPrompt(DataSet dsAPEMyInsights)
+        {
+            StringBuilder prompt = new StringBuilder();
+            
+
+            if (dsAPEMyInsights == null || dsAPEMyInsights.Tables.Count < 3)
+                return "Not available.";
+
+            try
+            {
+                DataTable dtAcademicYears = dsAPEMyInsights.Tables[0];
+                DataView dvCompetency = new DataView(dsAPEMyInsights.Tables[1]);
+                DataView dvMyInsightsData = new DataView(dsAPEMyInsights.Tables[2]);
+
+                if (dtAcademicYears.Rows.Count > 0)
+                {
+                    foreach (DataRow drYear in dtAcademicYears.Rows)
+                    {
+                        string academicyear = drYear["AcademicYear"].ToString();
+
+                        dvMyInsightsData.RowFilter = "AcademicYear = " + academicyear;
+
+                        if (dvMyInsightsData.Count == 0)
+                            continue;
+
+                        // ----------------------------------------------------
+                        // HEADER SECTION
+                        // ----------------------------------------------------
+
+                        prompt.AppendLine("What You're Viewing");
+                        prompt.AppendLine("--------------------------------");
+
+                        prompt.AppendLine(
+                            $"This section presents Performance Improvement Topics (PITs) generated by MyInsights, based on rotation evaluations and observational data from the academic year ({drYear["FormattedStartDate"]} – {drYear["FormattedEndDate"]}).");
+
+                        prompt.AppendLine(
+                            $"The Department of {drYear["ProgramName"]} has {dvMyInsightsData.Count} PITs.");
+
+                        prompt.AppendLine();
+
+                        prompt.AppendLine("What Each PIT Represents");
+                        prompt.AppendLine("--------------------------------");
+
+                        prompt.AppendLine("Each PIT aggregates Areas for Improvement (AFIs) and rotation evaluation feedback into a thematic topic for PEC review.");
+
+                        prompt.AppendLine("Each PIT contains:");
+                        prompt.AppendLine("- Title and Definition");
+                        prompt.AppendLine("- AFI Frequency");
+                        prompt.AppendLine("- Competency / Category");
+                        prompt.AppendLine("- Rotation(s)");
+                        prompt.AppendLine("- Justification & CPR references");
+                        prompt.AppendLine("- Primary ACGME competency");
+                        prompt.AppendLine("- Recommended Action Plan");
+
+                        prompt.AppendLine();
+
+                        prompt.AppendLine("What the PEC Should Do");
+                        prompt.AppendLine("--------------------------------");
+                        prompt.AppendLine("- Review each PIT for program relevance");
+                        prompt.AppendLine("- Assign responsible faculty or PEC members");
+                        prompt.AppendLine("- Evaluate recommended action plan");
+                        prompt.AppendLine("- Document actions in the APE Action Log");
+
+                        prompt.AppendLine();
+                        prompt.AppendLine("Scroll below to review each PIT and recommended action plan.");
+                        prompt.AppendLine();
+
+                        // ----------------------------------------------------
+                        // PIT DETAILS
+                        // ----------------------------------------------------
+
+                        foreach (DataRowView pit in dvMyInsightsData)
+                        {
+                            string model = pit["ActionPlanModel"].ToString().ToLower();
+
+                            prompt.AppendLine("=================================================");
+                            prompt.AppendLine($"PIT: {pit["PITTitle"]}");
+                            prompt.AppendLine("-------------------------------------------------");
+
+                            prompt.AppendLine($"AFI Frequency: {pit["Frequency"]}");
+                            prompt.AppendLine($"Competency / Category: {pit["CompetencyName"]}");
+                            prompt.AppendLine($"Rotations: {pit["Rotations"]}");
+
+                            prompt.AppendLine();
+                            prompt.AppendLine("PIT Description:");
+                            prompt.AppendLine(pit["PITDefinition"].ToString());
+
+                            prompt.AppendLine();
+                            prompt.AppendLine("Justification & CPR References:");
+                            prompt.AppendLine(pit["Justification"].ToString());
+                            prompt.AppendLine(pit["CPRReferences"].ToString().Replace(",", ", "));
+
+                            prompt.AppendLine();
+                            prompt.AppendLine($"Recommended Action Plan: {pit["ActionPlanModel"]} Model");
+
+                            prompt.AppendLine(pit["ModelJustification"].ToString());
+
+                            prompt.AppendLine();
+                            prompt.AppendLine("Action Plan Steps");
+                            prompt.AppendLine("--------------------------------");
+
+                            // ---------------------------------------
+                            // 6-SIGMA
+                            // ---------------------------------------
+                            if (model.Contains("6-sigma"))
+                            {
+                                prompt.AppendLine($"Define: {pit["Define"]}");
+                                prompt.AppendLine($"Measure: {pit["Measure"]}");
+                                prompt.AppendLine($"Analyze: {pit["Analyze"]}");
+                                prompt.AppendLine($"Improve: {pit["Improve"]}");
+                                prompt.AppendLine($"Control: {pit["Control"]}");
+                            }
+                            // ---------------------------------------
+                            // SWOT
+                            // ---------------------------------------
+                            else if (model.Contains("swot"))
+                            {
+                                prompt.AppendLine($"Strength: {pit["Strength"]}");
+                                prompt.AppendLine($"Weakness: {pit["Weakness"]}");
+                                prompt.AppendLine($"Opportunity: {pit["Opportunity"]}");
+                                prompt.AppendLine($"Threat: {pit["Threat"]}");
+                            }
+                            // ---------------------------------------
+                            // PDSA
+                            // ---------------------------------------
+                            else
+                            {
+                                prompt.AppendLine($"Plan: {pit["Plan"]}");
+                                prompt.AppendLine($"Do: {pit["Do"]}");
+                                prompt.AppendLine($"Study: {pit["Check"]}");
+                                prompt.AppendLine($"Act: {pit["Act"]}");
+                            }
+
+                            prompt.AppendLine();
+                        }
+                    }
+                }
+            }
+            catch
+            {
+                return "Not Available.";
+            }
+
+            return prompt.ToString();
+        }
+
+        private static string BuildMyInsightsPrompt(DataSet dsMyInsights, byte isFaculty)
+        {
+            StringBuilder prompt = new StringBuilder();
+           
+
+            if (dsMyInsights == null || dsMyInsights.Tables.Count < 7)
+                return "";
+
+            try
+            {
+                DataTable dtStrengths = dsMyInsights.Tables[1];
+                DataTable dtDeficiencies = dsMyInsights.Tables[2];
+                DataTable dtPriority = dsMyInsights.Tables[3];
+                DataTable dtStrategic = dsMyInsights.Tables[4];
+                DataTable dtSummaryCompetencies = dsMyInsights.Tables[6];
+                DataTable dtProgression = dsMyInsights.Tables[7];
+                DataTable dtGuidance = dsMyInsights.Tables[8];
+                DataTable dtCompetencies = dsMyInsights.Tables[5];
+
+                // ----------------------------
+                // Department Strengths
+                // ----------------------------
+                if (dtStrengths.Rows.Count > 0)
+                {
+                    prompt.AppendLine("Department-Level Strengths");
+                    prompt.AppendLine("--------------------------------");
+
+                    foreach (DataRow row in dtStrengths.Rows)
+                    {
+                        if (dtStrengths.Columns.Contains("Header"))
+                            prompt.AppendLine($"• {row["Header"]}: {row["Description"]}");
+                        else
+                            prompt.AppendLine($"• {row["Description"]}");
+                    }
+
+                    prompt.AppendLine();
+                }
+
+                // ----------------------------
+                // Department Deficiencies
+                // ----------------------------
+                if (dtDeficiencies.Rows.Count > 0)
+                {
+                    prompt.AppendLine("Department-Level Deficiencies / Opportunities");
+                    prompt.AppendLine("--------------------------------");
+
+                    foreach (DataRow row in dtDeficiencies.Rows)
+                    {
+                        if (dtDeficiencies.Columns.Contains("Header"))
+                            prompt.AppendLine($"• {row["Header"]}: {row["Description"]}");
+                        else
+                            prompt.AppendLine($"• {row["Description"]}");
+                    }
+
+                    prompt.AppendLine();
+                }
+
+                // ----------------------------
+                // PEC Priority Actions
+                // ----------------------------
+                if (dtPriority.Rows.Count > 0)
+                {
+                    prompt.AppendLine("PEC Priority Actions (High-Yield, Low-Lift)");
+                    prompt.AppendLine("--------------------------------");
+
+                    foreach (DataRow row in dtPriority.Rows)
+                    {
+                        if (dtPriority.Columns.Contains("Header"))
+                            prompt.AppendLine($"• {row["Header"]}: {row["Description"]}");
+                        else
+                            prompt.AppendLine($"• {row["Description"]}");
+                    }
+
+                    prompt.AppendLine();
+                }
+
+                // ----------------------------
+                // Strategic Types
+                // ----------------------------
+                List<long> strategicTypes = dtStrategic.AsEnumerable()
+                    .Select(r => r.Field<long>("StrategicTypeId"))
+                    .Distinct()
+                    .ToList();
+
+                DataView dvStrategic = new DataView(dtStrategic);
+
+                if (strategicTypes.Count > 0)
+                {
+                    prompt.AppendLine("Summary for the PEC");
+                    prompt.AppendLine("--------------------------------");
+
+                    foreach (var type in strategicTypes)
+                    {
+                        dvStrategic.RowFilter = "StrategicTypeId = " + type;
+
+                        if (dvStrategic.Count > 0)
+                        {
+                            prompt.AppendLine(dvStrategic[0]["StrategicType"].ToString());
+
+                            foreach (DataRowView row in dvStrategic)
+                                prompt.AppendLine($"- {row["StrategicDescription"]}");
+
+                            prompt.AppendLine();
+                        }
+                    }
+                }
+
+                // ----------------------------
+                // Competency Details
+                // ----------------------------
+                DataView dvSummary = new DataView(dtSummaryCompetencies);
+                DataView dvProgression = new DataView(dtProgression);
+                DataView dvGuidance = new DataView(dtGuidance);
+
+                foreach (DataRow competency in dtCompetencies.Rows)
+                {
+                    string competencyID = competency["CompetencyID"].ToString();
+
+                    prompt.AppendLine(competency["CompetencyName"].ToString());
+                    prompt.AppendLine("--------------------------------");
+
+                    dvSummary.RowFilter = "CompetencyID = " + competencyID;
+
+                    foreach (DataRowView summary in dvSummary)
+                    {
+                        if (!string.IsNullOrEmpty(summary["CPRName"].ToString()))
+                            prompt.AppendLine($"({summary["CPRName"]})");
+
+                        prompt.AppendLine("What Stood Out:");
+                        prompt.AppendLine(summary["WhatStoodOut"].ToString());
+                        prompt.AppendLine();
+
+                        if (isFaculty == 1)
+                        {
+                            prompt.AppendLine("Stability and Reliability:");
+                            prompt.AppendLine(summary["StabilityandReliability"].ToString());
+                            prompt.AppendLine();
+                        }
+
+                        if (isFaculty == 0)
+                        {
+                            dvProgression.RowFilter = "SummaryCompetencyId = " + summary["SummaryCompetencyId"];
+
+                            var levels = dvProgression.ToTable().AsEnumerable()
+                                .Select(r => r.Field<string>("TrainingLevel"))
+                                .Distinct()
+                                .ToList();
+
+                            if (levels.Count > 0)
+                            {
+                                prompt.AppendLine("Progression by PGY");
+
+                                foreach (var level in levels)
+                                {
+                                    dvProgression.RowFilter =
+                                        $"SummaryCompetencyId = {summary["SummaryCompetencyId"]} AND TrainingLevel='{level}'";
+
+                                    if (dvProgression.Count > 0)
+                                    {
+                                        prompt.AppendLine($"{dvProgression[0]["TrainingLevel"]}:");
+                                        prompt.AppendLine(dvProgression[0]["Description"].ToString());
+                                    }
+                                }
+
+                                prompt.AppendLine();
+                            }
+                        }
+
+                        dvGuidance.RowFilter = "SummaryCompetencyId = " + summary["SummaryCompetencyId"];
+
+                        if (dvGuidance.Count > 0)
+                        {
+                            prompt.AppendLine("Guidance for PEC");
+
+                            foreach (DataRowView guidance in dvGuidance)
+                                prompt.AppendLine($"- {guidance["GuidanceText"]}");
+
+                            prompt.AppendLine();
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                return "Not Available.";
+            }
+
+            return prompt.ToString();
+        }
+
+        private static string BuildRotationSummaryComments(DataSet dsMyInsights)
+        {
+            StringBuilder prompt = new StringBuilder();
+
+            try
+            {
+                if (dsMyInsights == null || dsMyInsights.Tables.Count == 0)
+                    return "Not Available.";
+
+                DataTable dtOverallSummary = dsMyInsights.Tables[0];
+
+                if (dtOverallSummary.Rows.Count == 0)
+                    return "Not Available.";
+
+                DataRow overall = dtOverallSummary.Rows[0];                
+
+                prompt.AppendLine("Overall Summary");
+                prompt.AppendLine(overall["OverallSummary"].ToString());
+                prompt.AppendLine();
+
+                // -------------------------
+                // Department Sections
+                // -------------------------
+
+                for (int i = 1; i <= 3; i++)
+                {
+                    DataTable dt = dsMyInsights.Tables[i];
+
+                    string header = "";
+
+                    if (i == 1) header = "Department-Level Strengths";
+                    if (i == 2) header = "Department-Level Deficiencies / Opportunities";
+                    if (i == 3) header = "PEC Priority Actions (High-Yield, Low-Lift)";
+
+                    if (dt.Rows.Count > 0)
+                    {
+                        prompt.AppendLine(header);
+                        prompt.AppendLine("--------------------------------");
+
+                        foreach (DataRow row in dt.Rows)
+                        {
+                            if (dt.Columns.Contains("Header"))
+                                prompt.AppendLine($"• {row["Header"]}: {row["Description"]}");
+                            else
+                                prompt.AppendLine($"• {row["Description"]}");
+                        }
+
+                        prompt.AppendLine();
+                    }
+                }
+
+                // -------------------------
+                // Summary for PEC
+                // -------------------------
+
+                DataTable dtSummaryPOC = dsMyInsights.Tables[4];
+                DataTable dtSummaryPOCDetails = dsMyInsights.Tables[5];
+
+                var pecSections = dtSummaryPOC.AsEnumerable()
+                    .Where(r => r.Field<int>("IsCategory") == 0)
+                    .Select(r => new
+                    {
+                        ID = r.Field<long>("ID"),
+                        Name = r.Field<string>("DisplayName")
+                    })
+                    .Distinct()
+                    .ToList();
+
+                DataView dvDetails = new DataView(dtSummaryPOCDetails);
+
+                if (pecSections.Count > 0)
+                {
+                    prompt.AppendLine("Summary for the PEC");
+                    prompt.AppendLine("--------------------------------");
+
+                    foreach (var section in pecSections)
+                    {
+                        dvDetails.RowFilter = "SummaryForPECID = " + section.ID;
+
+                        if (dvDetails.Count > 0)
+                        {
+                            prompt.AppendLine(section.Name + ":");
+
+                            foreach (DataRowView row in dvDetails)
+                            {
+                                prompt.AppendLine($"  - {row["Description"]}");
+                            }
+
+                            prompt.AppendLine();
+                        }
+                    }
+                }
+
+                // -------------------------
+                // Competency Details
+                // -------------------------
+
+                DataTable dtCompetencyDetails = dsMyInsights.Tables[6];
+                DataTable dtGuidance = dsMyInsights.Tables[7];
+
+                var competencies = dtSummaryPOC.AsEnumerable()
+                    .Where(r => r.Field<int>("IsCategory") == 1)
+                    .Select(r => new
+                    {
+                        ID = r.Field<long>("ID"),
+                        Name = r.Field<string>("DisplayName")
+                    })
+                    .Distinct()
+                    .ToList();
+
+                DataView dvCompDetails = new DataView(dtCompetencyDetails);
+                DataView dvGuidance = new DataView(dtGuidance);
+
+                foreach (var competency in competencies)
+                {
+                    prompt.AppendLine(competency.Name);
+                    prompt.AppendLine("--------------------------------");
+
+                    dvCompDetails.RowFilter = "SummaryForPECID = " + competency.ID;
+
+                    foreach (DataRowView row in dvCompDetails)
+                    {
+                        prompt.AppendLine("What Stood Out:");
+                        prompt.AppendLine(row["WhatStoodOut"].ToString());
+                        prompt.AppendLine();
+
+                        prompt.AppendLine("Stability Reliability:");
+                        prompt.AppendLine(row["StabilityReliability"].ToString());
+                        prompt.AppendLine();
+
+                        dvGuidance.RowFilter = "DomainDetailID = " + row["ID"];
+
+                        if (dvGuidance.Count > 0)
+                        {
+                            prompt.AppendLine("Guidance for PEC:");
+
+                            foreach (DataRowView g in dvGuidance)
+                            {
+                                prompt.AppendLine($"- {g["GuidanceText"]}");
+                            }
+
+                            prompt.AppendLine();
+                        }
+                    }
+                }
+            }
+            catch(Exception ex)
+            {
+                prompt.AppendLine("Not Available.");
+                //Supress Error. 
+            }
+
+            return prompt.ToString();
+        }
+
     }
 }

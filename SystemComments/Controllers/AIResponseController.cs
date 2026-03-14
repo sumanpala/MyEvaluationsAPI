@@ -367,121 +367,8 @@ namespace SystemComments.Controllers
             }
             await BackEndService.InsertAPEResponses(input, aiAPEResponse[0], _context);
             return aiAPEResponse;
-        }             
-                     
-        
-
-        //[HttpPost("TestModel5")]
-        //[AllowAnonymous]
-        //public async Task<string> TestGPT5Model()
-        //{
-        //    return await GetGPT5Response("");
-        //}
-
-        //[HttpPost("TestAzureDomain")]
-        //[AllowAnonymous]
-        //public async Task<string> TestAzureDomain()
-        //{
-        //    string time = "0";
-        //    Stopwatch sw = Stopwatch.StartNew();
-        //    int maxTokens = Convert.ToInt32(_config.GetSection("AppSettings:MaxTokens").Value);
-
-        //    string systemMessages = "You are good at poetry.\n Return result in 2 to 3 seconds.";
-
-        //    var messages = new List<ChatMessage>
-        //    {
-        //        ChatMessage.CreateSystemMessage(systemMessages),
-        //        ChatMessage.CreateUserMessage("Plese provide one good poetry.")
-        //    };
-
-        //    StringBuilder sb = new StringBuilder();           
-        //    var options = new ChatCompletionOptions
-        //    {
-        //        Temperature = 1,
-        //        TopP = 1,
-        //        PresencePenalty = 0,
-        //        FrequencyPenalty = 0,
-        //        MaxOutputTokenCount = 400
-        //    };
-
-        //    try
-        //    {
-        //        // ✅ Streaming response from OpenAI
-        //        await foreach (var update in chatAzureClient.CompleteChatStreamingAsync(messages, options))
-        //        {
-        //            if (update.ContentUpdate.Count > 0)
-        //            {
-        //                string token = update.ContentUpdate[0].Text;
-        //                sb.Append(token);
-
-        //            }
-        //        }
-        //    }
-        //    catch (Exception ex)
-        //    {
-
-        //    }
-
-        //    sw.Stop();
-        //    time = sw.Elapsed.TotalSeconds.ToString();
-        //    // let prefetch complete in background
-        //    // _ = prefetchTask;
-        //    return sb.ToString(); 
-        //}
-
-        //[HttpPost("GetTokenUsage")]
-        //[AllowAnonymous]
-        //public async Task<string> GetTokenUsage([FromBody] TokenUsage input)
-        //{
-        //    TokenName token = (TokenName)input.TokenName;
-        //    string apiKey = "";
-        //    switch (token.ToString())
-        //    {
-        //        case "MyInsightsToken":
-        //            apiKey = _config.GetSection("AppSettings:MyInsightsToken").Value;
-        //            break;
-        //        case "NPVToken":
-        //            apiKey = _config.GetSection("AppSettings:NPVToken").Value;
-        //            break;
-        //        case "AIToken":
-        //            apiKey = _config.GetSection("AppSettings:AIToken").Value;
-        //            break;
-        //        case "SAGEToken":
-        //            apiKey = _config.GetSection("AppSettings:SAGEToken").Value;
-        //            break;
-        //        case "MyInsightsAPEToken":
-        //            apiKey = _config.GetSection("AppSettings:MyInsightsAPEToken").Value;
-        //            break;
-        //        case "MyInsightsAttendingToken":
-        //            apiKey = _config.GetSection("AppSettings:MyInsightsAttendingToken").Value;
-        //            break;
-        //    }
-        //    if (apiKey.Length > 0)
-        //    {
-
-
-        //        using var http = new HttpClient();
-        //        http.DefaultRequestHeaders.Authorization =
-        //            new AuthenticationHeaderValue("Bearer", apiKey);
-        //        http.DefaultRequestHeaders.Accept.Add(
-        //            new MediaTypeWithQualityHeaderValue("application/json"));
-
-        //        string url = $"https://api.openai.com/v1/usage?date={input.StartDate}&end_date={input.EndDate}";
-
-        //        HttpResponseMessage response = await http.GetAsync(url);
-
-        //        if (!response.IsSuccessStatusCode)
-        //        {
-        //            Console.WriteLine($"Error: {response.StatusCode}");
-        //            Console.WriteLine(await response.Content.ReadAsStringAsync());                   
-        //        }
-
-        //        string content = await response.Content.ReadAsStringAsync();
-        //        Console.WriteLine("Usage response:");
-        //        Console.WriteLine(content);
-        //    }
-        //    return token.ToString();
-        //}
+        }                                
+             
 
         [HttpPost("MyInsightsRotations1")]
         [AllowAnonymous]
@@ -565,6 +452,86 @@ namespace SystemComments.Controllers
                 MyInsightsSurveyResponse surveyResponse = new MyInsightsSurveyResponse();
                 surveyResponse.Part1JSON = $"[\"error\":\"{ex.Message}\"]";
                 aiResponse.Add(surveyResponse);
+                _logger.LogError(ex, "An error occurred while making the OpenAI API request");
+
+            }
+            return aiResponse;
+        }
+
+        [HttpPost("PECSummaryInsights")]
+        [AllowAnonymous]
+        public async Task<ActionResult<IEnumerable<MyInsightsResponse>>> PECSummaryInsights([FromBody] PECSummary input)
+        {
+            List<MyInsightsResponse> aiResponse = new List<MyInsightsResponse>();
+            try
+            {
+                MyInsightsResponse insightsResponse = new MyInsightsResponse();
+                DataSet dsPrompts = BackEndService.GetACGMESummaryMyInsightsPITS(_context, input);
+                string prompt = "";
+                string residentSurveyPITS = "";
+                string residentWellBeingSurveyPITS = "";
+                string facultySurveyPITS = "";
+                string facultyWellBeingSurveyPITS = "";
+                if(dsPrompts.Tables.Count > 0)
+                {
+                    DataTable dtPrompt = dsPrompts.Tables[0];
+                    DataView dvSuprveyComments = new(dsPrompts.Tables[1]);
+                    if (dtPrompt.Rows.Count > 0) {
+                        prompt = dtPrompt.Rows[0]["APIFileContent"].ToString();
+                        prompt = prompt.Replace("{ProgramType}", dtPrompt.Rows[0]["ProgramName"].ToString());
+                        insightsResponse.ProgramType = dtPrompt.Rows[0]["ProgramName"].ToString();
+                    }
+                    dvSuprveyComments.RowFilter = "IsResident=0";
+                    facultySurveyPITS = PromptService.GetSurveyPITS(dvSuprveyComments.ToTable());
+                    prompt = prompt.Replace("{FacultySurveyPITs}", facultySurveyPITS);
+
+                    dvSuprveyComments.RowFilter = "IsResident=1";
+                    residentSurveyPITS = PromptService.GetSurveyPITS(dvSuprveyComments.ToTable());
+                    prompt = prompt.Replace("{ResidentSurveyPITs}", residentSurveyPITS);
+
+                    dvSuprveyComments.RowFilter = "IsResident=2";
+                    residentWellBeingSurveyPITS = PromptService.GetSurveyPITS(dvSuprveyComments.ToTable());
+                    prompt = prompt.Replace("{ResidentWellBeingPITs}", residentWellBeingSurveyPITS);
+
+                    dvSuprveyComments.RowFilter = "IsResident=3";
+                    facultyWellBeingSurveyPITS = PromptService.GetSurveyPITS(dvSuprveyComments.ToTable());
+                    prompt = prompt.Replace("{FacultyWellBeingPITs}", facultyWellBeingSurveyPITS);
+
+                }
+                string rotationSummaryComments = BackEndService.GetRotationSummaryInsights(_context, input);
+                prompt = prompt.Replace("{RotationSummary}", rotationSummaryComments);
+
+                string residentSummaryInsights = BackEndService.GetMyInsightsSummaryResults(_context, input, Convert.ToByte(0));
+                prompt = prompt.Replace("{ResidentPerformanceSummary}", residentSummaryInsights);
+
+                string facultySummaryInsights = BackEndService.GetMyInsightsSummaryResults(_context, input, Convert.ToByte(0));
+                prompt = prompt.Replace("{FacultyPerformanceSummary}", facultySummaryInsights);
+
+                string apeInsights = BackEndService.GetAPEMyInsights(_context, input);
+                prompt = prompt.Replace("{APESummaryPITs}", apeInsights);
+
+                string systemMessage = "You are an expert assistant specializing in Graduate Medical Education (GME)" +
+                    ", ACGME Common Program Requirements, and Annual Program Evaluation (APE) processes.\r\n\r\n" +
+                    "Your role is to analyze program evaluation data and generate a Program Evaluation Committee (PEC) summary suitable for institutional leadership review." +
+                    "\r\n\r\nAlways follow the instructions provided in the user message carefully. The user message contains the detailed evaluation framework, section definitions, " +
+                    "and analysis rules that must guide your reasoning and writing.\r\n\r\nImportant behavioral rules:\r\n\r\n• Use only the information provided in the user message " +
+                    "input.\r\n• Do not invent facts, names, metrics, or assumptions.\r\n• Do not introduce new headings or sections beyond those requested.\r\n" +
+                    "• Do not add explanations, commentary, or analysis outside the required output structure.\r\n• Do not mention AI, prompts, or internal reasoning." +
+                    "\r\n\r\nOutput requirements:\r\n\r\n• The response must be returned strictly as valid JSON.\r\n• Do not include markdown formatting.\r\n" +
+                    "• Do not include text before or after the JSON.\r\n• Ensure the JSON is syntactically valid and parseable" +
+                    ".\r\n\r\nThe JSON structure must match the format defined in the user message.";
+                string response = await MyInsightsGPT5Response(systemMessage, prompt, "gpt-5.2");
+                insightsResponse.SummaryJSON = response;
+                insightsResponse.Prompt = prompt;
+                DataSet dsResult = BackEndService.SavePECSummaryInsights(_context, input, insightsResponse);
+
+                aiResponse.Add(insightsResponse);
+            }
+            catch (System.Exception ex)
+            {
+                MyInsightsResponse insightsResponse = new MyInsightsResponse();
+                insightsResponse.ErrorMessage = $"[\"error\":\"{ex.Message}\"]";
+                aiResponse.Add(insightsResponse);
                 _logger.LogError(ex, "An error occurred while making the OpenAI API request");
 
             }
@@ -1711,7 +1678,7 @@ namespace SystemComments.Controllers
         }
 
 
-        private async Task<string> MyInsightsGPT5Response(string prompt, string comments)
+        private async Task<string> MyInsightsGPT5Response(string prompt, string comments, string model = "gpt-5")
         {
             string time = "0";
             Stopwatch sw = Stopwatch.StartNew();
@@ -1726,7 +1693,7 @@ namespace SystemComments.Controllers
             };
 
             StringBuilder sb = new StringBuilder();
-            var chatClient = _openAIAPEMyInsightsClient.GetChatClient("gpt-5");
+            var chatClient = _openAIAPEMyInsightsClient.GetChatClient(model);
             var options = new ChatCompletionOptions
             {
                 Temperature = 1,

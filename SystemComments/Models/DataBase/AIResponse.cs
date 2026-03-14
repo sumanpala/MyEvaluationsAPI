@@ -53,6 +53,10 @@ namespace SystemComments.Models.DataBase
         
         public string ErrorMessage {  get; set; }
 
+        public string Prompt { get; set; }
+
+        public string ProgramType {  get; set; }    
+
     }
 
     public class Choice
@@ -198,4 +202,5 @@ namespace SystemComments.Models.DataBase
 
         public string Part2JSON { get; set; }
     }
+
 }
