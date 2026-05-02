@@ -306,22 +306,30 @@ namespace SystemComments.Controllers
                 string prompt = string.Empty;
                 string response = string.Empty;
                 APEResponse apeResponse = new APEResponse();
+                string frequencyRule = "FREQUENCY CALCULATION RULE (MANDATORY):\r\n\r\n- Frequency must be a NUMBER between 20 and 80.\r\n- Frequency is NOT the raw count.\r\n- Frequency must be calculated by NORMALIZING the number of AFIs assigned to each PIT.\r\n\r\nCALCULATION METHOD:\r\n\r\n1. Internally determine:\r\n   - The number of AFIs assigned to each PIT\r\n   - The MIN and MAX AFI counts across all PITs\r\n\r\n2. Apply normalization:\r\n\r\n   Frequency = 20 + ((PIT_count - MIN_count) / (MAX_count - MIN_count)) × 80\r\n\r\n3. Round Frequency to the nearest multiple of 5.\r\n\r\n4. Don't repeat same frequency for all PIT's 5. Ensure:\r\n   - The smallest PIT → ~20\r\n   - The largest PIT → ~80\r\n   - Others fall proportionally in between\r\n\r\nEDGE CASE:\r\n\r\n- If all PITs have equal counts:\r\n  \r\nSTRICT RULES:\r\n\r\n- Frequency must always be between 20 and 80\r\n- DO NOT output raw counts (e.g., 3, 7, 9)\r\n- DO NOT use fixed or repeated values unless mathematically required\r\n- Frequencies must vary based on actual distribution\r\n\r\nVALIDATION BEFORE OUTPUT:\r\n\r\n- Ensure min Frequency ≈ 20\r\n- Ensure max Frequency ≈ 80\r\n- Ensure values are distributed (not all same)";
                 //string requiredCompetencies = "\n\nReturn the results for below Competency/Category's without fail and also include if any other Competency/Category's are available.\n 1) Interpersonal and Communication Skills\n2) Medical Knowledge" +
                 //"\n3) Patient Care and Procedural Skills\n4) Practice-Based Learning and Improvement\n5) Professionalism\n6) Systems-Based Practice\nReturn atleast 3 to 4 PITs for one PrimaryACGMECompetencyOrCategory";
                 string requiredCompetencies = "\n\nCoverage Rule:\n\r\nThe output must always include all six ACGME Core Competencies:\nInterpersonal and Communication Skills\nMedical Knowledge" +
                     "\nPatient Care and Procedural Skills\nPractice-Based Learning and Improvement\nProfessionalism\nSystems-Based Practice\n" +
                     "If there are additional ACGME categories identified in the AFIs or Comments Source (e.g., Well-Being, Supervision, Faculty Development, etc.), include those as well as separate JSON objects with their PITs.\n" +
                     "This ensures that PEC receives a full framework covering the required six competencies plus any additional program-relevant categories." +
-                    "\n\nPIT Count Rule:\n- For each ACGME competency/category, output 3–4 PITs derived from the AFIs.\n- If fewer than 3 PITs exist, include what is available." + 
-                    "\n\n\"Important: Frequency is always high. Try to include Frequency as High based on the prompt.\"\n" +
+                    "\n\nPIT Count Rule:\n- For each ACGME competency/category, output 3–4 PITs derived from the AFIs.\n- If fewer than 3 PITs exist, include what is available." +
+                    "\n\n"+ frequencyRule + "\nImportant: Frequency is always high. Don't Repeat same frequency for all PITS. \n Try to include Frequency as High based on the prompt.\"\n" +
                     "\n\"Important: Include all rotations which are involved on generating the PIT.\"\n";
                 
                 prompt = await BackEndService.GetAPEAreaOfImprovementsResponse(input, _context, _config);                
                 input.AFIPrompt = prompt;
                 prompt = prompt + requiredCompetencies;
                 response = await GetAPEAIResponse(prompt);
-                response = Regex.Replace(response, @"\r\n?|\n", "").Replace("```json", "").Replace("json{", "{").Replace("```", "");
-                string unescapedJson = System.Text.RegularExpressions.Regex.Unescape(response);
+                //response = Regex.Replace(response, @"\r\n?|\n", "").Replace("```json", "").Replace("json{", "{").Replace("```", "");
+                string cleaned = response.Trim();
+                
+                if (cleaned.StartsWith("```"))
+                {
+                    cleaned = Regex.Replace(cleaned, @"^```[a-zA-Z]*\s*", "");
+                    cleaned = Regex.Replace(cleaned, @"\s*```$", "");
+                }
+                string unescapedJson = cleaned;
                 var parsed = JToken.Parse(unescapedJson);
                 string compactJson = JsonConvert.SerializeObject(parsed, Formatting.None);
                 apeResponse.AFIJSON = compactJson;
@@ -330,8 +338,15 @@ namespace SystemComments.Controllers
                 input.AFIProgramPrompt = prompt;
                 prompt = prompt + requiredCompetencies;
                 response = await GetAPEAIResponse(prompt);
-                response = Regex.Replace(response, @"\r\n?|\n", "").Replace("```json", "").Replace("json{", "{").Replace("```", "");
-                unescapedJson = System.Text.RegularExpressions.Regex.Unescape(response);
+                //response = Regex.Replace(response, @"\r\n?|\n", "").Replace("```json", "").Replace("json{", "{").Replace("```", "");
+                cleaned = response.Trim();
+
+                if (cleaned.StartsWith("```"))
+                {
+                    cleaned = Regex.Replace(cleaned, @"^```[a-zA-Z]*\s*", "");
+                    cleaned = Regex.Replace(cleaned, @"\s*```$", "");
+                }
+                unescapedJson = cleaned;
                 parsed = JToken.Parse(unescapedJson);
                 compactJson = JsonConvert.SerializeObject(parsed, Formatting.None);
                 apeResponse.AFIProgramJSON = compactJson;
@@ -345,8 +360,15 @@ namespace SystemComments.Controllers
                     input.PITPrompt = pitPrompt;
                     pitPrompt = pitPrompt + requiredCompetencies;
                     string pitResponse = await GetAPEAIResponse(pitPrompt);
-                    pitResponse = Regex.Replace(pitResponse, @"\r\n?|\n", "").Replace("```json", "").Replace("json{", "{").Replace("```", "");
-                    unescapedJson = System.Text.RegularExpressions.Regex.Unescape(pitResponse);
+                    cleaned = pitResponse.Trim();
+
+                    if (cleaned.StartsWith("```"))
+                    {
+                        cleaned = Regex.Replace(cleaned, @"^```[a-zA-Z]*\s*", "");
+                        cleaned = Regex.Replace(cleaned, @"\s*```$", "");
+                    }
+                    //pitResponse = Regex.Replace(pitResponse, @"\r\n?|\n", "").Replace("```json", "").Replace("json{", "{").Replace("```", "");
+                    unescapedJson = cleaned;
                     parsed = JToken.Parse(unescapedJson);
                     compactJson = JsonConvert.SerializeObject(parsed, Formatting.None);
                     apeResponse.PITJSON = compactJson;
@@ -1110,35 +1132,79 @@ namespace SystemComments.Controllers
         private async Task<string> GetAPEAIResponse(string prompt, Int16 promptType = 1)
         {
             //string time = "0";            
-            StringBuilder delta = new StringBuilder();           
-            List<object> messages = new List<object>
+            //StringBuilder delta = new StringBuilder();           
+            //List<object> messages = new List<object>
+            //{
+            //    new { role = "system", content = "You are a JSON generator. Always output ONLY valid JSON. The JSON must include ALL PITs present in the user’s input. Do not stop early. Do not skip any PIT. Do not summarize.\n\n" },
+            //    new { role = "user", content = prompt }
+            //};
+            //string aiKey = _config.GetSection("AppSettings:MyInsightsAPEToken").Value;           
+
+            //using (var client = new HttpClient())
+            //{
+            //    client.Timeout = Timeout.InfiniteTimeSpan;
+            //    client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", aiKey);
+            //    var requestBody = new
+            //    {
+            //        model = "gpt-5",
+            //        messages = messages,
+            //        max_tokens = 9000,
+            //        temperature = 0,
+            //        top_p = 0.1,
+            //        stream = false
+            //    };
+
+            //    var content = new StringContent(JsonConvert.SerializeObject(requestBody), Encoding.UTF8, "application/json");
+            //    var response = await client.PostAsync("https://api.openai.com/v1/chat/completions", content);
+            //    var result = await response.Content.ReadAsStringAsync();
+
+            //    dynamic json = JsonConvert.DeserializeObject(result);
+            //    return json?.choices?[0]?.message?.content ?? "";
+            //}
+
+            string time = "0";
+            Stopwatch sw = Stopwatch.StartNew();                      
+
+            var messages = new List<ChatMessage>
             {
-                new { role = "system", content = "You are a JSON generator. Always output ONLY valid JSON. The JSON must include ALL PITs present in the user’s input. Do not stop early. Do not skip any PIT. Do not summarize.\n\n" },
-                new { role = "user", content = prompt }
+                ChatMessage.CreateSystemMessage("You are a JSON generator. Always output ONLY valid JSON. The JSON must include ALL PITs present in the user’s input. Do not stop early. Do not skip any PIT. Do not summarize.\\n\\n"),
+                ChatMessage.CreateUserMessage(prompt)
             };
-            string aiKey = _config.GetSection("AppSettings:MyInsightsAPEToken").Value;           
 
-            using (var client = new HttpClient())
+            StringBuilder sb = new StringBuilder();
+            var chatClient = _openAIAPEMyInsightsClient.GetChatClient("gpt-5");
+            var options = new ChatCompletionOptions
             {
-                client.Timeout = Timeout.InfiniteTimeSpan;
-                client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", aiKey);
-                var requestBody = new
+                Temperature = 1,
+                //TopP = 0,
+                PresencePenalty = 0,
+                FrequencyPenalty = 0,
+                //MaxOutputTokenCount = 8000
+            };
+
+            try
+            {
+                // ✅ Streaming response from OpenAI
+                await foreach (var update in chatClient.CompleteChatStreamingAsync(messages, options))
                 {
-                    model = "gpt-5",
-                    messages = messages,
-                    max_tokens = 9000,
-                    temperature = 0,
-                    top_p = 0.1,
-                    stream = false
-                };
+                    if (update.ContentUpdate.Count > 0)
+                    {
+                        string token = update.ContentUpdate[0].Text;
+                        sb.Append(token);
 
-                var content = new StringContent(JsonConvert.SerializeObject(requestBody), Encoding.UTF8, "application/json");
-                var response = await client.PostAsync("https://api.openai.com/v1/chat/completions", content);
-                var result = await response.Content.ReadAsStringAsync();
-
-                dynamic json = JsonConvert.DeserializeObject(result);
-                return json?.choices?[0]?.message?.content ?? "";
+                    }
+                }
             }
+            catch (Exception ex)
+            {
+
+            }
+
+            sw.Stop();
+            time = sw.Elapsed.TotalSeconds.ToString();
+            // let prefetch complete in background
+            // _ = prefetchTask;
+            return sb.ToString();
 
             //using (var request = new HttpRequestMessage(HttpMethod.Post, "https://api.openai.com/v1/chat/completions"))
             //{
@@ -1894,7 +1960,7 @@ namespace SystemComments.Controllers
         {
             if (isEnable5model)
             {
-                chatClient = _openAIClient.GetChatClient("gpt-5.1");
+                chatClient = _openAIClient.GetChatClient("gpt-5.2");
             }
             prompt = prompt.Replace("```xml", "").Replace("<!-- Include follow-up only if response is vague -->", "");
             //string time = "0";
@@ -2070,7 +2136,7 @@ namespace SystemComments.Controllers
             var chatClient = _openAIClient.GetChatClient("gpt-4o-mini");
             if (isEnable5model)
             {
-                chatClient = _openAIClient.GetChatClient("gpt-5.1");
+                chatClient = _openAIClient.GetChatClient("gpt-5.2");
             }
             var options = new ChatCompletionOptions
             {

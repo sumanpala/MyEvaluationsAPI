@@ -1477,6 +1477,38 @@ The narrative must be fully self-contained, without requiring tables, graphs, or
 
             return promptBuilder.ToString();
         }
+
+        public static string SanitizePrompt(string input)
+        {
+            if (string.IsNullOrWhiteSpace(input))
+                return input;
+
+            // Normalize Unicode (decomposes weird characters)
+            string normalized = input.Normalize(NormalizationForm.FormKC);
+
+            // Replace smart quotes with standard quotes
+            normalized = normalized
+                .Replace("“", "\"")
+                .Replace("”", "\"")
+                .Replace("‘", "'")
+                .Replace("’", "'");
+
+            // Replace long dashes with normal dash
+            normalized = normalized
+                .Replace("–", "-")
+                .Replace("—", "-");
+
+            // Replace ellipsis
+            normalized = normalized.Replace("…", "...");
+
+            // Remove non-ASCII control characters (except newline/tab)
+            normalized = Regex.Replace(normalized, @"[^\u0009\u000A\u000D\u0020-\u007E]", "");
+
+            // Optional: collapse excessive whitespace
+            normalized = Regex.Replace(normalized, @"\s{2,}", " ");
+
+            return normalized.Trim();
+        }
     }   
 
 }
