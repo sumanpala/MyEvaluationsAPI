@@ -1172,7 +1172,7 @@ namespace SystemComments.Controllers
             };
 
             StringBuilder sb = new StringBuilder();
-            var chatClient = _openAIAPEMyInsightsClient.GetChatClient("gpt-5");
+            var chatClient = _openAIAPEMyInsightsClient.GetChatClient("gpt-5.2");
             var options = new ChatCompletionOptions
             {
                 Temperature = 1,
@@ -1711,7 +1711,7 @@ namespace SystemComments.Controllers
                 ChatMessage.CreateUserMessage(comments)
             };
 
-            var chatClient = _openAIAPEMyInsightsClient.GetChatClient("gpt-5");
+            var chatClient = _openAIAPEMyInsightsClient.GetChatClient("gpt-5.2");
 
             var options = new ChatCompletionOptions
             {
@@ -1744,7 +1744,7 @@ namespace SystemComments.Controllers
         }
 
 
-        private async Task<string> MyInsightsGPT5Response(string prompt, string comments, string model = "gpt-5")
+        private async Task<string> MyInsightsGPT5Response(string prompt, string comments, string model = "gpt-5.2")
         {
             string time = "0";
             Stopwatch sw = Stopwatch.StartNew();
@@ -1810,7 +1810,7 @@ namespace SystemComments.Controllers
             };
 
             StringBuilder sb = new StringBuilder();
-            var chatClient = _openAIAPEMyInsightsClient.GetChatClient("gpt-5");
+            var chatClient = _openAIAPEMyInsightsClient.GetChatClient("gpt-5.2");
             var options = new ChatCompletionOptions
             {
                 Temperature = 1,

@@ -760,12 +760,12 @@ namespace SystemComments.Utilities
                     {
                         ReportCategory = row["ReportCategory"].ToString(),
                         QuestionText = row["QuestionText"].ToString(),
-                        ProgramCompliant = SafeDecimal(row, "ProgramCompliant"),
-                        SpecialtyCompliant = SafeDecimal(row, "SpecialtyCompliant"),
-                        NationalCompliant = SafeDecimal(row, "NationalCompliant"),
-                        ProgramMean = SafeDecimal(row, "ProgramMean"),
-                        SpecialtyMean = SafeDecimal(row, "SpecialtyMean"),
-                        NationalMean = SafeDecimal(row, "NationalMean")
+                        ProgramCompliant = SafeDecimal(row, "%ProgramCompliant"),
+                        SpecialtyCompliant = SafeDecimal(row, "%SpecialtyCompliant"),
+                        NationalCompliant = SafeDecimal(row, "%NationalCompliant"),
+                        //ProgramMean = SafeDecimal(row, "ProgramMean"),
+                        //SpecialtyMean = SafeDecimal(row, "SpecialtyMean"),
+                        //NationalMean = SafeDecimal(row, "NationalMean")
 
                     });
                 }
@@ -778,8 +778,8 @@ namespace SystemComments.Utilities
                         Agree = SafeDecimal(row, "Agree"),
                         Disagree = SafeDecimal(row, "Disagree"),
                         StronglyDisagree = SafeDecimal(row, "StronglyDisagree"),
-                        ProgramMean = SafeDecimal(row, "ProgramMean"),
-                        NationalMean = SafeDecimal(row, "NationalMean")
+                        //ProgramMean = SafeDecimal(row, "ProgramMean"),
+                        //NationalMean = SafeDecimal(row, "NationalMean")
 
                     });
                 }
@@ -863,7 +863,7 @@ namespace SystemComments.Utilities
                     // Get Stage 1 Response 
                     if (isDataAvailable)
                     {
-                        string systemMessage = "You are GPT-5, an expert analyst in Graduate Medical Education (GME) accreditation, survey analytics, and program evaluation reporting.\r\n\r\n" +
+                        string systemMessage = "You are GPT-5.2, an expert analyst in Graduate Medical Education (GME) accreditation, survey analytics, and program evaluation reporting.\r\n\r\n" +
                             "Your role:\r\n- Interpret and execute all instructions from the user message as a Graduate Medical Education specialist assisting a Program Evaluation Committee (PEC)." +
                             "\r\n- Analyze ACGME Resident/Fellow Survey datasets to identify Performance Improvement Topics (PITs) with Year-over-Year (YoY) awareness." +
                             "\r\n- Produce structured, deterministic JSON output suitable for inclusion in PEC documentation.\r\n\r\nBehavioral directives:\r\n" +
@@ -883,7 +883,7 @@ namespace SystemComments.Utilities
                         insightResponse.Part1Prompt = prompt;
                         stage2Prompt = stage2Prompt.Replace("[Survey Input]", response);
 
-                        systemMessage = "You are GPT-5, a deterministic Graduate Medical Education (GME) analytics and process-improvement expert supporting Program Evaluation Committees (PECs).\r\n\r\n" +
+                        systemMessage = "You are GPT-5.2, a deterministic Graduate Medical Education (GME) analytics and process-improvement expert supporting Program Evaluation Committees (PECs).\r\n\r\n" +
                             "ROLE:\r\nYou analyze ACGME Resident/Fellow Survey Performance Improvement Topics (PITs) and produce PEC-ready, structured action plans.\r\nYou interpret the user’s message as containing PIT data and framework selection rules." +
                             "\r\nYou generate one JSON object per PIT—never summaries, previews, or markdown.\r\n\r\nDOMAIN EXPECTATIONS:\r\n• Apply 2025 ACGME Common Program Requirements (CPR) or newer only.\r\n" +
                             "• Exclude all references to DEI-specific accreditation elements.\r\n• Treat each PIT independently unless consolidation rules are explicitly defined.\r\n" +
