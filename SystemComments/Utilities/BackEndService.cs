@@ -863,6 +863,7 @@ namespace SystemComments.Utilities
                     // Get Stage 1 Response 
                     if (isDataAvailable)
                     {
+                        string unicodeRule = "Unicode Preservation Rule\r\n\r\n    Always render the Unicode delta character exactly as: Δ\r\n\r\n    Use this exact Unicode character:\r\n    Δ = \\u0394\r\n\r\n    Never replace Δ with:\r\n    ?\r\n    Gap\r\n    Diff\r\n    delta\r\n    &#916;\r\n\r\n    PITDefinition format must preserve:\r\n    Spec. 96.86% (Δ -0.60); Nat. 97.85% (Δ -1.59)\r\n\r\n    The final JSON response must contain the actual rendered Unicode character Δ, not a replacement character.";
                         string systemMessage = "You are GPT-5.2, an expert analyst in Graduate Medical Education (GME) accreditation, survey analytics, and program evaluation reporting.\r\n\r\n" +
                             "Your role:\r\n- Interpret and execute all instructions from the user message as a Graduate Medical Education specialist assisting a Program Evaluation Committee (PEC)." +
                             "\r\n- Analyze ACGME Resident/Fellow Survey datasets to identify Performance Improvement Topics (PITs) with Year-over-Year (YoY) awareness." +
@@ -877,7 +878,7 @@ namespace SystemComments.Utilities
                             "\r\n- Each array element represents one PIT.\r\n- Each PIT must include: \r\n  Severity, ReportCategory, PITTitle, PITDefinition, Frequency, Justification, and CPRReferences." +
                             "\r\n- Do not add extra keys or formatting beyond valid JSON.\r\n- Do not include tables, markdown, or natural-language explanations outside the JSON block.\r\n\r\nTone and purpose:" +
                             "\r\n- Write definitions and justifications in clear, professional PEC-report language.  \r\n- Emphasize compliance, supervision, safety, and educational quality per ACGME CPR." +
-                            "\r\n\r\nIf any ambiguity arises, prefer explicit compliance with user instructions over assumptions.\r\n\r\nEnd of system message.\r\n";
+                            "\r\n\r\nIf any ambiguity arises, prefer explicit compliance with user instructions over assumptions.\r\n\r\nEnd of system message.\r\n" + unicodeRule;
                         response = await PromptService.MyInsightsGPT5Response(_openAIMyInsightsClient, prompt, systemMessage);
                         insightResponse.Part1JSON = response;
                         insightResponse.Part1Prompt = prompt;
@@ -895,7 +896,7 @@ namespace SystemComments.Utilities
                             "}\r\n  ]\r\n}\r\n\r\nCONSTRAINTS:\r\n• Produce deterministic results—identical inputs yield identical outputs.\r\n• Do not generate extra commentary, examples, or markdown.\r\n" +
                             "• Do not summarize or condense multiple PITs.\r\n• Maintain exact numeric and textual precision from the input.\r\n• Do not include placeholders or filler text (e.g., “TBD,” “example,” “...”).\r\n• Output only valid JSON (no tables, headers, or descriptive prose).\r\n• Never request clarification or confirmation.\r\n\r\nWRITING STYLE:\r\n" +
                             "• Use concise, directive, professional language suitable for PEC documentation.\r\n• Each action plan must sound implementation-ready, not conceptual.\r\n• Justifications reference ACGME CPR sections using decimal notation (e.g., “1.8.c”).\r\n• When referencing monitoring tools, describe explicit use (“Track via MyInsights dashboard after each rotation cycle.”)." +
-                            "\r\n\r\nEXECUTION LOGIC:\r\n• Read and apply all rules from the user message exactly as written.\r\n• Treat the user message as containing complete instructions and input data.\r\n• Begin immediately upon receipt—no intermediate output or explanation.\r\n• End after emitting the single `\"PEC_ActionPlans\"` JSON block.\r\n";
+                            "\r\n\r\nEXECUTION LOGIC:\r\n• Read and apply all rules from the user message exactly as written.\r\n• Treat the user message as containing complete instructions and input data.\r\n• Begin immediately upon receipt—no intermediate output or explanation.\r\n• End after emitting the single `\"PEC_ActionPlans\"` JSON block.\r\n" + unicodeRule;
 
                         response = await PromptService.MyInsightsGPT5Response(_openAIMyInsightsClient, stage2Prompt, systemMessage);
                         insightResponse.Part2JSON = response;
