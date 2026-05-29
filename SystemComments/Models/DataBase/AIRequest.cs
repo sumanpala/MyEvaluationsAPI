@@ -128,5 +128,23 @@ namespace SystemComments.Models.DataBase
 
     }
 
+    public class MyInsightsNarrativeQualityRequest
+    {
+        public Int64 DepartmentID { get; set; }
+
+        public Int64 EvaluatorID { get; set; }
+
+        public string StartDate { get; set; }
+
+        public string EndDate { get; set; }
+
+        public Int64 HistoryID { get; set; }
+
+        public Int64 UserID { get; set; }
+
+
+
+    }
+
 
 }

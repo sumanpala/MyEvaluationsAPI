@@ -203,4 +203,15 @@ namespace SystemComments.Models.DataBase
         public string Part2JSON { get; set; }
     }
 
+    public class MyInsightsNarrativeQualityResponse
+    {
+        public string Prompt { get; set; }
+
+        public string ResultJSON { get; set; }
+
+        public string ErrorMessage {  get; set; }
+
+
+    }
+
 }

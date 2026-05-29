@@ -1714,5 +1714,376 @@ namespace SystemComments.Utilities
             return prompt.ToString();
         }
 
+        public static async Task<DataSet> SaveMyInsightsNarrativeQuality(APIDataBaseContext _context, MyInsightsNarrativeQualityRequest input, MyInsightsNarrativeQualityResponse insightResponse)
+        {
+            return await Task.Run(() =>
+            {
+                DataSet dsResultSet = new DataSet();
+                SqlParameter[] parameters = new SqlParameter[]
+                        {
+                        new SqlParameter("@EvaluatorID", input.EvaluatorID),
+                        new SqlParameter("@DepartmentID", input.DepartmentID),
+                        new SqlParameter("@CreatedBy", input.UserID),
+                        new SqlParameter("@Prompt", insightResponse.Prompt),
+                        new SqlParameter("@Json", insightResponse.ResultJSON),
+                        new SqlParameter("@HistoryID", input.HistoryID)
+
+                        };
+                dsResultSet = _context.ExecuteStoredProcedure("SaveMyInsightsNarrativeQualityReport", parameters);
+                return dsResultSet;
+            });
+        }
+
+        public static async Task<string> GetEvaluationCommentsForMyInsightsNarrativeQuality(APIDataBaseContext _context, MyInsightsNarrativeQualityRequest input)
+        {
+            DataSet dsResult = new DataSet();
+            string prompt = string.Empty;
+            string comments = string.Empty;
+            SqlParameter[] parameters = new SqlParameter[]
+                    {
+                        new SqlParameter("@DepartmentID", input.DepartmentID),
+                        new SqlParameter("@EvaluatorID", input.EvaluatorID),
+                        new SqlParameter("@StartDate", input.StartDate),
+                        new SqlParameter("@EndDate", input.EndDate)                       
+
+                    };
+            dsResult = _context.ExecuteStoredProcedure("GetEvaluationCommentsForMyInsightsNarrativeQuality", parameters);
+            if(dsResult != null && dsResult.Tables.Count > 0)
+            {
+                var promptInfo = dsResult.Tables[0]
+                    .AsEnumerable()
+                    .Select(x => new PromptInfoModel
+                    {
+                        Prompt = x.Field<string>("Prompt"),
+                        EvaluatorFullName = x.Field<string>("EvaluatorFullName"),
+                        StartDate = x.Field<string>("StartDate"),
+                        EndDate = x.Field<string>("EndDate"),
+                        Role = x.Field<string>("Role"),
+                        DateRange = x.Field<string>("DateRange"),
+                        ReviewedEvaluations = x.Field<Int32>("ReviewedEvaluations")
+                    })
+                    .FirstOrDefault();
+
+                prompt = promptInfo.Prompt;               
+                var templates = dsResult.Tables[1]
+                .AsEnumerable()
+                .Select(x => new TemplateModel
+                {
+                    TemplateID = x.Field<long>("TemplateID"),
+                    TemplateName = x.Field<string>("TemplateName"),
+                    ProgramName = x.Field<string>("ProgramName")
+                })
+                .ToList();
+
+                var templateUsers = dsResult.Tables[2]
+                .AsEnumerable()
+                .Select(x => new TemplateUserModel
+                {
+                    TemplateID = x.Field<long>("TemplateID"),
+                    SubjectUserID = x.Field<long>("SubjectUserID"),
+                    UserFullName = x.Field<string>("UserFullName")
+                })
+                .ToList();
+
+                var questionComments = dsResult.Tables[3]
+                .AsEnumerable()
+                .Select(x => new QuestionCommentModel
+                {
+                    EvaluationID = x.Field<long>("EvaluationID"),
+                    TemplateID = x.Field<long>("TemplateID"),
+                    SubjectUserID = x.Field<long>("SubjectUserID"),
+                    QuestionID = x.Field<long>("QuestionID"),
+
+                    RotationName = x.Field<string>("RotationName"),
+                    Question = x.Field<string>("Question"),
+
+                    Comments = x.Field<string>("Comments"),
+                    EWComments = x.Field<string>("EWComments"),
+                    EEComments = x.Field<string>("EEComments"),
+                    EPAEWComments = x.Field<string>("EPAEWComments"),
+                    EPAEEComments = x.Field<string>("EPAEEComments"),
+                    EPAComments = x.Field<string>("EPAComments"),
+                    EvaluationPeriod = x.Field<string>("EvaluationPeriod")
+                })
+                .ToList();
+
+
+                var evaluatorComments = dsResult.Tables[4]
+                .AsEnumerable()
+                .Select(x => new EvaluatorCommentModel
+                {
+                    EvaluationID = x.Field<long>("EvaluationID"),
+                    TemplateID = x.Field<long>("TemplateID"),
+                    SubjectUserID = x.Field<long>("SubjectUserID"),
+
+                    EvaluatorComments = x.Field<string>("EvaluatorComments"),
+                    ReviewComments = x.Field<string>("ReviewComments"),
+
+                    RotationName = x.Field<string>("RotationName"),
+                    EvaluationPeriod = x.Field<string>("EvaluationPeriod")
+
+                })
+                .ToList();
+
+                var sageComments = dsResult.Tables[5]
+                .AsEnumerable()
+                .Select(x => new SageCommentModel
+                {
+                    EvaluationID = x.Field<long>("EvaluationID"),
+                    TemplateID = x.Field<long>("TemplateID"),
+                    SubjectUserID = x.Field<long>("SubjectUserID"),
+
+                    QuestionDescription = x.Field<string>("QuestionDescription"),
+
+                    HeaderType = x.Field<string>("HeaderType"),
+
+                    SectionName = x.Field<string>("SectionName"),
+
+                    SectionNumber = x.Field<int>("SectionNumber"),
+
+                    Answer = x.Field<string>("Answer"),
+
+                    QuestionID = x.Field<long>("QuestionID"),
+
+                    MainQuestionID = x.IsNull("MainQuestionID")
+                        ? null
+                        : x.Field<long?>("MainQuestionID")
+                })
+                .ToList();
+                comments = await FormatNarrativeComments(promptInfo, templates,templateUsers,questionComments,evaluatorComments,sageComments);
+                prompt = prompt.Replace("[evaluator narrative evaluation dataset]", comments);
+            }
+
+            return prompt;
+        }
+
+        private static async Task<string> FormatNarrativeComments(
+        PromptInfoModel promptInfo,
+        List<TemplateModel> templates,
+        List<TemplateUserModel> templateUsers,
+        List<QuestionCommentModel> questionComments,
+        List<EvaluatorCommentModel> evaluatorComments,
+        List<SageCommentModel> sageComments)
+        {
+            return await Task.Run(() =>
+            {
+                var sb = new StringBuilder();
+
+                if (promptInfo != null)
+                {
+                    sb.AppendLine("Evaluator Information");
+                    sb.AppendLine($"Evaluator Name: {promptInfo.EvaluatorFullName}");
+                    sb.AppendLine($"Evaluator Role: {promptInfo.Role}");
+                    sb.AppendLine($"Date Range: {promptInfo.StartDate} - {promptInfo.EndDate}");
+                    sb.AppendLine($"Evaluations Reviewed: {promptInfo.ReviewedEvaluations}");
+                    sb.AppendLine();
+                }
+
+                foreach (var template in templates.OrderBy(x => x.TemplateName))
+                {
+                    sb.AppendLine($"Template: {template.TemplateName}");
+
+                    if (!string.IsNullOrWhiteSpace(template.ProgramName))
+                    {
+                        sb.AppendLine($"Program: {template.ProgramName}");
+                    }
+
+                    sb.AppendLine();
+
+                    var users = templateUsers
+                        .Where(x => x.TemplateID == template.TemplateID)
+                        .OrderBy(x => x.UserFullName)
+                        .ToList();
+
+                    foreach (var user in users)
+                    {
+                        sb.AppendLine($"\tEvaluatee: {HtmlDecode(user.UserFullName)}");
+                        sb.AppendLine();
+
+                        #region Table 4 - Question Comments
+
+                        var userQuestionComments = questionComments
+                            .Where(x =>
+                                x.TemplateID == user.TemplateID &&
+                                x.SubjectUserID == user.SubjectUserID)
+                            .OrderBy(x => x.EvaluationID)
+                            .ThenBy(x => x.QuestionID)
+                            .ToList();
+
+                        foreach (var question in userQuestionComments)
+                        {
+                            sb.AppendLine(
+                                $"\t\tEvaluation Comments- ({question.EvaluationPeriod}: Rotation: {HtmlDecode(question.RotationName)}):");
+
+                            sb.AppendLine();
+
+                            sb.AppendLine(
+                                $"\t\tQuestion: {HtmlDecode(question.Question)}");
+
+                            var allComments = new List<string>
+                    {
+                        question.Comments,
+                        question.EWComments,
+                        question.EEComments,
+                        question.EPAEWComments,
+                        question.EPAEEComments,
+                        question.EPAComments
+                    }
+                            .Where(x => !string.IsNullOrWhiteSpace(x))
+                            .Select(x => HtmlDecode(x.Trim()))
+                            .Distinct()
+                            .ToList();
+
+                            if (allComments.Any())
+                            {
+                                sb.AppendLine("\t\tAnswer:");
+
+                                foreach (var comment in allComments)
+                                {
+                                    sb.AppendLine($"\t\t{comment}");
+                                    sb.AppendLine();
+                                }
+                            }
+
+                            sb.AppendLine();
+                        }
+
+                        #endregion
+
+                        #region Table 5 - Evaluator Comments
+
+                        var evalComments = evaluatorComments
+                            .Where(x =>
+                                x.TemplateID == user.TemplateID &&
+                                x.SubjectUserID == user.SubjectUserID)
+                            .OrderBy(x => x.EvaluationID)
+                            .ToList();
+
+                        if (evalComments.Any())
+                        {
+                            sb.AppendLine("\t\tOverall Evaluator Comments");
+                            sb.AppendLine();
+
+                            foreach (var ec in evalComments)
+                            {
+                                if (!string.IsNullOrWhiteSpace(ec.EvaluatorComments))
+                                {
+                                    sb.AppendLine(
+                                        $"\t\tEvaluation Comments- ({ec.EvaluationPeriod}: Rotation: {HtmlDecode(ec.RotationName)}):");
+
+                                    sb.AppendLine(
+                                        $"\t\t{HtmlDecode(ec.EvaluatorComments)}");
+
+                                    sb.AppendLine();
+                                }
+
+                                if (!string.IsNullOrWhiteSpace(ec.ReviewComments))
+                                {
+                                    sb.AppendLine(
+                                        $"\t\tReview Comments ({HtmlDecode(ec.RotationName)}):");
+
+                                    sb.AppendLine(
+                                        $"\t\t{HtmlDecode(ec.ReviewComments)}");
+
+                                    sb.AppendLine();
+                                }
+                            }
+                        }
+
+                        #endregion
+
+                        #region Table 6 - Sage Comments
+
+                        var sageRows = sageComments
+                            .Where(x =>
+                                x.TemplateID == user.TemplateID &&
+                                x.SubjectUserID == user.SubjectUserID)
+                            .OrderBy(x => x.EvaluationID)
+                            .ThenBy(x => x.SectionNumber)
+                            .ToList();
+
+                        if (sageRows.Any())
+                        {
+                            sb.AppendLine("\t\tSAGE Narrative Comments");
+                            sb.AppendLine();
+
+                            var mainQuestions = sageRows
+                                .Where(x => x.MainQuestionID == null)
+                                .OrderBy(x => x.SectionNumber)
+                                .ToList();
+
+                            foreach (var main in mainQuestions)
+                            {
+                                sb.AppendLine(
+                                    $"\t\tMain Question ({HtmlDecode(main.SectionName)})");
+
+                                sb.AppendLine();
+
+                                var guideQuestions = sageRows
+                                    .Where(x =>
+                                        x.MainQuestionID == main.QuestionID &&
+                                        x.EvaluationID == main.EvaluationID)
+                                    .OrderBy(x => x.QuestionID)
+                                    .ToList();
+
+                                if (guideQuestions.Any())
+                                {
+                                    sb.AppendLine("\t\tGuiding Prompts");
+
+                                    foreach (var guide in guideQuestions)
+                                    {
+                                        sb.AppendLine();
+
+                                        sb.AppendLine(
+                                            $"\t\t- {HtmlDecode(guide.QuestionDescription)}");
+
+                                        if (!string.IsNullOrWhiteSpace(guide.Answer))
+                                        {
+                                            sb.AppendLine();
+                                            sb.AppendLine("\t\tAnswer:");
+                                            sb.AppendLine(
+                                                $"\t\t{HtmlDecode(guide.Answer)}");
+                                        }
+                                    }
+
+                                    sb.AppendLine();
+                                }
+
+                                if (!string.IsNullOrWhiteSpace(main.Answer))
+                                {
+                                    sb.AppendLine("\t\tAnswer:");
+                                    sb.AppendLine(
+                                        $"\t\t{HtmlDecode(main.Answer)}");
+
+                                    sb.AppendLine();
+                                }
+                            }
+                        }
+
+                        #endregion
+
+                        sb.AppendLine();
+                        sb.AppendLine(new string('-', 120));
+                        sb.AppendLine();
+                    }
+                }
+
+                return Regex.Replace(
+                    sb.ToString(),
+                    @"(\r?\n){3,}",
+                    Environment.NewLine + Environment.NewLine);
+            });
+        }
+
+        private static string HtmlDecode(string value)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                return string.Empty;
+            }
+
+            return System.Web.HttpUtility.HtmlDecode(value).Trim();
+        }
+
     }
 }

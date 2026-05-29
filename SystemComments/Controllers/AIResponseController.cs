@@ -480,6 +480,48 @@ namespace SystemComments.Controllers
             return aiResponse;
         }
 
+        [HttpPost("MyInsightsNarrativeQuality")]
+        [Authorize]
+        public async Task<ActionResult<IEnumerable<MyInsightsNarrativeQualityResponse>>> MyInsightsNarrativeQuality([FromBody] MyInsightsNarrativeQualityRequest input)
+        {
+            List<MyInsightsNarrativeQualityResponse> aiResponse = new List<MyInsightsNarrativeQualityResponse>();
+            try
+            {
+                MyInsightsNarrativeQualityResponse myInsightsResponse = new MyInsightsNarrativeQualityResponse();
+                string prompt = await BackEndService.GetEvaluationCommentsForMyInsightsNarrativeQuality(_context, input);
+                string systemMessage = "You are an expert evaluator of Graduate Medical Education narrative feedback quality." +
+                    "\r\n\r\nYour task is to analyze evaluator-written narrative comments and generate a structured JSON report that evaluates the quality of the evaluator’s feedback, NOT the performance of the trainee." +
+                    "\r\n\r\nCritical Rules:\r\n\r\n- Evaluate feedback quality only.\r\n- Do not evaluate trainee competence or performance.\r\n- Follow all scoring rules, denominator rules, exclusions, classifications, and formulas exactly as provided in the user prompt." +
+                    "\r\n- Treat the user prompt as the authoritative scoring rubric.\r\n- Apply all threshold interpretations exactly as defined.\r\n- Respect all exclusion rules for:\r\n  - Not Observed\r\n  - Unable to Assess\r\n  - Not Applicable\r\n  " +
+                    "- Empty responses\r\n  - Optional blank fields\r\n  - Follow-up closure responses\r\n  - Test/placeholder data\r\n\r\nOutput Rules:\r\n\r\n- Return ONLY valid JSON.\r\n- Do not return markdown.\r\n- Do not include explanations outside the JSON object." +
+                    "\r\n- Do not include commentary outside the required schema.\r\n- Preserve the exact JSON structure requested in the user prompt.\r\n- Ensure all arrays, field names, counts, percentages, and labels match the required schema exactly." +
+                    "\r\n- Ensure narrative_responses_scored equals:\r\n  useful_narrative_count + vague_low_utility_count\r\n- Ensure all percentage calculations are mathematically consistent.\r\n- Ensure all outcome calculations are mathematically correct." +
+                    "\r\n- Use whole numbers unless explicitly instructed otherwise.\r\n- Never hallucinate unavailable data.\r\n- If data is insufficient, use the exact insufficient-data labels defined in the prompt.\r\n\r\n" +
+                    "Writing Style Rules:\r\n\r\n- Use concise professional language.\r\n- Avoid exaggerated praise.\r\n- Avoid unsupported assumptions.\r\n- Keep summary interpretations concise and evidence-based.\r\n- Do not expose internal reasoning or chain-of-thought." +
+                    "\r\n\r\nFinal Validation Requirements Before Responding:\r\n\r\n- Validate JSON syntax.\r\n- Validate required fields exist.\r\n- Validate counts and denominators.\r\n- Validate rating labels match the approved labels exactly." +
+                    "\r\n- Validate all percentages and outcomes are internally consistent.";
+                string response = await MyInsightsGPT5Response(systemMessage, prompt, "gpt-5.2");
+                myInsightsResponse.Prompt = prompt;
+                myInsightsResponse.ResultJSON = response;
+                aiResponse.Add(myInsightsResponse);                
+                
+
+            }
+            catch (System.Exception ex)
+            {
+                MyInsightsNarrativeQualityResponse myInsightsResponse = new MyInsightsNarrativeQualityResponse();
+                myInsightsResponse.ErrorMessage = $"[\"error\":\"{ex.Message}\"]";
+                aiResponse.Add(myInsightsResponse);
+                _logger.LogError(ex, "An error occurred while making the OpenAI API request");
+
+            }
+            if (aiResponse.Count > 0)
+            {
+               DataSet dsResult = await BackEndService.SaveMyInsightsNarrativeQuality(_context, input, aiResponse[0]);
+            }
+            return aiResponse;
+        }
+
         [HttpPost("PECSummaryInsights")]
         [AllowAnonymous]
         public async Task<ActionResult<IEnumerable<MyInsightsResponse>>> PECSummaryInsights([FromBody] PECSummary input)
