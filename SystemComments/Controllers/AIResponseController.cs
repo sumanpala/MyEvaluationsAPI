@@ -240,32 +240,39 @@ namespace SystemComments.Controllers
                 bool isErrorThrown = false;
                 if(aiResponse.Length > 0)
                 {
-                    var objResponse = JToken.Parse(aiResponse);
-                    JArray objChoices = (JArray)objResponse["choices"];
-                    try
+                    if (input.IsNPV != 0 && BackEndService.IsValidJson(aiResponse))
                     {
-                        if (objChoices.Count() > 0)
+                        try
                         {
-                            JObject objMessages = (JObject)objChoices[0]["message"];
-                            if (objMessages.Count > 0)
+                            var objResponse = JToken.Parse(aiResponse);
+                            JArray objChoices = (JArray)objResponse["choices"];
+                            if (objChoices.Count() > 0)
                             {
-                                aiComments = objMessages["content"].ToString();
-                                aiComments = aiComments.Replace("```html", "");
+                                JObject objMessages = (JObject)objChoices[0]["message"];
+                                if (objMessages.Count > 0)
+                                {
+                                    aiComments = objMessages["content"].ToString();
+                                    aiComments = aiComments.Replace("```html", "");
 
+                                }
                             }
                         }
-                    }
-                    catch (Exception ex)
-                    {
-                        isErrorThrown = true;
-                        AIResponse aiErrorResponse = new AIResponse();
-                        aiErrorResponse.AIResponseID = "";
-                        aiErrorResponse.UserID = 0;
-                        aiErrorResponse.CreatedDate = DateTime.Now;
-                        aiErrorResponse.InputPrompt = "";
-                        aiErrorResponse.Error = aiResponse;
-                        aiSavedResponse.Add(aiErrorResponse);
+                        catch (Exception ex)
+                        {
+                            isErrorThrown = true;
+                            AIResponse aiErrorResponse = new AIResponse();
+                            aiErrorResponse.AIResponseID = "";
+                            aiErrorResponse.UserID = 0;
+                            aiErrorResponse.CreatedDate = DateTime.Now;
+                            aiErrorResponse.InputPrompt = "";
+                            aiErrorResponse.Error = aiResponse;
+                            aiSavedResponse.Add(aiErrorResponse);
 
+                        }
+                    }
+                    else
+                    {
+                        aiComments = aiResponse;
                     }
                     if (input.IsSage != 1 && !isErrorThrown)
                     {
@@ -1358,7 +1365,8 @@ namespace SystemComments.Controllers
             try
             {                
                 string aiKey = _config.GetSection("AppSettings:MyInsightsToken").Value;
-                if(commentsType != 3 && userType == 3)
+                string aiResponse = "";
+                if (commentsType != 3 && userType == 3)
                 {
                     aiKey = _config.GetSection("AppSettings:MyInsightsAttendingToken").Value;
                 }
@@ -1370,7 +1378,7 @@ namespace SystemComments.Controllers
                         aiKey = _config.GetSection("AppSettings:NPVToken").Value;
                         break;
                     case 1:
-                        model = "gpt-4.1";
+                        model = "gpt-5.2";
                         aiKey = _config.GetSection("AppSettings:MyInsightsToken").Value;
                         break;
                     case 3:
@@ -1378,52 +1386,56 @@ namespace SystemComments.Controllers
                         aiKey = _config.GetSection("AppSettings:SAGEToken").Value;
                         break;
                     default:
-                        model = "gpt-4.1";
+                        model = "gpt-5.2";
                         aiKey = _config.GetSection("AppSettings:MyInsightsToken").Value;
                         break;
                 }
 
                 HttpClient client = new HttpClient();
-                client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", aiKey);                
-                string aiResponse = "";
+                client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", aiKey);               
                 client.Timeout = TimeSpan.FromMinutes(3);               
                 
                 if (comments.Length > 0)
                 {
-                    var request = new OpenAIRequest
-                    {
-                        //Model = "text-davinci-002",
-                        //Model = "gpt-3.5-turbo",
-                        Model = model,
-                        //Model = "GTP-4o mini",
-                        Temperature = 0.7f,
-                        MaxTokens = 4000
-                        //MaxTokens = 4000                        
-                    };
-                    string systemMessage = "You are a helpful assistant.";
-                    
 
-                    if(commentsType == 1)
+                    if (model == "gpt-5.2")
                     {
-                        systemMessage = "You are an expert medical educator and GME performance analyst.\r\nYour goal is to generate structured HTML narrative feedback that compares trainee " +
-                            "performance over a dynamic evaluation date range.\r\nYour response must strictly follow the Expected Output Format and include all evaluator data, " +
-                            "including positive, neutral, and negative comments.\r\nYou will never use people name when responding and only use the word 'Resident' instead of people name\r\n\r\n---\r\n\r\n1. REQUIRED STRUCTURE\r\n\r\nEach competency must use the exact HTML header pattern shown below.\r\nDo not deviate or omit the “Initial 3 Months” and “Most Recent 3 Months” labels.\r\n\r\nExample template for every competency section:\r\n\r\n<h1>[Competency Name]</h1>  \r\n<h2>Initial 3 Months: (Performance from [Start Date] to [Mid Date])</h2>  \r\n<p>[Summary of early performance, including strengths and weaknesses]</p>  \r\n<h2>Most Recent 3 Months: (Performance from [Mid Date] to [End Date])</h2>  \r\n<p>[Summary of recent performance, including improvements or regressions]</p>  \r\n<h3>Actionable Feedback:</h3>  \r\n<ul>  \r\n<li>[Specific, behavioral, actionable steps based on evaluator comments]</li>  \r\n</ul>  \r\n\r\nAll <h2> headings must begin exactly with:\r\nInitial 3 Months: for the first period, and\r\nMost Recent 3 Months: for the second period.\r\n\r\nDo not omit or rephrase these labels under any circumstance.\r\n\r\n---\r\n\r\n2. DYNAMIC DATE SUBSTITUTION\r\n\r\nAlways substitute the user-provided dates dynamically inside parentheses.\r\n\r\nExample:\r\n\r\n<h2>Initial 3 Months: (Performance from 05/01/2025 to 08/01/2025)</h2>  \r\n<h2>Most Recent 3 Months: (Performance from 08/01/2025 to 10/31/2025)</h2>  \r\n\r\n---\r\n\r\n3. DATA COMPLETENESS AND NEGATIVE FEEDBACK INCLUSION\r\n\r\nInclude all evaluator comments, positive, neutral, and negative.\r\nExplicitly reflect negative or critical feedback under the correct competency.\r\nIf early evaluations contain negative comments, describe them accurately and note whether improvement occurred later.\r\nNever omit or soften negative feedback.\r\nEnsure that the analysis represents all comments from the provided evaluation period.\r\n\r\n---\r\n\r\n4. COMPETENCY STRUCTURE\r\n\r\nFollow this order and include every competency:\r\n\r\n1. Patient Care\r\n2. Medical Knowledge\r\n3. Systems-Based Practice\r\n4. Practice-Based Learning & Improvement\r\n5. Professionalism\r\n6. Interpersonal & Communication Skills\r\n7. Overall MyInsights\r\n\r\nThe Overall MyInsights section must include:\r\nStrengths\r\nAreas for Improvement\r\nActionable Steps\r\nShort-Term Goals (Next 3–6 months)\r\nLong-Term Goals (6–12 months)\r\n\r\n---\r\n\r\n5. OUTPUT VALIDATION RULES\r\n\r\nBefore finalizing the response, ensure that:\r\nEach competency has both <h2> subheaders labeled Initial 3 Months and Most Recent 3 Months.\r\nAll HTML is valid and well-formed.\r\nEvery competency includes a <h3>Actionable Feedback:</h3> block with at least one <li> item.\r\nFeedback tone remains professional, gender-neutral, and narrative in nature.\r\nNo placeholder text, “N/A,” or omitted sections are included.\r\n\r\n---\r\n\r\n6. DO NOT\r\n\r\nDo not use headings like “Performance from …” without the required prefix.\r\nDo not collapse both 3-month summaries into one section.\r\nDo not summarize outside the HTML structure.\r\nDo not include text outside competency sections.\r\n";
+                        aiResponse = await MyInsightsGPT5Response(comments, userComments, "gpt-5.2", _openAIMyInsightsClient);
                     }
-                    else if (commentsType == 2)
+                    else
                     {
-                       string[] splitPrompt = comments.Split("##Summarized Comments:##");
-                        if (splitPrompt.Length > 1)
+                        var request = new OpenAIRequest
                         {
-                            userComments = splitPrompt[1];
-                            userComments = await PromptService.SummarizeComments(comments, "gpt-4.1", _openAINPVClient);
-                            if (userComments.Length > 0)
+                            Model = model,
+                            Temperature = 0.7f,
+                            MaxTokens = 4000
+                        };
+
+                        string systemMessage = "You are a helpful assistant.";
+
+
+                        if (commentsType == 1)
+                        {
+                            systemMessage = "You are an expert medical educator and GME performance analyst.\r\nYour goal is to generate structured HTML narrative feedback that compares trainee " +
+                                "performance over a dynamic evaluation date range.\r\nYour response must strictly follow the Expected Output Format and include all evaluator data, " +
+                                "including positive, neutral, and negative comments.\r\nYou will never use people name when responding and only use the word 'Resident' instead of people name\r\n\r\n---\r\n\r\n1. REQUIRED STRUCTURE\r\n\r\nEach competency must use the exact HTML header pattern shown below.\r\nDo not deviate or omit the “Initial 3 Months” and “Most Recent 3 Months” labels.\r\n\r\nExample template for every competency section:\r\n\r\n<h1>[Competency Name]</h1>  \r\n<h2>Initial 3 Months: (Performance from [Start Date] to [Mid Date])</h2>  \r\n<p>[Summary of early performance, including strengths and weaknesses]</p>  \r\n<h2>Most Recent 3 Months: (Performance from [Mid Date] to [End Date])</h2>  \r\n<p>[Summary of recent performance, including improvements or regressions]</p>  \r\n<h3>Actionable Feedback:</h3>  \r\n<ul>  \r\n<li>[Specific, behavioral, actionable steps based on evaluator comments]</li>  \r\n</ul>  \r\n\r\nAll <h2> headings must begin exactly with:\r\nInitial 3 Months: for the first period, and\r\nMost Recent 3 Months: for the second period.\r\n\r\nDo not omit or rephrase these labels under any circumstance.\r\n\r\n---\r\n\r\n2. DYNAMIC DATE SUBSTITUTION\r\n\r\nAlways substitute the user-provided dates dynamically inside parentheses.\r\n\r\nExample:\r\n\r\n<h2>Initial 3 Months: (Performance from 05/01/2025 to 08/01/2025)</h2>  \r\n<h2>Most Recent 3 Months: (Performance from 08/01/2025 to 10/31/2025)</h2>  \r\n\r\n---\r\n\r\n3. DATA COMPLETENESS AND NEGATIVE FEEDBACK INCLUSION\r\n\r\nInclude all evaluator comments, positive, neutral, and negative.\r\nExplicitly reflect negative or critical feedback under the correct competency.\r\nIf early evaluations contain negative comments, describe them accurately and note whether improvement occurred later.\r\nNever omit or soften negative feedback.\r\nEnsure that the analysis represents all comments from the provided evaluation period.\r\n\r\n---\r\n\r\n4. COMPETENCY STRUCTURE\r\n\r\nFollow this order and include every competency:\r\n\r\n1. Patient Care\r\n2. Medical Knowledge\r\n3. Systems-Based Practice\r\n4. Practice-Based Learning & Improvement\r\n5. Professionalism\r\n6. Interpersonal & Communication Skills\r\n7. Overall MyInsights\r\n\r\nThe Overall MyInsights section must include:\r\nStrengths\r\nAreas for Improvement\r\nActionable Steps\r\nShort-Term Goals (Next 3–6 months)\r\nLong-Term Goals (6–12 months)\r\n\r\n---\r\n\r\n5. OUTPUT VALIDATION RULES\r\n\r\nBefore finalizing the response, ensure that:\r\nEach competency has both <h2> subheaders labeled Initial 3 Months and Most Recent 3 Months.\r\nAll HTML is valid and well-formed.\r\nEvery competency includes a <h3>Actionable Feedback:</h3> block with at least one <li> item.\r\nFeedback tone remains professional, gender-neutral, and narrative in nature.\r\nNo placeholder text, “N/A,” or omitted sections are included.\r\n\r\n---\r\n\r\n6. DO NOT\r\n\r\nDo not use headings like “Performance from …” without the required prefix.\r\nDo not collapse both 3-month summaries into one section.\r\nDo not summarize outside the HTML structure.\r\nDo not include text outside competency sections.\r\n";
+                        }
+                        else if (commentsType == 2)
+                        {
+                            string[] splitPrompt = comments.Split("##Summarized Comments:##");
+                            if (splitPrompt.Length > 1)
                             {
-                                comments = splitPrompt[0];
+                                userComments = splitPrompt[1];
+                                userComments = await PromptService.SummarizeComments(comments, "gpt-4.1", _openAINPVClient);
+                                if (userComments.Length > 0)
+                                {
+                                    comments = splitPrompt[0];
+                                }
                             }
                         }
-                    }
-                     request.Messages = new RequestMessage[]
-                       {
+
+                        request.Messages = new RequestMessage[]
+                          {
                                         new RequestMessage()
                                         {
                                              Role = "system",
@@ -1439,13 +1451,14 @@ namespace SystemComments.Controllers
                                              Role = "user",
                                              Content = userComments
                                         }
-                       };
+                          };
 
-                    var json = System.Text.Json.JsonSerializer.Serialize(request);
-                    var content = new StringContent(json, Encoding.UTF8, "application/json");
-                    var response = await client.PostAsync("https://api.openai.com/v1/chat/completions", content);
-                    var resjson = response.Content.ReadAsStringAsync();
-                    aiResponse = resjson.Result;
+                        var json = System.Text.Json.JsonSerializer.Serialize(request);
+                        var content = new StringContent(json, Encoding.UTF8, "application/json");
+                        var response = await client.PostAsync("https://api.openai.com/v1/chat/completions", content);
+                        var resjson = response.Content.ReadAsStringAsync();
+                        aiResponse = resjson.Result;
+                    }
                 }
                 else
                 {
@@ -1786,7 +1799,8 @@ namespace SystemComments.Controllers
         }
 
 
-        private async Task<string> MyInsightsGPT5Response(string prompt, string comments, string model = "gpt-5.2")
+        private async Task<string> MyInsightsGPT5Response(string prompt, string comments
+            , string model = "gpt-5.2", OpenAIClient _openAIMyInsightsClient = null)
         {
             string time = "0";
             Stopwatch sw = Stopwatch.StartNew();
@@ -1801,7 +1815,11 @@ namespace SystemComments.Controllers
             };
 
             StringBuilder sb = new StringBuilder();
-            var chatClient = _openAIAPEMyInsightsClient.GetChatClient(model);
+            var chatClient =  _openAIAPEMyInsightsClient.GetChatClient(model);
+            if(_openAIMyInsightsClient != null)
+            {
+                chatClient = _openAIMyInsightsClient.GetChatClient(model);
+            }
             var options = new ChatCompletionOptions
             {
                 Temperature = 1,

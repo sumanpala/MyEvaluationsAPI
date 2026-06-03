@@ -2085,5 +2085,21 @@ namespace SystemComments.Utilities
             return System.Web.HttpUtility.HtmlDecode(value).Trim();
         }
 
+        public static bool IsValidJson(string json)
+        {
+            if (string.IsNullOrWhiteSpace(json))
+                return false;
+
+            try
+            {
+                JToken.Parse(json);
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
     }
 }
