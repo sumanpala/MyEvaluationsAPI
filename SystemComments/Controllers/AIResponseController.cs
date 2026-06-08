@@ -831,6 +831,10 @@ namespace SystemComments.Controllers
                                 comments = comments.Replace("[Level]", dtPrompt.Rows[0]["PGYLevel"].ToString());
                                 comments = comments.Replace("[User Type]", dtPrompt.Rows[0]["UserTypeName"].ToString());
                                 comments = comments.Replace("[Specialty]", dtPrompt.Rows[0]["SpecialityName"].ToString());
+                                comments = comments.Replace("[User Name]", dtPrompt.Rows[0]["SubjectUserName"].ToString());
+                                comments = comments.Replace("[Name]", dtPrompt.Rows[0]["SubjectUserName"].ToString());
+                                comments = comments.Replace("[Assessment Date]", dtPrompt.Rows[0]["AssessmentDate"].ToString());
+                                comments = comments.Replace("[Date]", dtPrompt.Rows[0]["AssessmentDate"].ToString());
                             }
                         }
                         else
@@ -874,6 +878,10 @@ namespace SystemComments.Controllers
                                 comments = comments.Replace("[Level]", dtPrompt.Rows[0]["PGYLevel"].ToString());
                                 comments = comments.Replace("[User Type]", dtPrompt.Rows[0]["UserTypeName"].ToString());
                                 comments = comments.Replace("[Specialty]", dtPrompt.Rows[0]["SpecialityName"].ToString());
+                                comments = comments.Replace("[User Name]", dtPrompt.Rows[0]["SubjectUserName"].ToString());
+                                comments = comments.Replace("[Name]", dtPrompt.Rows[0]["SubjectUserName"].ToString());
+                                comments = comments.Replace("[Assessment Date]", dtPrompt.Rows[0]["AssessmentDate"].ToString());
+                                comments = comments.Replace("[Date]", dtPrompt.Rows[0]["AssessmentDate"].ToString());
 
                             }
                             else
