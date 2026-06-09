@@ -1897,11 +1897,6 @@ namespace SystemComments.Utilities
 
                     foreach (var user in users)
                     {
-                        sb.AppendLine($"\tEvaluatee: {HtmlDecode(user.UserFullName)}");
-                        sb.AppendLine();
-
-                        #region Table 4 - Question Comments
-
                         var userQuestionComments = questionComments
                             .Where(x =>
                                 x.TemplateID == user.TemplateID &&
@@ -1909,6 +1904,30 @@ namespace SystemComments.Utilities
                             .OrderBy(x => x.EvaluationID)
                             .ThenBy(x => x.QuestionID)
                             .ToList();
+
+
+                        var evalComments = evaluatorComments
+                           .Where(x =>
+                               x.TemplateID == user.TemplateID &&
+                               x.SubjectUserID == user.SubjectUserID)
+                           .OrderBy(x => x.EvaluationID)
+                           .ToList();
+
+                        var sageRows = sageComments
+                           .Where(x =>
+                               x.TemplateID == user.TemplateID &&
+                               x.SubjectUserID == user.SubjectUserID)
+                           .OrderBy(x => x.EvaluationID)
+                           .ThenBy(x => x.SectionNumber)
+                           .ToList();
+
+                        if (userQuestionComments.Count > 0 || evalComments.Count > 0 || sageRows.Count > 0)
+                        {
+                            sb.AppendLine($"\tEvaluatee: {HtmlDecode(user.UserFullName)}");
+                            sb.AppendLine();
+                        }
+
+                        #region Table 4 - Question Comments                        
 
                         foreach (var question in userQuestionComments)
                         {
@@ -1921,14 +1940,14 @@ namespace SystemComments.Utilities
                                 $"\t\tQuestion: {HtmlDecode(question.Question)}");
 
                             var allComments = new List<string>
-                    {
-                        question.Comments,
-                        question.EWComments,
-                        question.EEComments,
-                        question.EPAEWComments,
-                        question.EPAEEComments,
-                        question.EPAComments
-                    }
+                            {
+                                question.Comments,
+                                question.EWComments,
+                                question.EEComments,
+                                question.EPAEWComments,
+                                question.EPAEEComments,
+                                question.EPAComments
+                            }
                             .Where(x => !string.IsNullOrWhiteSpace(x))
                             .Select(x => HtmlDecode(x.Trim()))
                             .Distinct()
@@ -1950,14 +1969,7 @@ namespace SystemComments.Utilities
 
                         #endregion
 
-                        #region Table 5 - Evaluator Comments
-
-                        var evalComments = evaluatorComments
-                            .Where(x =>
-                                x.TemplateID == user.TemplateID &&
-                                x.SubjectUserID == user.SubjectUserID)
-                            .OrderBy(x => x.EvaluationID)
-                            .ToList();
+                        #region Table 5 - Evaluator Comments                       
 
                         if (evalComments.Any())
                         {
@@ -1992,15 +2004,7 @@ namespace SystemComments.Utilities
 
                         #endregion
 
-                        #region Table 6 - Sage Comments
-
-                        var sageRows = sageComments
-                            .Where(x =>
-                                x.TemplateID == user.TemplateID &&
-                                x.SubjectUserID == user.SubjectUserID)
-                            .OrderBy(x => x.EvaluationID)
-                            .ThenBy(x => x.SectionNumber)
-                            .ToList();
+                        #region Table 6 - Sage Comments                       
 
                         if (sageRows.Any())
                         {
@@ -2063,7 +2067,7 @@ namespace SystemComments.Utilities
                         #endregion
 
                         sb.AppendLine();
-                        sb.AppendLine(new string('-', 120));
+                        //sb.AppendLine(new string('-', 120));
                         sb.AppendLine();
                     }
                 }
