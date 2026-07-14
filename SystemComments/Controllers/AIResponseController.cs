@@ -767,6 +767,7 @@ namespace SystemComments.Controllers
             }
             return aiResponse;
         }
+       
 
         [HttpPost("SubmitSAGE")]
         [Authorize]
@@ -782,6 +783,7 @@ namespace SystemComments.Controllers
             List<SAGEResponse> aiSavedResponse = new List<SAGEResponse>();
             Int16 isEnable5Model = 0;
             Int64 templateDepartmentID = input.DepartmentID;
+            Int16 isSageFocus = 0;
             try
             {
                 if (input.EvaluationID > 0)
@@ -816,7 +818,10 @@ namespace SystemComments.Controllers
                             apiFileContent = dtPrompt.Rows[0]["APIFileContent"].ToString();
                             isEnable5Model = Convert.ToInt16(dtPrompt.Rows[0]["IsEnable5Model"].ToString());
                             templateDepartmentID = Convert.ToInt64(dtPrompt.Rows[0]["TemplateDepartmentID"].ToString());
-                        }
+                            isSageFocus = Convert.ToInt16(dtPrompt.Rows[0]["IsSageFocus"].ToString());
+                        }                        
+
+
                         if (dtResponses.Rows.Count > 0 && input.SageRequest.Length > 2)
                         {
                             comments = dtResponses.Rows[0]["AIPrompt"].ToString();
@@ -901,6 +906,22 @@ namespace SystemComments.Controllers
                             }
                             comments = comments.Replace("[Historical Data]", history);
                         }
+                        if (isSageFocus == 1)
+                        {
+                            (string milestoneFramework, string epaFramework, string priorEPAData) = await Task.FromResult(BackEndService.GetSageFocusHistory(new AIRequest
+                            {
+                                DepartmentID = 13,
+                                StartDate = "05/01/2025",
+                                EndDate = "04/30/2026",
+                                UserID = 2
+                            }, _context));
+
+                            comments = comments.Replace("[Milestone Framework]", milestoneFramework);
+                            comments = comments.Replace("[EPA Framework]", epaFramework);
+                            comments = comments.Replace("[Prior EPA Data]", priorEPAData);                            
+
+                        }
+
                     }
                     comments = RemoveHTMLTags(comments);
                     string sageQuestions = "";
@@ -929,7 +950,7 @@ namespace SystemComments.Controllers
                     if (isEnable5Model == 1)
                     {
                         aiComments = await GetFastOpenAIResponse3(comments + "\n include <mainsection></mainsection> without fail. \n Answer is always empty in the response for example <answer></answer>"
-                            , lastSection, totalSections, sageQuestions, ((isEnable5Model == 1) ? true : false), input.SageRequest);
+                            , lastSection, totalSections, sageQuestions, ((isEnable5Model == 1) ? true : false), input.SageRequest, isSageFocus);
                     }
                     else
                     {
@@ -961,7 +982,7 @@ namespace SystemComments.Controllers
                         if (isEnable5Model == 1)
                         {
                             aiComments = await GetFastOpenAIResponse3(comments + "\n include <mainsection></mainsection> without fail. \n Answer is always empty in the response for example <answer></answer>"
-                                , lastSection, totalSections, sageQuestions, ((isEnable5Model == 1) ? true : false), input.SageRequest);
+                                , lastSection, totalSections, sageQuestions, ((isEnable5Model == 1) ? true : false), input.SageRequest, isSageFocus);
                         }
                         else
                         {
@@ -985,7 +1006,7 @@ namespace SystemComments.Controllers
                         if (isEnable5Model == 1)
                         {
                             aiComments = await GetFastOpenAIResponse3(comments + "\n include <mainsection></mainsection> without fail. \n Answer is always empty in the response for example <answer></answer>"
-                                , lastSection, totalSections, sageQuestions, ((isEnable5Model == 1) ? true : false), input.SageRequest);
+                                , lastSection, totalSections, sageQuestions, ((isEnable5Model == 1) ? true : false), input.SageRequest, isSageFocus);
                         }
                         else
                         {
@@ -1010,7 +1031,7 @@ namespace SystemComments.Controllers
                         if (isEnable5Model == 1)
                         {
                             aiComments = await GetFastOpenAIResponse3(comments + "\n include <mainsection></mainsection> without fail. \n Answer is always empty in the response for example <answer></answer>"
-                                , lastSection, totalSections, sageQuestions, ((isEnable5Model == 1) ? true : false), input.SageRequest);
+                                , lastSection, totalSections, sageQuestions, ((isEnable5Model == 1) ? true : false), input.SageRequest, isSageFocus);
                         }
                         else
                         {
@@ -1987,19 +2008,19 @@ namespace SystemComments.Controllers
 
                 return UpdateXMLTags(sb.ToString(), false);
             }
-            string followupQuestionRule = "\r\n- If Section {currentsection} Main Question Answer is not empty and vague (<30 words, e.g., “good”), include exactly one <followupsection> with a <followupquestion>.\r\n- If <answer> is clear and >30 words, skip <followupsection>.";
+            string followupQuestionRule = "\r\n- If <answer> is clear and >30 words or Followup Question generated, skip <followupsection>.\r\n- If Section {currentsection} Main Question Answer is not empty and vague (<30 words, e.g., \"good\") and Followup Question is not generated, include exactly one <followupsection> with a <question>.\r\n";
             if (currentSection <= 1)
             {
-                var task1 = GenerateSectionAsync($"Important: Include only Section 1 and exclude <followupsection>. \n" + prompt);
+                var task1 = GenerateSectionAsync($"{prompt.Replace("{currentsection}", "1")} \n Important: Include only Section 1 and skip <followupsection>. \n -Exclude <allsections> from response.\n");
                 await Task.WhenAll(task1);
                 finalXml = $"{allSectionsBlock}{task1.Result}";
             }
             else
             {
-                var task1 = GenerateSectionAsync(prompt + $"\nImportant: Include only Section {currentSection - 1} of {totalSections}.\n{followupQuestionRule.Replace("{currentsection}", (currentSection - 1).ToString())}\n- Exclude <allsections> from response.\n");
-                var task2 = GenerateSectionAsync(prompt + $"\nImportant: Include only Section {currentSection} of {totalSections}.\n{followupQuestionRule.Replace("{currentsection}", (currentSection).ToString())}\n- Exclude <allsections> from response.\n");
+                var task1 = GenerateSectionAsync($"{prompt.Replace("{currentsection}", (currentSection - 1).ToString())}\nImportant Rule: Include only Section {currentSection - 1} of {totalSections}.\n{followupQuestionRule.Replace("{currentsection}", (currentSection - 1).ToString())}\n- Exclude <allsections> from response.\n- Exclude <sessioncontrol> from response.\n");
+                var task2 = GenerateSectionAsync($"{prompt.Replace("{currentsection}", currentSection.ToString())}\nImportant Rule: Include only Section {currentSection} of {totalSections}.\n{followupQuestionRule.Replace("{currentsection}", (currentSection).ToString())}\n- Exclude <allsections> from response.\n- Exclude <sessioncontrol> from response.\n");
+                //var task2 = GenerateSectionAsync($"{prompt.Replace("{currentsection}", currentSection.ToString())}\nImportant Rule: Include only Section {currentSection} of {totalSections}. and skip <followupsection>\n- Exclude <allsections> from response.\n");
                 await Task.WhenAll(task1, task2);
-                //finalXml = $"{allSectionsBlock}{task1.Result.Replace("<sections>", "").Replace("</sections>", "")}{ReplaceSecondSectionAsyncTags(task2.Result.Replace("<sections>", "").Replace("</sections>", ""))}";
                 finalXml = $"{task1.Result.Replace("<sections>", "").Replace("</sections>", "")}{ReplaceSecondSectionAsyncTags(task2.Result.Replace("<sections>", "").Replace("</sections>", ""))}";
                 if (!finalXml.Contains("<sections"))
                 {
@@ -2007,11 +2028,12 @@ namespace SystemComments.Controllers
                 }
 
                 bool startsWithTotalSections =
-               finalXml.TrimStart().StartsWith("<totalsections>", StringComparison.OrdinalIgnoreCase);
+                finalXml.TrimStart().StartsWith("<totalsections>", StringComparison.OrdinalIgnoreCase);
                 if (!startsWithTotalSections)
                 {
                     finalXml = $"<totalsections>{totalSections}</totalsections>" + finalXml;
                 }
+
                 finalXml = $"{allSectionsBlock}{finalXml}";
             }
 
@@ -2024,11 +2046,12 @@ namespace SystemComments.Controllers
         }
 
         private async Task<string> GetFastOpenAIResponse3(string prompt, int currentSection = 1, int totalSections = 4 
-            ,string userResponse = "" ,bool isEnable5model = false, string previousResponse = "")
+            ,string userResponse = "" ,bool isEnable5model = false, string previousResponse = "", int isSageFocus = 0)
         {
             if (isEnable5model)
             {
-                chatClient = _openAIClient.GetChatClient("gpt-5.2");
+                string model = (isSageFocus == 1) ? "gpt-5.4" : "gpt-5.2";
+                chatClient = _openAIClient.GetChatClient(model);
             }
             prompt = prompt.Replace("```xml", "").Replace("<!-- Include follow-up only if response is vague -->", "");
             //string time = "0";

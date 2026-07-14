@@ -15,6 +15,7 @@ using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using SystemComments.Models.DataBase;
+using static System.Net.Mime.MediaTypeNames;
 
 namespace SystemComments.Utilities
 {
@@ -681,6 +682,172 @@ namespace SystemComments.Utilities
             });
 
             return prompt;
+        }
+        
+        private static string RemoveHtmlTags(string text)
+        {
+            text = WebUtility.HtmlDecode(text);
+
+            // Replace common tags with new lines
+            text = Regex.Replace(text, @"</?(ul|ol)>", "", RegexOptions.IgnoreCase);
+            text = Regex.Replace(text, @"<li[^>]*>", "• ", RegexOptions.IgnoreCase);
+            text = Regex.Replace(text, @"</li>", Environment.NewLine, RegexOptions.IgnoreCase);
+            text = Regex.Replace(text, @"<br\s*/?>", Environment.NewLine, RegexOptions.IgnoreCase);
+            text = Regex.Replace(text, @"</p>", Environment.NewLine, RegexOptions.IgnoreCase);
+
+            // Remove remaining HTML tags
+            text = Regex.Replace(text, "<.*?>", "");
+            return text;
+        }
+
+        public static (string MilestoneFramework, string EPAFramework, string PriorEPAData) GetSageFocusHistory(AIRequest input, APIDataBaseContext _context)
+        {
+            SqlParameter[] parameters = new SqlParameter[]
+                    {
+                            new SqlParameter("@LoginDepartmentID", input.DepartmentID),
+                            new SqlParameter("@UserID", input.UserID),
+                            new SqlParameter("@IsSelfEvaluation","0"),
+                            new SqlParameter("@FromDate", input.StartDate),
+                            new SqlParameter("@ToDate", input.EndDate),
+                            new SqlParameter("@EvaluatorID", "0")
+                      };
+
+            DataSet dsHistory = _context.ExecuteStoredProcedure("GetOutcomeNarrativeDataForSage", parameters);
+
+            return BuildOutcomeNarrativeReport(dsHistory);
+        }
+
+        public static (string MilestoneFramework, string EPAFramework, string PriorEPAData) BuildOutcomeNarrativeReport(DataSet ds)
+        {
+            var sb = new StringBuilder();
+
+            DataTable dt1 = ds.Tables[0];
+            DataTable dt2 = ds.Tables[1];
+            DataTable dt3 = ds.Tables[2];
+            DataTable dt4 = ds.Tables[3];
+            DataTable dt5 = ds.Tables[4];
+            string milestoneFrameWork = string.Empty;
+            string epaFrameWork = string.Empty;
+            string priorEPAData = string.Empty;
+            //----------------------------------------------------------
+            // Outcome Narrative
+            //----------------------------------------------------------
+            if (dt1.Rows.Count > 0)
+            {
+                sb.AppendLine("Sub-Competency Settings:");
+                sb.AppendLine();
+            }
+
+            foreach (var competency in dt1.AsEnumerable()
+                .GroupBy(r => r["Competency"].ToString())
+                .OrderBy(g => g.Key))
+            {
+                sb.AppendLine("Competency: " + competency.Key);
+
+                foreach (var sub in competency.GroupBy(r => new
+                {
+                    OutcomeNarrativeID = Convert.ToInt64(r["OutcomeNarrativeID"]),
+                    Name = r["OutcomeNarrativeName"].ToString()
+                }))
+                {
+                    sb.AppendLine($"\t Sub-Competency: {sub.Key.Name}");
+
+                    var milestones = dt2.AsEnumerable()
+                        .Where(r => Convert.ToInt64(r["OutcomeNarrativeID"]) == sub.Key.OutcomeNarrativeID);
+
+                    foreach (var m in milestones)
+                    {
+                        string question = m["QuestionDescription"].ToString();
+
+                        if (!string.IsNullOrWhiteSpace(question))
+                            sb.AppendLine($"\t\t• Milestone: {question}");
+
+                        bool isEPA = Convert.ToInt32(m["IsEPA"]) == 1;
+                        string epa = m["EPAName"].ToString();
+
+                        if (isEPA && !string.IsNullOrWhiteSpace(epa))
+                            sb.AppendLine($"\t\t• EPA: {epa}");
+                    }
+                    sb.AppendLine();
+                    sb.AppendLine("\t\tLevel Descriptions: ");
+                    sb.AppendLine();
+                    foreach (DataRow level in sub.OrderBy(r => Convert.ToDecimal(r["Score"])))
+                    {
+                        sb.AppendLine(
+                            $"\t\tLevel {level["Score"]}: {level["AnswerName"]} - {level["Description"]}");
+                    }
+
+                    sb.AppendLine();
+                }
+
+                sb.AppendLine();
+            }
+
+            milestoneFrameWork = RemoveHtmlTags(sb.ToString());
+            sb.Clear();
+
+            //----------------------------------------------------------
+            // EPA Settings
+            //----------------------------------------------------------
+
+            sb.AppendLine();
+            if (dt3.Rows.Count > 0)
+            {
+                sb.AppendLine("EPA Settings:");
+                sb.AppendLine();
+            }
+            foreach (var competency in dt3.AsEnumerable()
+                .GroupBy(r => r["Competency"].ToString())
+                .OrderBy(g => g.Key))
+            {
+                sb.AppendLine("Competency: " + competency.Key);
+
+                foreach (DataRow epa in competency)
+                {
+                    long id = Convert.ToInt64(epa["MilestoneSubCompetencyID"]);
+
+                    sb.AppendLine($"\t• EPA: {epa["SubCompetencyName"]}");
+
+                    foreach (DataRow m in dt4.AsEnumerable()
+                        .Where(r => Convert.ToInt64(r["MilestoneSubCompetencyID"]) == id))
+                    {
+                        sb.AppendLine($"\t\t○ Milestone: {m["QuestionDescription"]}");
+                    }
+                }
+
+                sb.AppendLine();
+            }
+
+            epaFrameWork = RemoveHtmlTags(sb.ToString());
+
+            sb.Clear();
+
+            //----------------------------------------------------------
+            // EPA HISTORY
+            //----------------------------------------------------------
+            sb.AppendLine();
+            if (dt5.Rows.Count > 0)
+            {
+                sb.AppendLine("Evaluation EPA Scores:");
+                sb.AppendLine();
+            }
+
+            foreach (var epa in dt5.AsEnumerable()
+                .GroupBy(r => r["SubCompetencyName"].ToString())
+                .OrderBy(g => g.Key))
+            {
+                sb.AppendLine("EPA: " + epa.Key);
+
+                foreach (DataRow row in epa.OrderBy(r =>
+                         DateTime.Parse(r["CompletedDate"].ToString())))
+                {
+                    sb.AppendLine($"\t• Completed Date: {row["CompletedDate"]}");
+                    sb.AppendLine($"\t• Score - {row["Score"]} - {row["AnswerName"]}");
+                    sb.AppendLine();
+                }
+            }
+            priorEPAData = RemoveHtmlTags(sb.ToString());
+            return (milestoneFrameWork, epaFrameWork, priorEPAData);
         }
 
         public static string GetPreviousHistory(AIRequest input, string templateIDs, Int64 userID, APIDataBaseContext _context)

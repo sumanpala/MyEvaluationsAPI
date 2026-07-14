@@ -699,10 +699,35 @@ namespace SystemComments.Utilities
                     sectionNumber++;
                 }
             }
+      
             sections = sections
-           .GroupBy(s => s["name"]?.ToString())
-           .Select(g => g.First())
-           .ToList();
+                .GroupBy(s => s["fullname"]?.ToString())
+                .Select(g => g.First())
+                .ToList();
+
+            // Reorder sections based on allsections
+            sections.Sort((x, y) =>
+            {
+                var xIndex = lstAllSections.FindIndex(a =>
+                    string.Equals(
+                        a["fullname"]?.ToString(),
+                        x["fullname"]?.ToString(),
+                        StringComparison.OrdinalIgnoreCase));
+
+                var yIndex = lstAllSections.FindIndex(a =>
+                    string.Equals(
+                        a["fullname"]?.ToString(),
+                        y["fullname"]?.ToString(),
+                        StringComparison.OrdinalIgnoreCase));
+
+                return xIndex.CompareTo(yIndex);
+            });
+
+            // Update section numbers
+            for (short i = 0; i < sections.Count; i++)
+            {
+                sections[i]["sectionnum"] = (short)(i + 1);
+            }
 
             jsonData["sections"] = sections;
             jsonData["allsections"] = lstAllSections;
