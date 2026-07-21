@@ -726,6 +726,7 @@ namespace SystemComments.Utilities
             DataTable dt3 = ds.Tables[2];
             DataTable dt4 = ds.Tables[3];
             DataTable dt5 = ds.Tables[4];
+            DataTable dt6 = ds.Tables[5];
             string milestoneFrameWork = string.Empty;
             string epaFrameWork = string.Empty;
             string priorEPAData = string.Empty;
@@ -796,26 +797,53 @@ namespace SystemComments.Utilities
                 sb.AppendLine("EPA Settings:");
                 sb.AppendLine();
             }
-            foreach (var competency in dt3.AsEnumerable()
-                .GroupBy(r => r["Competency"].ToString())
-                .OrderBy(g => g.Key))
+            foreach (var epaGroup in dt3.AsEnumerable()
+            .GroupBy(r => new
             {
-                sb.AppendLine("Competency: " + competency.Key);
+                EPAGroupID = Convert.ToInt64(r["EPAGroupID"]),
+                EPAGroupName = r["EPAGroupName"].ToString()
+            })
+            .OrderBy(g => g.Key.EPAGroupID))
+            {
+                sb.AppendLine($"EPA Group: {(!string.IsNullOrWhiteSpace(epaGroup.Key.EPAGroupName) ? epaGroup.Key.EPAGroupName : "Not Available")}; EPA GroupID: {epaGroup.Key.EPAGroupID} ");
 
-                foreach (DataRow epa in competency)
+                foreach (var competency in epaGroup
+                    .GroupBy(r => r["Competency"].ToString())
+                    .OrderBy(g => g.Key))
                 {
-                    long id = Convert.ToInt64(epa["MilestoneSubCompetencyID"]);
+                    sb.AppendLine($"\tCompetency: {competency.Key}");
 
-                    sb.AppendLine($"\t• EPA: {epa["SubCompetencyName"]}");
-
-                    foreach (DataRow m in dt4.AsEnumerable()
-                        .Where(r => Convert.ToInt64(r["MilestoneSubCompetencyID"]) == id))
+                    foreach (DataRow epa in competency.OrderBy(r => Convert.ToInt32(r["SortOrder"])))
                     {
-                        sb.AppendLine($"\t\t○ Milestone: {m["QuestionDescription"]}");
+                        long id = Convert.ToInt64(epa["MilestoneSubCompetencyID"]);
+
+                        sb.AppendLine($"\t\t• EPA: {epa["SubCompetencyName"]}");
+                        sb.AppendLine($"\t\t• EPA ID: {id}");
+
+                        foreach (DataRow milestone in dt4.AsEnumerable()
+                            .Where(r => Convert.ToInt64(r["MilestoneSubCompetencyID"]) == id))
+                        {
+                            sb.AppendLine($"\t\t\t○ Milestone: {milestone["QuestionDescription"]}");
+                        }
                     }
+
+                    sb.AppendLine();
                 }
 
                 sb.AppendLine();
+            }
+
+            if(dt6.Rows.Count > 0)
+            {
+                sb.AppendLine("EPA Scale:");
+                sb.AppendLine();
+                sb.AppendLine($"Scale ID: {dt6.Rows[0]["AnswerTypeID"]}; Early Warning Score: {dt6.Rows[0]["EWValue"]}; Exceed Expectation Score: {dt6.Rows[0]["EEValue"]};");
+                sb.AppendLine();
+            }
+
+            foreach (DataRow drScale in dt6.Rows)
+            {
+                sb.AppendLine($"\t{drScale["Score"]} = {drScale["Name"]}; Answer ID={drScale["AnswerID"]}");
             }
 
             epaFrameWork = RemoveHtmlTags(sb.ToString());

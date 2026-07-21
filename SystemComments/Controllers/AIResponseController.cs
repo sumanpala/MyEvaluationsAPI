@@ -905,22 +905,24 @@ namespace SystemComments.Controllers
                                 //history = await SummarizeHistoricalData(history, 2000);
                             }
                             comments = comments.Replace("[Historical Data]", history);
-                        }
-                        if (isSageFocus == 1)
-                        {
-                            (string milestoneFramework, string epaFramework, string priorEPAData) = await Task.FromResult(BackEndService.GetSageFocusHistory(new AIRequest
+
+                            if (isSageFocus == 1)
                             {
-                                DepartmentID = 13,
-                                StartDate = "05/01/2025",
-                                EndDate = "04/30/2026",
-                                UserID = 2
-                            }, _context));
+                                (string milestoneFramework, string epaFramework, string priorEPAData) = await Task.FromResult(BackEndService.GetSageFocusHistory(new AIRequest
+                                {
+                                    DepartmentID = input.DepartmentID,
+                                    StartDate = dtPrompt.Rows[0]["StartDate"].ToString(),
+                                    EndDate = dtPrompt.Rows[0]["EndDate"].ToString(),
+                                    UserID = Convert.ToInt64(dtPrompt.Rows[0]["SubjectUserID"].ToString())
+                                }, _context));
 
-                            comments = comments.Replace("[Milestone Framework]", milestoneFramework);
-                            comments = comments.Replace("[EPA Framework]", epaFramework);
-                            comments = comments.Replace("[Prior EPA Data]", priorEPAData);                            
+                                comments = comments.Replace("[Milestone Framework]", milestoneFramework);
+                                comments = comments.Replace("[EPA Framework]", epaFramework);
+                                comments = comments.Replace("[Prior EPA Data]", priorEPAData);
 
+                            }
                         }
+                       
 
                     }
                     comments = RemoveHTMLTags(comments);
