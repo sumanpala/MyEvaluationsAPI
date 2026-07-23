@@ -272,6 +272,92 @@ namespace SystemComments.Utilities
                         objInputObject["endmessage"] = endMessage;
                     }
 
+                    JArray? allSections = objInputObject["allsections"] as JArray;
+                    JArray? mergedSections = objInputObject["sections"] as JArray;
+
+                    if (allSections != null && mergedSections != null)
+                    {
+                        string totalSections = objInputObject["totalsections"]?.ToString() ?? "";
+
+                        foreach (JObject section in mergedSections.OfType<JObject>())
+                        {
+                            JObject? epaAssessment = section["epaAssessment"] as JObject;
+                            if (epaAssessment == null)
+                                continue;
+
+                            string fullName = section["fullname"]?.ToString() ?? "";
+
+                            JObject? allSection = allSections
+                                .OfType<JObject>()
+                                .FirstOrDefault(x =>
+                                    string.Equals(
+                                        x["fullname"]?.ToString(),
+                                        fullName,
+                                        StringComparison.OrdinalIgnoreCase));
+
+                            if (allSection == null)
+                                continue;
+
+                            // Create/Get epasections object
+                            JObject epasectionsObject = allSection["epasections"] as JObject ?? new JObject();
+
+                            if (epasectionsObject["name"] == null)
+                                epasectionsObject["name"] = "EPA Assessment";
+
+                            JArray epasections = epasectionsObject["sections"] as JArray ?? new JArray();
+
+                            string sectionNo = Regex.Match(fullName, @"Section\\s+(\\d+)")
+                                                    .Groups[1].Value;
+
+                            int index = 0;
+
+                            JToken? competencies =
+                                epaAssessment["epaGroup"]?["competencies"] ??
+                                epaAssessment["competencies"];
+
+                            if (competencies is JArray competencyArray)
+                            {
+                                foreach (JObject competency in competencyArray.OfType<JObject>())
+                                {
+                                    if (!(competency["epas"] is JArray epas))
+                                        continue;
+
+                                    foreach (JObject epa in epas.OfType<JObject>())
+                                    {
+                                        string epaSectionName =
+                                            $"Section {sectionNo}{(char)('a' + index)} of {totalSections}";
+
+                                        // Check by EPA ID (recommended)
+                                        bool exists = epasections
+                                            .OfType<JObject>()
+                                            .Any(x =>
+                                                string.Equals(
+                                                    x["epaid"]?.ToString(),
+                                                    epa["id"]?.ToString(),
+                                                    StringComparison.OrdinalIgnoreCase));
+
+                                        if (!exists)
+                                        {
+                                            epasections.Add(new JObject
+                                            {
+                                                ["name"] = epaSectionName,
+                                                ["epaid"] = epa["id"]?.ToString() ?? ""
+                                            });
+                                        }
+
+                                        index++;
+                                    }
+                                }
+                            }
+
+                            if (epasections.Count > 0)
+                            {
+                                epasectionsObject["sections"] = epasections;
+                                allSection["epasections"] = epasectionsObject;
+                            }
+                        }
+                    }
+
                     if (objInputObject != null)
                     {
                         updatedJSON = JsonConvert.SerializeObject(objInputObject, Formatting.None);
@@ -621,6 +707,130 @@ namespace SystemComments.Utilities
                         sectionData["mainsection"] = lstMainQuestions;
                     }
 
+                    // Extract EPA Assessment
+                    XElement epaAssessmentElement = section.Element("epaAssessment");
+
+                    if (epaAssessmentElement != null)
+                    {
+                        var epaAssessment = new Dictionary<string, object>();
+
+                        // epaAssessment attributes
+                        foreach (var attribute in epaAssessmentElement.Attributes())
+                        {
+                            epaAssessment[attribute.Name.LocalName] =
+                                HttpUtility.HtmlDecode(attribute.Value);
+                        }
+
+                        XElement epaGroupElement = epaAssessmentElement.Element("epaGroup");
+
+                        // Parent that contains competency elements
+                        XElement competencyParent = epaGroupElement ?? epaAssessmentElement;
+
+                        Dictionary<string, object> epaGroup = null;
+
+                        if (epaGroupElement != null)
+                        {
+                            epaGroup = new Dictionary<string, object>();
+
+                            foreach (var attribute in epaGroupElement.Attributes())
+                            {
+                                epaGroup[attribute.Name.LocalName] =
+                                    HttpUtility.HtmlDecode(attribute.Value);
+                            }
+                        }
+
+                        // *** Missing declaration ***
+                        var competencies = new List<Dictionary<string, object>>();
+
+                        foreach (XElement competencyElement in competencyParent.Elements("competency"))
+                        {
+                            var competency = new Dictionary<string, object>();
+
+                            // competency attributes
+                            foreach (var attribute in competencyElement.Attributes())
+                            {
+                                competency[attribute.Name.LocalName] =
+                                    HttpUtility.HtmlDecode(attribute.Value);
+                            }
+
+                            competency["name"] =
+                                HttpUtility.HtmlDecode(competencyElement.Element("name")?.Value ?? "");
+
+                            // Rating Scale
+                            XElement ratingScaleElement = competencyElement.Element("ratingScale");
+
+                            if (ratingScaleElement != null)
+                            {
+                                var ratingScale = new Dictionary<string, object>();
+
+                                foreach (var attribute in ratingScaleElement.Attributes())
+                                {
+                                    ratingScale[attribute.Name.LocalName] =
+                                        HttpUtility.HtmlDecode(attribute.Value);
+                                }
+
+                                var options = new List<Dictionary<string, object>>();
+
+                                foreach (XElement optionElement in ratingScaleElement.Elements("option"))
+                                {
+                                    var option = new Dictionary<string, object>();
+
+                                    foreach (var attribute in optionElement.Attributes())
+                                    {
+                                        option[attribute.Name.LocalName] =
+                                            HttpUtility.HtmlDecode(attribute.Value);
+                                    }
+
+                                    option["label"] = HttpUtility.HtmlDecode(optionElement.Value);
+
+                                    options.Add(option);
+                                }
+
+                                ratingScale["options"] = options;
+                                competency["ratingScale"] = ratingScale;
+                            }
+
+                            // EPAs
+                            var epas = new List<Dictionary<string, object>>();
+
+                            foreach (XElement epaElement in competencyElement.Elements("epa"))
+                            {
+                                var epa = new Dictionary<string, object>();
+
+                                foreach (var attribute in epaElement.Attributes())
+                                {
+                                    epa[attribute.Name.LocalName] =
+                                        HttpUtility.HtmlDecode(attribute.Value);
+                                }
+
+                                epa["title"] =
+                                    HttpUtility.HtmlDecode(epaElement.Element("title")?.Value ?? "");
+                                epa["answer"] =
+                                    HttpUtility.HtmlDecode(epaElement.Element("answer")?.Value ?? "");
+                                epa["asnswerid"] =
+                                    epaElement.Element("asnswerid")?.Value ?? "";
+
+                                epas.Add(epa);
+                            }
+
+                            competency["epas"] = epas;
+
+                            competencies.Add(competency);
+                        }
+
+                        if (epaGroup != null)
+                        {
+                            epaGroup["competencies"] = competencies;
+                            epaAssessment["epaGroup"] = epaGroup;
+                        }
+                        else
+                        {
+                            epaAssessment["competencies"] = competencies;
+                        }
+
+                        sectionData["epaAssessment"] = epaAssessment;
+                    }
+
                     // Extract follow-up sections dynamically
                     var followUpSections = new Dictionary<string, object>();
                     var questions = new List<Dictionary<string, object>>();
@@ -732,7 +942,7 @@ namespace SystemComments.Utilities
             jsonData["sections"] = sections;
             jsonData["allsections"] = lstAllSections;
             return JsonConvert.SerializeObject(jsonData, Newtonsoft.Json.Formatting.Indented);
-        }
+        }       
 
         public static DataSet ConvertJsonToDataSet(string json)
         {

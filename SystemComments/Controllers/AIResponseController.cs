@@ -507,7 +507,7 @@ namespace SystemComments.Controllers
                     "Writing Style Rules:\r\n\r\n- Use concise professional language.\r\n- Avoid exaggerated praise.\r\n- Avoid unsupported assumptions.\r\n- Keep summary interpretations concise and evidence-based.\r\n- Do not expose internal reasoning or chain-of-thought." +
                     "\r\n\r\nFinal Validation Requirements Before Responding:\r\n\r\n- Validate JSON syntax.\r\n- Validate required fields exist.\r\n- Validate counts and denominators.\r\n- Validate rating labels match the approved labels exactly." +
                     "\r\n- Validate all percentages and outcomes are internally consistent.";
-                string response = await MyInsightsGPT5Response(systemMessage, prompt, "gpt-5.2");
+                string response = await MyInsightsGPT5Response(systemMessage, prompt, "gpt-5.4");
                 myInsightsResponse.Prompt = prompt;
                 myInsightsResponse.ResultJSON = response;
                 aiResponse.Add(myInsightsResponse);                
@@ -591,7 +591,7 @@ namespace SystemComments.Controllers
                     "\r\n\r\nOutput requirements:\r\n\r\n• The response must be returned strictly as valid JSON.\r\n• Do not include markdown formatting.\r\n" +
                     "• Do not include text before or after the JSON.\r\n• Ensure the JSON is syntactically valid and parseable" +
                     ".\r\n\r\nThe JSON structure must match the format defined in the user message.";
-                string response = await MyInsightsGPT5Response(systemMessage, prompt, "gpt-5.2");
+                string response = await MyInsightsGPT5Response(systemMessage, prompt, "gpt-5.4");
                 insightsResponse.SummaryJSON = response;
                 insightsResponse.Prompt = prompt;
                 DataSet dsResult = BackEndService.SavePECSummaryInsights(_context, input, insightsResponse);
@@ -1252,7 +1252,7 @@ namespace SystemComments.Controllers
             };
 
             StringBuilder sb = new StringBuilder();
-            var chatClient = _openAIAPEMyInsightsClient.GetChatClient("gpt-5.2");
+            var chatClient = _openAIAPEMyInsightsClient.GetChatClient("gpt-5.4");
             var options = new ChatCompletionOptions
             {
                 Temperature = 1,
@@ -1405,19 +1405,19 @@ namespace SystemComments.Controllers
                 switch (commentsType)
                 {
                     case 2:
-                        model = "gpt-4.1";
+                        model = "gpt-5.4";
                         aiKey = _config.GetSection("AppSettings:NPVToken").Value;
                         break;
                     case 1:
-                        model = "gpt-5.2";
+                        model = "gpt-5.4";
                         aiKey = _config.GetSection("AppSettings:MyInsightsToken").Value;
                         break;
                     case 3:
-                        model = "gpt-4o";
+                        model = "gpt-5.4";
                         aiKey = _config.GetSection("AppSettings:SAGEToken").Value;
                         break;
                     default:
-                        model = "gpt-5.2";
+                        model = "gpt-5.4";
                         aiKey = _config.GetSection("AppSettings:MyInsightsToken").Value;
                         break;
                 }
@@ -1429,9 +1429,9 @@ namespace SystemComments.Controllers
                 if (comments.Length > 0)
                 {
 
-                    if (model == "gpt-5.2")
+                    if (model == "gpt-5.4")
                     {
-                        aiResponse = await MyInsightsGPT5Response(comments, userComments, "gpt-5.2", _openAIMyInsightsClient);
+                        aiResponse = await MyInsightsGPT5Response(comments, userComments, "gpt-5.4", _openAIMyInsightsClient);
                     }
                     else
                     {
@@ -1797,7 +1797,7 @@ namespace SystemComments.Controllers
                 ChatMessage.CreateUserMessage(comments)
             };
 
-            var chatClient = _openAIAPEMyInsightsClient.GetChatClient("gpt-5.2");
+            var chatClient = _openAIAPEMyInsightsClient.GetChatClient("gpt-5.4");
 
             var options = new ChatCompletionOptions
             {
@@ -1831,7 +1831,7 @@ namespace SystemComments.Controllers
 
 
         private async Task<string> MyInsightsGPT5Response(string prompt, string comments
-            , string model = "gpt-5.2", OpenAIClient _openAIMyInsightsClient = null)
+            , string model = "gpt-5.4", OpenAIClient _openAIMyInsightsClient = null)
         {
             string time = "0";
             Stopwatch sw = Stopwatch.StartNew();
@@ -1901,7 +1901,7 @@ namespace SystemComments.Controllers
             };
 
             StringBuilder sb = new StringBuilder();
-            var chatClient = _openAIAPEMyInsightsClient.GetChatClient("gpt-5.2");
+            var chatClient = _openAIAPEMyInsightsClient.GetChatClient("gpt-5.4");
             var options = new ChatCompletionOptions
             {
                 Temperature = 1,
@@ -2052,7 +2052,7 @@ namespace SystemComments.Controllers
         {
             if (isEnable5model)
             {
-                string model = (isSageFocus == 1) ? "gpt-5.4" : "gpt-5.2";
+                string model = "gpt-5.4";
                 chatClient = _openAIClient.GetChatClient(model);
             }
             prompt = prompt.Replace("```xml", "").Replace("<!-- Include follow-up only if response is vague -->", "");
@@ -2229,7 +2229,7 @@ namespace SystemComments.Controllers
             var chatClient = _openAIClient.GetChatClient("gpt-4o-mini");
             if (isEnable5model)
             {
-                chatClient = _openAIClient.GetChatClient("gpt-5.2");
+                chatClient = _openAIClient.GetChatClient("gpt-5.4");
             }
             var options = new ChatCompletionOptions
             {

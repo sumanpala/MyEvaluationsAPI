@@ -429,7 +429,7 @@ Expected HTML Output Format:
 
         private static async Task<string> GenerateSectionAsync(OpenAIClient _openAIMyInsightsClient, string section, string systemMessage, string comments)
         {
-            var chatClient = _openAIMyInsightsClient.GetChatClient("gpt-5");           
+            var chatClient = _openAIMyInsightsClient.GetChatClient("gpt-5.4");           
 
             var messages = new List<ChatMessage>
             {
@@ -488,7 +488,7 @@ Expected HTML Output Format:
                 ChatMessage.CreateUserMessage(comments)
             };
 
-            var chatClient = _openAIMyInsightsClient.GetChatClient("gpt-5");
+            var chatClient = _openAIMyInsightsClient.GetChatClient("gpt-5.4");
 
             var options = new ChatCompletionOptions
             {
@@ -606,7 +606,7 @@ Expected HTML Output Format:
                 client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", aiKey);
                 var requestBody = new
                 {
-                    model = "gpt-5",
+                    model = "gpt-5.4",
                     messages = messages,
                     max_tokens = maxTokens,
                     temperature = 0,
@@ -627,7 +627,7 @@ Expected HTML Output Format:
         {
             string aiKey = _config.GetSection("AppSettings:MyInsightsAPEToken").Value;
             OpenAIClient _openAIClient = new OpenAIClient(aiKey);
-            ChatClient chatClient = _openAIClient.GetChatClient("gpt-5");
+            ChatClient chatClient = _openAIClient.GetChatClient("gpt-5.4");
             
             string userMessage = "";
             string systemMessage = "You are an expert summarizer specializing in academic and clinical evaluation data. \r\nYour goal is to extract, group, and summarize evaluator comments by rotation name." +
@@ -682,8 +682,12 @@ Expected HTML Output Format:
         
 
         public static async Task<string> SummarizeText(IConfiguration _config, string text, int maxTokens = 4000, Int16 promptType = 1)
-        {
+        {          
+
             string aiKey = _config.GetSection("AppSettings:MyInsightsAPEToken").Value;
+            OpenAIClient _openAIClient = new OpenAIClient(aiKey);
+            ChatClient chatClient = _openAIClient.GetChatClient("gpt-5.4");
+
             string userMessage = (promptType == 1) ? "Please summarize the area of improvements comments in detailed format line by line\n" : "Please summarize the comments with out loosing \"Rotation Name:\"\n";
             string systemMessage = "You are an expert in Graduate Medical Education (GME) program evaluation.\n";
             if (promptType == 2)
@@ -693,33 +697,68 @@ Expected HTML Output Format:
                 systemMessage += "Rotation Name: <exact rotation string from input>\nComments:\n- <concise point 1 reflecting only what appears in the comments>\n- <concise point 2>\n- <concise point 3>\n";
                 systemMessage += "[6–15 bullets per rotation based on the comments by rotation]\nEliminate duplicate comments by rotation.\n";
             }
-            List<object> messages = new List<object>
+
+            var messages = new List<ChatMessage>
             {
-                new { role = "system", content = systemMessage },
-                new { role = "user", content = $"Summarize the following text in under {maxTokens} tokens:\n\n{userMessage}" + text }
+                ChatMessage.CreateSystemMessage(systemMessage),
+                ChatMessage.CreateUserMessage(text)
             };
 
-            using (var client = new HttpClient())
+            StringBuilder sb = new StringBuilder();
+            var options = new ChatCompletionOptions
             {
-                client.Timeout = Timeout.InfiniteTimeSpan;
-                client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", aiKey);
-                var requestBody = new
+                Temperature = 1,               
+                PresencePenalty = 0,
+                FrequencyPenalty = 0,               
+            };
+
+            try
+            {
+                // ✅ Streaming response from OpenAI
+                await foreach (var update in chatClient.CompleteChatStreamingAsync(messages, options))
                 {
-                    model = "gpt-4.1",
-                    messages = messages,
-                    max_tokens = maxTokens,
-                    temperature = 0,
-                    top_p = 0.1,
-                    stream = false
-                };
+                    if (update.ContentUpdate.Count > 0)
+                    {
+                        string token = update.ContentUpdate[0].Text;
+                        sb.Append(token);
 
-                var content = new StringContent(JsonConvert.SerializeObject(requestBody), Encoding.UTF8, "application/json");
-                var response = await client.PostAsync("https://api.openai.com/v1/chat/completions", content);
-                var result = await response.Content.ReadAsStringAsync();
-
-                dynamic json = JsonConvert.DeserializeObject(result);
-                return json?.choices?[0]?.message?.content ?? "";
+                    }
+                }
             }
+            catch (Exception ex)
+            {
+
+            }
+
+            return sb.ToString();
+
+            //List<object> messages = new List<object>
+            //{
+            //    new { role = "system", content = systemMessage },
+            //    new { role = "user", content = $"Summarize the following text in under {maxTokens} tokens:\n\n{userMessage}" + text }
+            //};
+
+            //using (var client = new HttpClient())
+            //{
+            //    client.Timeout = Timeout.InfiniteTimeSpan;
+            //    client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", aiKey);
+            //    var requestBody = new
+            //    {
+            //        model = "gpt-4.1",
+            //        messages = messages,
+            //        max_tokens = maxTokens,
+            //        temperature = 0,
+            //        top_p = 0.1,
+            //        stream = false
+            //    };
+
+            //    var content = new StringContent(JsonConvert.SerializeObject(requestBody), Encoding.UTF8, "application/json");
+            //    var response = await client.PostAsync("https://api.openai.com/v1/chat/completions", content);
+            //    var result = await response.Content.ReadAsStringAsync();
+
+            //    dynamic json = JsonConvert.DeserializeObject(result);
+            //    return json?.choices?[0]?.message?.content ?? "";
+            //}
         }
 
         public async static Task<(string, string)> GetComments(AIRequest input, OpenAIClient _openAINPVClient)
@@ -767,7 +806,7 @@ Expected HTML Output Format:
                     if (comments.Length > 0)
                     {
 
-                        string updatedComments = await PromptService.SummarizeComments(comments, "gpt-5.2", _openAINPVClient);
+                        string updatedComments = await PromptService.SummarizeComments(comments, "gpt-5.4", _openAINPVClient);
                         if (updatedComments.Trim().Length > 0)
                         {
                             comments = updatedComments;

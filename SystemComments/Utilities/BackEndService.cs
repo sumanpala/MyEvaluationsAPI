@@ -835,16 +835,28 @@ namespace SystemComments.Utilities
 
             if(dt6.Rows.Count > 0)
             {
-                sb.AppendLine("EPA Scale:");
-                sb.AppendLine();
-                sb.AppendLine($"Scale ID: {dt6.Rows[0]["AnswerTypeID"]}; Early Warning Score: {dt6.Rows[0]["EWValue"]}; Exceed Expectation Score: {dt6.Rows[0]["EEValue"]};");
-                sb.AppendLine();
-            }
+                sb.AppendLine("EPA Scale:");                
 
-            foreach (DataRow drScale in dt6.Rows)
-            {
-                sb.AppendLine($"\t{drScale["Score"]} = {drScale["Name"]}; Answer ID={drScale["AnswerID"]}");
-            }
+                foreach (var competency in dt6.AsEnumerable()
+                .GroupBy(r => r["Competency"].ToString())
+                .OrderBy(g => g.Key))
+                {
+                    sb.AppendLine($"\tCompetency: {competency.Key}");                   
+                    bool isFirst = true;
+                    foreach (DataRow scale in dt6.AsEnumerable()
+                            .Where(r => r["Competency"].ToString() == competency.Key))
+                    {
+                        if (isFirst)
+                        {
+                            sb.AppendLine($"\t\tScale ID: {scale["AnswerTypeID"]}; IsSliding: {scale["IsSliding"]} Early Warning Score: {scale["EWValue"]}; Exceed Expectation Score: {scale["EEValue"]};");
+                            isFirst = false;
+                        }
+                        sb.AppendLine($"\t\t\t{scale["Score"]} = {scale["Name"]}; Answer ID={scale["AnswerID"]}");                        
+                    }
+                }
+                    
+                sb.AppendLine();
+            }           
 
             epaFrameWork = RemoveHtmlTags(sb.ToString());
 
@@ -1059,7 +1071,7 @@ namespace SystemComments.Utilities
                     if (isDataAvailable)
                     {
                         string unicodeRule = "Unicode Preservation Rule\r\n\r\n    Always render the Unicode delta character exactly as: Δ\r\n\r\n    Use this exact Unicode character:\r\n    Δ = \\u0394\r\n\r\n    Never replace Δ with:\r\n    ?\r\n    Gap\r\n    Diff\r\n    delta\r\n    &#916;\r\n\r\n    PITDefinition format must preserve:\r\n    Spec. 96.86% (Δ -0.60); Nat. 97.85% (Δ -1.59)\r\n\r\n    The final JSON response must contain the actual rendered Unicode character Δ, not a replacement character.";
-                        string systemMessage = "You are GPT-5.2, an expert analyst in Graduate Medical Education (GME) accreditation, survey analytics, and program evaluation reporting.\r\n\r\n" +
+                        string systemMessage = "You are GPT-5.4, an expert analyst in Graduate Medical Education (GME) accreditation, survey analytics, and program evaluation reporting.\r\n\r\n" +
                             "Your role:\r\n- Interpret and execute all instructions from the user message as a Graduate Medical Education specialist assisting a Program Evaluation Committee (PEC)." +
                             "\r\n- Analyze ACGME Resident/Fellow Survey datasets to identify Performance Improvement Topics (PITs) with Year-over-Year (YoY) awareness." +
                             "\r\n- Produce structured, deterministic JSON output suitable for inclusion in PEC documentation.\r\n\r\nBehavioral directives:\r\n" +
@@ -1079,7 +1091,7 @@ namespace SystemComments.Utilities
                         insightResponse.Part1Prompt = prompt;
                         stage2Prompt = stage2Prompt.Replace("[Survey Input]", response);
 
-                        systemMessage = "You are GPT-5.2, a deterministic Graduate Medical Education (GME) analytics and process-improvement expert supporting Program Evaluation Committees (PECs).\r\n\r\n" +
+                        systemMessage = "You are GPT-5.4, a deterministic Graduate Medical Education (GME) analytics and process-improvement expert supporting Program Evaluation Committees (PECs).\r\n\r\n" +
                             "ROLE:\r\nYou analyze ACGME Resident/Fellow Survey Performance Improvement Topics (PITs) and produce PEC-ready, structured action plans.\r\nYou interpret the user’s message as containing PIT data and framework selection rules." +
                             "\r\nYou generate one JSON object per PIT—never summaries, previews, or markdown.\r\n\r\nDOMAIN EXPECTATIONS:\r\n• Apply 2025 ACGME Common Program Requirements (CPR) or newer only.\r\n" +
                             "• Exclude all references to DEI-specific accreditation elements.\r\n• Treat each PIT independently unless consolidation rules are explicitly defined.\r\n" +
