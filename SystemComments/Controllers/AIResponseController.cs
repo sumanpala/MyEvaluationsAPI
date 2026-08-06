@@ -313,7 +313,7 @@ namespace SystemComments.Controllers
                 string prompt = string.Empty;
                 string response = string.Empty;
                 APEResponse apeResponse = new APEResponse();
-                string frequencyRule = "FREQUENCY CALCULATION RULE (MANDATORY):\r\n\r\n- Frequency must be a NUMBER between 20 and 80.\r\n- Frequency is NOT the raw count.\r\n- Frequency must be calculated by NORMALIZING the number of AFIs assigned to each PIT.\r\n\r\nCALCULATION METHOD:\r\n\r\n1. Internally determine:\r\n   - The number of AFIs assigned to each PIT\r\n   - The MIN and MAX AFI counts across all PITs\r\n\r\n2. Apply normalization:\r\n\r\n   Frequency = 20 + ((PIT_count - MIN_count) / (MAX_count - MIN_count)) × 80\r\n\r\n3. Round Frequency to the nearest multiple of 5.\r\n\r\n4. Don't repeat same frequency for all PIT's 5. Ensure:\r\n   - The smallest PIT → ~20\r\n   - The largest PIT → ~80\r\n   - Others fall proportionally in between\r\n\r\nEDGE CASE:\r\n\r\n- If all PITs have equal counts:\r\n  \r\nSTRICT RULES:\r\n\r\n- Frequency must always be between 20 and 80\r\n- DO NOT output raw counts (e.g., 3, 7, 9)\r\n- DO NOT use fixed or repeated values unless mathematically required\r\n- Frequencies must vary based on actual distribution\r\n\r\nVALIDATION BEFORE OUTPUT:\r\n\r\n- Ensure min Frequency ≈ 20\r\n- Ensure max Frequency ≈ 80\r\n- Ensure values are distributed (not all same)";
+                string frequencyRule = "FREQUENCY CALCULATION RULE (MANDATORY):\r\n\r\n- Frequency must be a NUMBER between 10 and 80.\r\n- Frequency is NOT the raw count.\r\n- Frequency must be calculated by NORMALIZING the number of AFIs assigned to each PIT.\r\n\r\nCALCULATION METHOD:\r\n\r\n1. Internally determine:\r\n   - The number of AFIs assigned to each PIT\r\n   - The MIN and MAX AFI counts across all PITs\r\n\r\n2. Apply normalization:\r\n\r\n   Frequency = 20 + ((PIT_count - MIN_count) / (MAX_count - MIN_count)) × 80\r\n\r\n3. Round Frequency to the nearest multiple of 5.\r\n\r\n4. Don't repeat same frequency for all PIT's 5. Ensure:\r\n   - The smallest PIT → ~20\r\n   - The largest PIT → ~80\r\n   - Others fall proportionally in between\r\n\r\nEDGE CASE:\r\n\r\n- If all PITs have equal counts:\r\n  \r\nSTRICT RULES:\r\n\r\n- Frequency must always be between 20 and 80\r\n- DO NOT output raw counts (e.g., 3, 7, 9)\r\n- DO NOT use fixed or repeated values unless mathematically required\r\n- Frequencies must vary based on actual distribution\r\n\r\nVALIDATION BEFORE OUTPUT:\r\n\r\n- Ensure min Frequency ≈ 20\r\n- Ensure max Frequency ≈ 80\r\n- Ensure values are distributed (not all same)";
                 //string requiredCompetencies = "\n\nReturn the results for below Competency/Category's without fail and also include if any other Competency/Category's are available.\n 1) Interpersonal and Communication Skills\n2) Medical Knowledge" +
                 //"\n3) Patient Care and Procedural Skills\n4) Practice-Based Learning and Improvement\n5) Professionalism\n6) Systems-Based Practice\nReturn atleast 3 to 4 PITs for one PrimaryACGMECompetencyOrCategory";
                 string requiredCompetencies = "\n\nCoverage Rule:\n\r\nThe output must always include all six ACGME Core Competencies:\nInterpersonal and Communication Skills\nMedical Knowledge" +
@@ -341,9 +341,12 @@ namespace SystemComments.Controllers
                 string compactJson = JsonConvert.SerializeObject(parsed, Formatting.None);
                 apeResponse.AFIJSON = compactJson;
 
-                prompt = await BackEndService.GetAPEAFIProgramResponse(input, _context, _config);               
+                prompt = await BackEndService.GetAPEAFIProgramResponse(input, _context, _config);
+                prompt = prompt.Replace("[Input]", response) + requiredCompetencies;
+                
+                //prompt = prompt.Replace("[Stage 1 JSON]", compactJson);
                 input.AFIProgramPrompt = prompt;
-                prompt = prompt + requiredCompetencies;
+                //prompt = prompt + "\n Generate PITs based on Stage 1 JSON.";
                 response = await GetAPEAIResponse(prompt);
                 //response = Regex.Replace(response, @"\r\n?|\n", "").Replace("```json", "").Replace("json{", "{").Replace("```", "");
                 cleaned = response.Trim();
@@ -363,7 +366,8 @@ namespace SystemComments.Controllers
                     string pitPrompt = input.PITPrompt;
                     //string summary = PromptService.SummarizePITs(apeResponse.AFIJSON);
                     //string summary1 = PromptService.SummarizePITs(apeResponse.AFIProgramJSON);
-                    pitPrompt = pitPrompt.Replace("[Input]", "\n**AFI Summary JSON**\n" + apeResponse.AFIJSON + "\n\n**AFI Program Summary JSON**\n" + apeResponse.AFIProgramJSON);
+                    pitPrompt = pitPrompt.Replace("[Input]", "\n**Stage  1 (AFI Summary JSON)**\n" + apeResponse.AFIJSON + "\n\n**Stage 2 (AFI Program Summary JSON)**\n" + apeResponse.AFIProgramJSON);
+                    //pitPrompt = pitPrompt.Replace("[Stage 2 JSON]", apeResponse.AFIProgramJSON);
                     input.PITPrompt = pitPrompt;
                     pitPrompt = pitPrompt + requiredCompetencies;
                     string pitResponse = await GetAPEAIResponse(pitPrompt);
@@ -776,6 +780,7 @@ namespace SystemComments.Controllers
             string comments = "";
             string aiResponse = "";
             string minifiedJson = "[]";
+            string epaJSON = "";
             Stopwatch totalTime = Stopwatch.StartNew();
             double totalSeconds = 0, promptDBSeconds = 0, historySeconds = 0;
             int apiAttempts = 0;
@@ -819,6 +824,7 @@ namespace SystemComments.Controllers
                             isEnable5Model = Convert.ToInt16(dtPrompt.Rows[0]["IsEnable5Model"].ToString());
                             templateDepartmentID = Convert.ToInt64(dtPrompt.Rows[0]["TemplateDepartmentID"].ToString());
                             isSageFocus = Convert.ToInt16(dtPrompt.Rows[0]["IsSageFocus"].ToString());
+                            epaJSON = dtPrompt.Rows[0]["EPAJSON"].ToString();
                         }                        
 
 
@@ -908,7 +914,7 @@ namespace SystemComments.Controllers
 
                             if (isSageFocus == 1)
                             {
-                                (string milestoneFramework, string epaFramework, string priorEPAData) = await Task.FromResult(BackEndService.GetSageFocusHistory(new AIRequest
+                                (string milestoneFramework, string epaFramework, string priorEPAData, string epaInputJSON) = await Task.FromResult(BackEndService.GetSageFocusHistory(new AIRequest
                                 {
                                     DepartmentID = input.DepartmentID,
                                     StartDate = dtPrompt.Rows[0]["StartDate"].ToString(),
@@ -916,6 +922,7 @@ namespace SystemComments.Controllers
                                     UserID = Convert.ToInt64(dtPrompt.Rows[0]["SubjectUserID"].ToString())
                                 }, _context));
 
+                                epaJSON = epaInputJSON;
                                 comments = comments.Replace("[Milestone Framework]", milestoneFramework);
                                 comments = comments.Replace("[EPA Framework]", epaFramework);
                                 comments = comments.Replace("[Prior EPA Data]", priorEPAData);
@@ -964,13 +971,29 @@ namespace SystemComments.Controllers
                     string extractJSON = SageExtractData(aiComments);
                     JToken parsedJson = JToken.Parse(extractJSON);
                     minifiedJson = JsonConvert.SerializeObject(parsedJson, Formatting.None);
+                    if (isSageFocus == 1)
+                    {
+                        // Update EPA Data
+                        bool hasEpaAssessment = parsedJson["sections"]?
+                        .Any(s => s["epaassessment"] != null) == true;
+                        if(hasEpaAssessment)
+                        {
+                            string epaUpdatedJSON = BackEndService.MergeEPAJson(epaJSON, minifiedJson);
+                            if(epaUpdatedJSON.Length > 0)
+                            {
+                                minifiedJson = epaUpdatedJSON;
+                            }
+                        }
+                        
+                    }
+
                     bool isNewFollowup = false;
                     if (input.SageRequest.Length > 0 && minifiedJson.Length > 0)
                     {
                         minifiedJson = SageExtraction.MergeJson(input.SageRequest, minifiedJson, ref isNewFollowup);
                         extractJSON = minifiedJson;
                     }
-                    minifiedJson = UpdateRequestJSON(minifiedJson, input.SageRequest);
+                    minifiedJson = UpdateRequestJSON(minifiedJson, input.SageRequest);                    
 
                     Int32 sectionCount = GetSectionsCount(extractJSON);
                     Int32 allSectionsCount = GetAllSectionsCount(extractJSON);
@@ -1055,7 +1078,7 @@ namespace SystemComments.Controllers
                     totalSeconds = totalTime.Elapsed.TotalSeconds;
                     timeHistory.TotalSeconds = totalSeconds;
                     timeHistory.ApiAttempts = apiAttempts;
-                    DataSet dsResultSet = BackEndService.SaveSageResponse(_context, dsData, input, aiResponse, comments, minifiedJson, timeHistory);
+                    DataSet dsResultSet = BackEndService.SaveSageResponse(_context, dsData, input, aiResponse, comments, minifiedJson, timeHistory, epaJSON);
                     if (dsResultSet != null && dsResultSet.Tables.Count > 0)
                     {
                         DataTable dtEvaluationQuestions = dsResultSet.Tables[0];

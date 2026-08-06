@@ -278,10 +278,10 @@ namespace SystemComments.Utilities
                     if (allSections != null && mergedSections != null)
                     {
                         string totalSections = objInputObject["totalsections"]?.ToString() ?? "";
-
+                        int sectionNo = 1;
                         foreach (JObject section in mergedSections.OfType<JObject>())
                         {
-                            JObject? epaAssessment = section["epaAssessment"] as JObject;
+                            JObject? epaAssessment = section["epaassessment"] as JObject;
                             if (epaAssessment == null)
                                 continue;
 
@@ -306,13 +306,13 @@ namespace SystemComments.Utilities
 
                             JArray epasections = epasectionsObject["sections"] as JArray ?? new JArray();
 
-                            string sectionNo = Regex.Match(fullName, @"Section\\s+(\\d+)")
-                                                    .Groups[1].Value;
+                            //string sectionNo = Regex.Match(fullName, @"Section\\s+(\\d+)")
+                            //                        .Groups[1].Value;
 
-                            int index = 0;
+                            int index = 1;
 
                             JToken? competencies =
-                                epaAssessment["epaGroup"]?["competencies"] ??
+                                epaAssessment["epagroup"]?["competencies"] ??
                                 epaAssessment["competencies"];
 
                             if (competencies is JArray competencyArray)
@@ -325,7 +325,7 @@ namespace SystemComments.Utilities
                                     foreach (JObject epa in epas.OfType<JObject>())
                                     {
                                         string epaSectionName =
-                                            $"Section {sectionNo}{(char)('a' + index)} of {totalSections}";
+                                            $"Section {sectionNo.ToString()}{(char)('a' + index)} of {totalSections}";
 
                                         // Check by EPA ID (recommended)
                                         bool exists = epasections
@@ -355,6 +355,8 @@ namespace SystemComments.Utilities
                                 epasectionsObject["sections"] = epasections;
                                 allSection["epasections"] = epasectionsObject;
                             }
+
+                            sectionNo++;
                         }
                     }
 
@@ -708,7 +710,7 @@ namespace SystemComments.Utilities
                     }
 
                     // Extract EPA Assessment
-                    XElement epaAssessmentElement = section.Element("epaAssessment");
+                    XElement epaAssessmentElement = section.Element("epaassessment");
 
                     if (epaAssessmentElement != null)
                     {
@@ -721,7 +723,7 @@ namespace SystemComments.Utilities
                                 HttpUtility.HtmlDecode(attribute.Value);
                         }
 
-                        XElement epaGroupElement = epaAssessmentElement.Element("epaGroup");
+                        XElement epaGroupElement = epaAssessmentElement.Element("epagroup");
 
                         // Parent that contains competency elements
                         XElement competencyParent = epaGroupElement ?? epaAssessmentElement;
@@ -739,14 +741,13 @@ namespace SystemComments.Utilities
                             }
                         }
 
-                        // *** Missing declaration ***
                         var competencies = new List<Dictionary<string, object>>();
 
                         foreach (XElement competencyElement in competencyParent.Elements("competency"))
                         {
                             var competency = new Dictionary<string, object>();
 
-                            // competency attributes
+                            // Competency attributes
                             foreach (var attribute in competencyElement.Attributes())
                             {
                                 competency[attribute.Name.LocalName] =
@@ -756,8 +757,10 @@ namespace SystemComments.Utilities
                             competency["name"] =
                                 HttpUtility.HtmlDecode(competencyElement.Element("name")?.Value ?? "");
 
+                            // ----------------------------
                             // Rating Scale
-                            XElement ratingScaleElement = competencyElement.Element("ratingScale");
+                            // ----------------------------
+                            XElement ratingScaleElement = competencyElement.Element("ratingscale");
 
                             if (ratingScaleElement != null)
                             {
@@ -781,22 +784,26 @@ namespace SystemComments.Utilities
                                             HttpUtility.HtmlDecode(attribute.Value);
                                     }
 
-                                    option["label"] = HttpUtility.HtmlDecode(optionElement.Value);
+                                    option["label"] =
+                                        HttpUtility.HtmlDecode(optionElement.Value);
 
                                     options.Add(option);
                                 }
 
                                 ratingScale["options"] = options;
-                                competency["ratingScale"] = ratingScale;
+                                competency["ratingscale"] = ratingScale;
                             }
 
+                            // ----------------------------
                             // EPAs
+                            // ----------------------------
                             var epas = new List<Dictionary<string, object>>();
 
                             foreach (XElement epaElement in competencyElement.Elements("epa"))
                             {
                                 var epa = new Dictionary<string, object>();
 
+                                // EPA attributes
                                 foreach (var attribute in epaElement.Attributes())
                                 {
                                     epa[attribute.Name.LocalName] =
@@ -805,10 +812,47 @@ namespace SystemComments.Utilities
 
                                 epa["title"] =
                                     HttpUtility.HtmlDecode(epaElement.Element("title")?.Value ?? "");
-                                epa["answer"] =
-                                    HttpUtility.HtmlDecode(epaElement.Element("answer")?.Value ?? "");
-                                epa["asnswerid"] =
-                                    epaElement.Element("asnswerid")?.Value ?? "";
+
+                                //epa["answer"] =
+                                //    HttpUtility.HtmlDecode(epaElement.Element("answer")?.Value ?? "");
+
+                                //epa["asnswerid"] =
+                                //    HttpUtility.HtmlDecode(epaElement.Element("asnswerid")?.Value ?? "");
+
+                                // ----------------------------
+                                // Milestones
+                                // ----------------------------
+                                XElement milestonesElement = epaElement.Element("milestones");
+
+                                if (milestonesElement != null)
+                                {
+                                    var milestones = new List<Dictionary<string, object>>();
+
+                                    foreach (XElement milestoneElement in milestonesElement.Elements("milestone"))
+                                    {
+                                        var milestone = new Dictionary<string, object>();
+
+                                        // milestone attributes
+                                        foreach (var attribute in milestoneElement.Attributes())
+                                        {
+                                            milestone[attribute.Name.LocalName] =
+                                                HttpUtility.HtmlDecode(attribute.Value);
+                                        }
+
+                                        milestone["title"] =
+                                            HttpUtility.HtmlDecode(milestoneElement.Element("title")?.Value ?? "");
+
+                                        milestone["answer"] =
+                                            HttpUtility.HtmlDecode(milestoneElement.Element("answer")?.Value ?? "");
+
+                                        milestone["asnswerid"] =
+                                            HttpUtility.HtmlDecode(milestoneElement.Element("asnswerid")?.Value ?? "");
+
+                                        milestones.Add(milestone);
+                                    }
+
+                                    epa["milestones"] = milestones;
+                                }
 
                                 epas.Add(epa);
                             }
@@ -821,14 +865,14 @@ namespace SystemComments.Utilities
                         if (epaGroup != null)
                         {
                             epaGroup["competencies"] = competencies;
-                            epaAssessment["epaGroup"] = epaGroup;
+                            epaAssessment["epagroup"] = epaGroup;
                         }
                         else
                         {
                             epaAssessment["competencies"] = competencies;
                         }
 
-                        sectionData["epaAssessment"] = epaAssessment;
+                        sectionData["epaassessment"] = epaAssessment;
                     }
 
                     // Extract follow-up sections dynamically

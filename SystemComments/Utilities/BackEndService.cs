@@ -594,21 +594,24 @@ namespace SystemComments.Utilities
                 new SqlParameter("@EndDate", input.EndDate),
                 new SqlParameter("@Word", input.PromptWord)
             };
+            
 
             // Use Task.Run to ensure the method runs asynchronously
             await Task.Run(async () =>
             {
-                DataSet dsInsights = _context.ExecuteStoredProcedure("ExtractMyInsights", parameters);
+                DataSet dsInsights = _context.ExecuteStoredProcedure("ExtractMyInsights", parameters);               
+                
                 if (dsInsights != null)
                 {
                     DataTable dtPrompt = dsInsights.Tables[0];
-                    DataTable dtInsights = dsInsights.Tables[1];
+                    DataTable dtInsights = dsInsights.Tables[1];                    
                     if (dtPrompt.Rows.Count > 0)
                     {
                         prompt = await SageExtraction.FormatHtml(dtPrompt.Rows[0]["FileContent"].ToString());
                         prompt = prompt.Replace("<br/>", "\n").Replace("</br>", "\n").Replace("<br>", "\n");
-                        prompt = prompt.Replace("[Program Type]", dtPrompt.Rows[0]["ProgramName"].ToString());
+                        prompt = prompt.Replace("[Program Type]", dtPrompt.Rows[0]["ProgramName"].ToString());                        
                     }
+                    prompt = prompt.Replace("[Academic Year]", (input.AcademicYear.ToString() + "-" + (input.AcademicYear + 1).ToString()));
                     if (dtInsights.Rows.Count > 0)
                     {
                         string result = string.Join(Environment.NewLine,
@@ -617,11 +620,12 @@ namespace SystemComments.Utilities
                                 .Where(value => !string.IsNullOrEmpty(value))
                         );
                         result = Regex.Replace(result.Replace("\r\n", "\n").Replace("\n\n", "\n").Replace("<br/>", "\n"), "<.*?>", string.Empty);
-                        result = await PromptService.SummarizeText(_config, result, 4000, 1);
+                        //result = await PromptService.SummarizeText(_config, result, 4000, 1);
                         //result = await SummarizeCommentsWithGPT(result);
                         prompt = prompt.Replace("[From uploaded file]", result);
                     }
-                }
+                }                
+
             });
 
             return prompt;
@@ -634,7 +638,8 @@ namespace SystemComments.Utilities
             {
                 new SqlParameter("@DepartmentID", input.DepartmentID),
                 new SqlParameter("@StartDate", input.StartDate),
-                new SqlParameter("@EndDate", input.EndDate)
+                new SqlParameter("@EndDate", input.EndDate),
+                new SqlParameter("@IsIncludeInsights", 1)                
             };
 
             // Use Task.Run to ensure the method runs asynchronously
@@ -646,11 +651,13 @@ namespace SystemComments.Utilities
                     DataTable dtPrompt = dsInsights.Tables[0];
                     DataTable dtPITPrompt = dsInsights.Tables[1];
                     DataTable dtInsights = dsInsights.Tables[2];
+                    string academicYear = (input.AcademicYear.ToString() + "-" + (input.AcademicYear + 1).ToString());
+                    
                     if (dtPrompt.Rows.Count > 0)
                     {
                         prompt = await SageExtraction.FormatHtml(dtPrompt.Rows[0]["FileContent"].ToString());
                         prompt = prompt.Replace("<br/>", "\n").Replace("</br>", "\n").Replace("<br>", "\n");
-                        prompt = prompt.Replace("[Program Type]", dtPrompt.Rows[0]["ProgramName"].ToString());
+                        prompt = prompt.Replace("[Program Type]", dtPrompt.Rows[0]["ProgramName"].ToString());                        
                     }
                     if (dtPITPrompt.Rows.Count > 0)
                     {
@@ -659,6 +666,9 @@ namespace SystemComments.Utilities
                         pitPrompt = pitPrompt.Replace("[Program Type]", dtPITPrompt.Rows[0]["ProgramName"].ToString());
                         input.PITPrompt = pitPrompt;
                     }
+                    prompt = prompt.Replace("[Academic Year]", academicYear);
+                    pitPrompt = pitPrompt.Replace("[Academic Year]", academicYear);
+
                     if (dtInsights.Rows.Count > 0)
                     {
                         string result = string.Join(Environment.NewLine,
@@ -674,7 +684,7 @@ namespace SystemComments.Utilities
                         result = Regex.Replace(result.Replace("\r\n", "\n").Replace("<br/>", "\n"), "<.*?>", string.Empty);
                         result = Regex.Replace(result, @"(\r?\n){2,}", "\n\n");
 
-                        result = await PromptService.SummarizeText(_config, result, 9000, 2);
+                        //result = await PromptService.SummarizeText(_config, result, 9000, 2);
                         //result = await SummarizeCommentsWithGPT(result);
                         prompt = prompt.Replace("[From uploaded file]", result).Replace("[Rotations]", "[" + rotations + ",...]");
                     }
@@ -700,7 +710,7 @@ namespace SystemComments.Utilities
             return text;
         }
 
-        public static (string MilestoneFramework, string EPAFramework, string PriorEPAData) GetSageFocusHistory(AIRequest input, APIDataBaseContext _context)
+        public static (string MilestoneFramework, string EPAFramework, string PriorEPAData, string inputJSON) GetSageFocusHistory(AIRequest input, APIDataBaseContext _context)
         {
             SqlParameter[] parameters = new SqlParameter[]
                     {
@@ -717,7 +727,7 @@ namespace SystemComments.Utilities
             return BuildOutcomeNarrativeReport(dsHistory);
         }
 
-        public static (string MilestoneFramework, string EPAFramework, string PriorEPAData) BuildOutcomeNarrativeReport(DataSet ds)
+        public static (string MilestoneFramework, string EPAFramework, string PriorEPAData, string inputJSON) BuildOutcomeNarrativeReport(DataSet ds)
         {
             var sb = new StringBuilder();
 
@@ -823,7 +833,8 @@ namespace SystemComments.Utilities
                         foreach (DataRow milestone in dt4.AsEnumerable()
                             .Where(r => Convert.ToInt64(r["MilestoneSubCompetencyID"]) == id))
                         {
-                            sb.AppendLine($"\t\t\t○ Milestone: {milestone["QuestionDescription"]}");
+                            sb.AppendLine($"\t\t\t• Milestone: {milestone["QuestionDescription"]}");
+                            sb.AppendLine($"\t\t\t• Milestone ID: {milestone["QuestionID"]}");
                         }
                     }
 
@@ -887,7 +898,168 @@ namespace SystemComments.Utilities
                 }
             }
             priorEPAData = RemoveHtmlTags(sb.ToString());
-            return (milestoneFrameWork, epaFrameWork, priorEPAData);
+
+            DataTable dt5Distinct = dt6.DefaultView.ToTable(
+                true,
+                "AnswerTypeID",
+                "AnswerID",
+                "Name",
+                "Score",
+                "IsSliding",
+                "IsEarlyWarning",
+                "EWValue",
+                "IsExceedExpectation",
+                "EEValue"
+            );
+
+            var inputJSON = new Dictionary<string, object>
+            {
+                ["epa"] = DataTableToList(dt3),
+                ["milestone"] = DataTableToList(dt4),
+                ["ratingscale"] = DataTableToList(dt5Distinct)
+            };
+
+            string epaJSON = JsonConvert.SerializeObject(inputJSON, Formatting.Indented);
+
+            return (milestoneFrameWork, epaFrameWork, priorEPAData, epaJSON);
+        }
+
+        public static string MergeEPAJson(string epaJsonString, string aiJsonString)
+        {
+            JObject epaJson = JObject.Parse(epaJsonString);
+            JObject aiJson = JObject.Parse(aiJsonString);
+
+            // -----------------------------
+            // Build Lookups
+            // -----------------------------
+
+            var epaLookup = epaJson["epa"]
+                .Cast<JObject>()
+                .ToDictionary(
+                    x => (int)x["MilestoneSubCompetencyID"],
+                    x => x);
+
+            var milestoneLookup = epaJson["milestone"]
+                .Cast<JObject>()
+                .GroupBy(x => (int)x["MilestoneSubCompetencyID"])
+                .ToDictionary(
+                    g => g.Key,
+                    g => g.ToList());
+
+            var ratingLookup = epaJson["ratingscale"]
+                .Cast<JObject>()
+                .GroupBy(x => (int)x["AnswerTypeID"])
+                .ToDictionary(
+                    g => g.Key,
+                    g => g.ToList());
+
+            // -----------------------------
+            // Loop Sections
+            // -----------------------------
+
+            foreach (JObject section in aiJson["sections"])
+            {
+                JObject epaAssessment = section["epaassessment"] as JObject;
+
+                if (epaAssessment == null)
+                    continue;
+
+                JArray competencies =
+                    (JArray)epaAssessment["epagroup"]["competencies"];
+
+                foreach (JObject competency in competencies)
+                {
+                    //-----------------------------------------
+                    // Rating Scale
+                    //-----------------------------------------
+
+                    JObject ratingScale =
+                        (JObject)competency["ratingscale"];
+
+                    if (ratingScale != null)
+                    {
+                        int answerTypeId = 0;
+
+                        var idValue = ratingScale["id"]?.ToString();
+
+                        if (!string.IsNullOrWhiteSpace(idValue) && int.TryParse(idValue, out var id))
+                        {
+                            answerTypeId = id;
+                        }
+                        else if (ratingLookup.Any())
+                        {
+                            answerTypeId = ratingLookup.First().Key;
+                        }                       
+
+                        if (ratingLookup.TryGetValue(answerTypeId, out var ratings))
+                        {
+                            ratingScale["options"] = new JArray(
+                                ratings
+                                .Select(r => new JObject
+                                {
+                                    ["value"] = r["AnswerID"],
+                                    ["label"] = r["Name"],
+                                    ["score"] = r["Score"]
+                                }));
+                        }
+                    }
+
+                    //-----------------------------------------
+                    // EPAs
+                    //-----------------------------------------
+
+                    JArray epas = (JArray)competency["epas"];
+
+                    foreach (JObject epa in epas)
+                    {
+                        int id = epa["id"]?.Value<int?>() ?? 0;                      
+
+                        //-------------------------------------
+                        // Update title
+                        //-------------------------------------
+
+                        if (epaLookup.TryGetValue(id, out JObject epaInfo))
+                        {
+                            epa["title"] =
+                                epaInfo["SubCompetencyName"];
+                        }
+
+                        //-------------------------------------
+                        // Add milestones
+                        //-------------------------------------
+
+                        if (milestoneLookup.TryGetValue(id, out var milestones))
+                        {
+                            epa["milestones"] = new JArray(
+                                milestones.Select(m => new JObject
+                                {
+                                    ["id"] = m["QuestionID"],
+                                    ["title"] = m["QuestionDescription"],
+                                    ["competency"] = m["QuestionsCategoryName"],
+                                    ["answer"] = "",
+                                    ["asnswerid"] = 0
+                                }));
+                        }
+                        else
+                        {
+                            epa["milestones"] = new JArray();
+                        }
+                    }
+                }
+            }
+
+            return aiJson.ToString();
+        }
+
+    private static List<Dictionary<string, object>> DataTableToList(DataTable dt)
+        {
+            return dt.AsEnumerable()
+                .Select(row => dt.Columns.Cast<DataColumn>()
+                    .ToDictionary(
+                        col => col.ColumnName,
+                        col => row[col] == DBNull.Value ? null : row[col]
+                    ))
+                .ToList();
         }
 
         public static string GetPreviousHistory(AIRequest input, string templateIDs, Int64 userID, APIDataBaseContext _context)
@@ -1250,7 +1422,8 @@ namespace SystemComments.Utilities
             return dsResultSet;
         }
 
-        public static DataSet SaveSageResponse(APIDataBaseContext _context, DataSet dsData, AIRequest input, string aiResponse, string aiPrompt, string extractJSON, TimeHistory timeHistory)
+        public static DataSet SaveSageResponse(APIDataBaseContext _context, DataSet dsData, AIRequest input
+            , string aiResponse, string aiPrompt, string extractJSON, TimeHistory timeHistory, string epaJSON)
         {
             DataTable dtSections = new DataTable();
             DataTable dtSectionInfo = new DataTable();
@@ -1336,6 +1509,7 @@ namespace SystemComments.Utilities
                             new SqlParameter("@AIResponse", aiResponse),
                             new SqlParameter("@AIJSON", extractJSON),
                             new SqlParameter("@AIPrompt", aiPrompt),
+                            new SqlParameter("@InputJSON", epaJSON),                            
                             new SqlParameter("@TotalSeconds", timeHistory.TotalSeconds),
                             new SqlParameter("@PromptSeconds", timeHistory.PromptDBSeconds),
                             new SqlParameter("@CommentsSeconds", timeHistory.HistorySeconds),
