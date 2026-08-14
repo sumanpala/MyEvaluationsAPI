@@ -930,122 +930,251 @@ namespace SystemComments.Utilities
             JObject epaJson = JObject.Parse(epaJsonString);
             JObject aiJson = JObject.Parse(aiJsonString);
 
-            // -----------------------------
-            // Build Lookups
-            // -----------------------------
+            // -----------------------------------------
+            // Build EPA Lookup
+            // -----------------------------------------
 
-            var epaLookup = epaJson["epa"]
-                .Cast<JObject>()
-                .ToDictionary(
-                    x => (int)x["MilestoneSubCompetencyID"],
-                    x => x);
+            var epaLookup = new Dictionary<int, JObject>();
 
-            var milestoneLookup = epaJson["milestone"]
-                .Cast<JObject>()
-                .GroupBy(x => (int)x["MilestoneSubCompetencyID"])
-                .ToDictionary(
-                    g => g.Key,
-                    g => g.ToList());
+            JArray epaArray = epaJson["epa"] as JArray;
 
-            var ratingLookup = epaJson["ratingscale"]
-                .Cast<JObject>()
-                .GroupBy(x => (int)x["AnswerTypeID"])
-                .ToDictionary(
-                    g => g.Key,
-                    g => g.ToList());
-
-            // -----------------------------
-            // Loop Sections
-            // -----------------------------
-
-            foreach (JObject section in aiJson["sections"])
+            if (epaArray != null)
             {
+                foreach (JObject item in epaArray.OfType<JObject>())
+                {
+                    int id = item["MilestoneSubCompetencyID"] != null
+                        ? item["MilestoneSubCompetencyID"].Value<int>()
+                        : 0;
+
+                    if (id > 0 && !epaLookup.ContainsKey(id))
+                    {
+                        epaLookup.Add(id, item);
+                    }
+                }
+            }
+
+            // -----------------------------------------
+            // Build Milestone Lookup
+            // -----------------------------------------
+
+            var milestoneLookup = new Dictionary<int, List<JObject>>();
+
+            JArray milestoneArray = epaJson["milestone"] as JArray;
+
+            if (milestoneArray != null)
+            {
+                foreach (JObject item in milestoneArray.OfType<JObject>())
+                {
+                    int id = item["MilestoneSubCompetencyID"] != null
+                        ? item["MilestoneSubCompetencyID"].Value<int>()
+                        : 0;
+
+                    if (id <= 0)
+                        continue;
+
+                    if (!milestoneLookup.ContainsKey(id))
+                    {
+                        milestoneLookup.Add(id, new List<JObject>());
+                    }
+
+                    milestoneLookup[id].Add(item);
+                }
+            }
+
+            // -----------------------------------------
+            // Build Rating Scale Lookup
+            // -----------------------------------------
+
+            var ratingLookup = new Dictionary<int, List<JObject>>();
+
+            JArray ratingArray = epaJson["ratingscale"] as JArray;
+
+            if (ratingArray != null)
+            {
+                foreach (JObject item in ratingArray.OfType<JObject>())
+                {
+                    int answerTypeId = item["AnswerTypeID"] != null
+                        ? item["AnswerTypeID"].Value<int>()
+                        : 0;
+
+                    if (answerTypeId <= 0)
+                        continue;
+
+                    if (!ratingLookup.ContainsKey(answerTypeId))
+                    {
+                        ratingLookup.Add(answerTypeId, new List<JObject>());
+                    }
+
+                    ratingLookup[answerTypeId].Add(item);
+                }
+            }
+
+            // -----------------------------------------
+            // Sections
+            // -----------------------------------------
+
+            JArray sections = aiJson["sections"] as JArray;
+
+            if (sections == null)
+            {
+                return aiJson.ToString();
+            }
+
+            foreach (JObject section in sections.OfType<JObject>())
+            {
+                // -----------------------------------------
+                // EPA Assessment
+                // -----------------------------------------
+
                 JObject epaAssessment = section["epaassessment"] as JObject;
 
                 if (epaAssessment == null)
                     continue;
 
-                JArray competencies =
-                    (JArray)epaAssessment["epagroup"]["competencies"];
+                // -----------------------------------------
+                // EPA Group
+                // -----------------------------------------
 
-                foreach (JObject competency in competencies)
+                JObject epaGroup = epaAssessment["epagroup"] as JObject;
+
+                if (epaGroup == null)
+                    continue;
+
+                // -----------------------------------------
+                // Competencies
+                // -----------------------------------------
+
+                JArray competencies = epaGroup["competencies"] as JArray;
+
+                if (competencies == null)
+                    continue;
+
+                foreach (JObject competency in competencies.OfType<JObject>())
                 {
-                    //-----------------------------------------
+                    // =========================================
                     // Rating Scale
-                    //-----------------------------------------
+                    // =========================================
 
                     JObject ratingScale =
-                        (JObject)competency["ratingscale"];
+                        competency["ratingscale"] as JObject;
 
                     if (ratingScale != null)
                     {
                         int answerTypeId = 0;
 
-                        var idValue = ratingScale["id"]?.ToString();
+                        string idValue =
+                            ratingScale["id"] != null
+                                ? ratingScale["id"].ToString()
+                                : "";
 
-                        if (!string.IsNullOrWhiteSpace(idValue) && int.TryParse(idValue, out var id))
+                        int parsedId;
+
+                        if (!string.IsNullOrWhiteSpace(idValue) &&
+                            int.TryParse(idValue, out parsedId))
                         {
-                            answerTypeId = id;
+                            answerTypeId = parsedId;
                         }
-                        else if (ratingLookup.Any())
+                        else if (ratingLookup.Count > 0)
                         {
-                            answerTypeId = ratingLookup.First().Key;
-                        }                       
+                            answerTypeId = ratingLookup.Keys.First();
+                        }
 
-                        if (ratingLookup.TryGetValue(answerTypeId, out var ratings))
+                        List<JObject> ratings;
+
+                        if (ratingLookup.TryGetValue(
+                                answerTypeId,
+                                out ratings))
                         {
-                            ratingScale["options"] = new JArray(
-                                ratings
-                                .Select(r => new JObject
-                                {
-                                    ["value"] = r["AnswerID"],
-                                    ["label"] = r["Name"],
-                                    ["score"] = r["Score"]
-                                }));
+                            JArray options = new JArray();
+
+                            foreach (JObject rating in ratings)
+                            {
+                                options.Add(
+                                    new JObject
+                                    {
+                                        ["value"] = rating["AnswerID"],
+                                        ["label"] = rating["Name"],
+                                        ["score"] = rating["Score"]
+                                    });
+                            }
+
+                            ratingScale["options"] = options;
+                        }
+                        else
+                        {
+                            ratingScale["options"] = new JArray();
                         }
                     }
 
-                    //-----------------------------------------
+                    // =========================================
                     // EPAs
-                    //-----------------------------------------
+                    // =========================================
 
-                    JArray epas = (JArray)competency["epas"];
+                    JArray epas = competency["epas"] as JArray;
 
-                    foreach (JObject epa in epas)
+                    if (epas == null)
+                        continue;
+
+                    foreach (JObject epa in epas.OfType<JObject>())
                     {
-                        int id = epa["id"]?.Value<int?>() ?? 0;
+                        int id = 0;
 
-                        //-------------------------------------
-                        // Update title
-                        //-------------------------------------
+                        if (epa["id"] != null)
+                        {
+                            id = epa["id"].Value<int>();
+                        }
+
+                        // -------------------------------------
+                        // Reset EPA Answer
+                        // -------------------------------------
+
                         epa["answer"] = "";
                         epa["answerid"] = 0;
 
-                        if (epaLookup.TryGetValue(id, out JObject epaInfo))
+                        // -------------------------------------
+                        // Update EPA Title
+                        // -------------------------------------
+
+                        JObject epaInfo;
+
+                        if (epaLookup.TryGetValue(id, out epaInfo))
                         {
                             epa["title"] =
                                 epaInfo["SubCompetencyName"];
                         }
 
-                        //-------------------------------------
-                        // Add milestones
-                        //-------------------------------------
+                        // -------------------------------------
+                        // Add Milestones
+                        // -------------------------------------
 
-                        if (milestoneLookup.TryGetValue(id, out var milestones))
+                        List<JObject> milestones;
+
+                        if (milestoneLookup.TryGetValue(
+                                id,
+                                out milestones))
                         {
-                            epa["milestones"] = new JArray(
-                                milestones.Select(m => new JObject
-                                {
-                                    ["id"] = m["QuestionID"],
-                                    ["title"] = m["QuestionDescription"],
-                                    ["competency"] = m["QuestionsCategoryName"],
-                                    ["answer"] = "",
-                                    ["answerid"] = 0
-                                }));
+                            JArray milestoneArrayResult = new JArray();
+
+                            foreach (JObject milestone in milestones)
+                            {
+                                milestoneArrayResult.Add(
+                                    new JObject
+                                    {
+                                        ["id"] = milestone["QuestionID"],
+                                        ["title"] = milestone["QuestionDescription"],
+                                        ["competency"] = milestone["QuestionsCategoryName"],
+                                        ["answer"] = "",
+                                        ["answerid"] = 0
+                                    });
+                            }
+
+                            epa["milestones"] =
+                                milestoneArrayResult;
                         }
                         else
                         {
-                            epa["milestones"] = new JArray();
+                            epa["milestones"] =
+                                new JArray();
                         }
                     }
                 }
@@ -1054,7 +1183,7 @@ namespace SystemComments.Utilities
             return aiJson.ToString();
         }
 
-    private static List<Dictionary<string, object>> DataTableToList(DataTable dt)
+        private static List<Dictionary<string, object>> DataTableToList(DataTable dt)
         {
             return dt.AsEnumerable()
                 .Select(row => dt.Columns.Cast<DataColumn>()
