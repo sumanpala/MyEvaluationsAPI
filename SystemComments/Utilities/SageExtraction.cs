@@ -816,8 +816,8 @@ namespace SystemComments.Utilities
                                 //epa["answer"] =
                                 //    HttpUtility.HtmlDecode(epaElement.Element("answer")?.Value ?? "");
 
-                                //epa["asnswerid"] =
-                                //    HttpUtility.HtmlDecode(epaElement.Element("asnswerid")?.Value ?? "");
+                                //epa["answerid"] =
+                                //    HttpUtility.HtmlDecode(epaElement.Element("answerid")?.Value ?? "");
 
                                 // ----------------------------
                                 // Milestones
@@ -845,8 +845,8 @@ namespace SystemComments.Utilities
                                         milestone["answer"] =
                                             HttpUtility.HtmlDecode(milestoneElement.Element("answer")?.Value ?? "");
 
-                                        milestone["asnswerid"] =
-                                            HttpUtility.HtmlDecode(milestoneElement.Element("asnswerid")?.Value ?? "");
+                                        milestone["answerid"] =
+                                            HttpUtility.HtmlDecode(milestoneElement.Element("answerid")?.Value ?? "");
 
                                         milestones.Add(milestone);
                                     }

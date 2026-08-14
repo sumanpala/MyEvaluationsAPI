@@ -719,7 +719,8 @@ namespace SystemComments.Utilities
                             new SqlParameter("@IsSelfEvaluation","0"),
                             new SqlParameter("@FromDate", input.StartDate),
                             new SqlParameter("@ToDate", input.EndDate),
-                            new SqlParameter("@EvaluatorID", "0")
+                            new SqlParameter("@EvaluatorID", "0"),
+                            new SqlParameter("@EvaluationID", input.EvaluationID)
                       };
 
             DataSet dsHistory = _context.ExecuteStoredProcedure("GetOutcomeNarrativeDataForSage", parameters);
@@ -1012,11 +1013,13 @@ namespace SystemComments.Utilities
 
                     foreach (JObject epa in epas)
                     {
-                        int id = epa["id"]?.Value<int?>() ?? 0;                      
+                        int id = epa["id"]?.Value<int?>() ?? 0;
 
                         //-------------------------------------
                         // Update title
                         //-------------------------------------
+                        epa["answer"] = "";
+                        epa["answerid"] = 0;
 
                         if (epaLookup.TryGetValue(id, out JObject epaInfo))
                         {
@@ -1037,7 +1040,7 @@ namespace SystemComments.Utilities
                                     ["title"] = m["QuestionDescription"],
                                     ["competency"] = m["QuestionsCategoryName"],
                                     ["answer"] = "",
-                                    ["asnswerid"] = 0
+                                    ["answerid"] = 0
                                 }));
                         }
                         else
