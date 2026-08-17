@@ -919,7 +919,8 @@ namespace SystemComments.Controllers
                                     DepartmentID = input.DepartmentID,
                                     StartDate = dtPrompt.Rows[0]["StartDate"].ToString(),
                                     EndDate = dtPrompt.Rows[0]["EndDate"].ToString(),
-                                    UserID = Convert.ToInt64(dtPrompt.Rows[0]["SubjectUserID"].ToString())
+                                    UserID = Convert.ToInt64(dtPrompt.Rows[0]["SubjectUserID"].ToString()),
+                                    EvaluationID = input.EvaluationID
                                 }, _context));
 
                                 epaJSON = epaInputJSON;
@@ -2137,6 +2138,11 @@ namespace SystemComments.Controllers
                     {
                         string previousUpdatedResponse = UpdateXMLTags(SageExtraction.ConvertJsonToXmlContext(previousResponse), true);
                         messages.Add(ChatMessage.CreateAssistantMessage(previousUpdatedResponse));
+                        if(isSageFocus == 1)
+                        {
+                            prompt = prompt.Replace("[Previous Section Respose]", previousUpdatedResponse);
+                            //prompt = prompt + "\n Previous Sections Response:\n" +  previousUpdatedResponse;
+                        }
                     }
                     List<string> tokenBuffer = new();
 
