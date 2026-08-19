@@ -168,6 +168,7 @@ namespace SystemComments.Utilities
         {
             string updatedJSON = "";
             JArray? sectionsArray = null;
+
             try
             {
                 if (inputJSON.Length <= 2)
@@ -179,196 +180,441 @@ namespace SystemComments.Utilities
                     JObject jsonObject = JObject.Parse(aiJSON);
                     JObject objInputObject = JObject.Parse(inputJSON);
 
-                    JArray? allSectionsFromJson1 = objInputObject["allsections"] as JArray;
+                    JArray? allSectionsFromJson1 =
+                        objInputObject["allsections"] as JArray;
 
-                    // Check if "allsections" in JSON2 is missing or empty
-                    JArray? allSectionsFromJson2 = jsonObject["allsections"] as JArray;
-                    if (allSectionsFromJson1 == null || allSectionsFromJson1.Count == 0)
+                    JArray? allSectionsFromJson2 =
+                        jsonObject["allsections"] as JArray;
+
+                    // ============================================================
+                    // ALL SECTIONS
+                    // ============================================================
+
+                    if (allSectionsFromJson1 == null ||
+                        allSectionsFromJson1.Count == 0)
                     {
-                        // Update JSON2 with "allsections" from JSON1
-                        objInputObject["allsections"] = allSectionsFromJson2 ?? new JArray();
+                        objInputObject["allsections"] =
+                            allSectionsFromJson2 ?? new JArray();
                     }
-                    if (objInputObject != null)
+
+                    sectionsArray =
+                        objInputObject["sections"] as JArray;
+
+                    if (sectionsArray == null)
                     {
-                        sectionsArray = objInputObject["sections"] as JArray;
+                        sectionsArray = new JArray();
+                        objInputObject["sections"] = sectionsArray;
                     }
+
+                    // ============================================================
+                    // MERGE SECTIONS
+                    // ============================================================
 
                     Int32 sectionIndex = 0;
-                    foreach (var section in jsonObject["sections"])
+
+                    foreach (var section in jsonObject["sections"] ?? new JArray())
                     {
-                        if (sectionsArray != null && sectionsArray.Count > 0 && sectionsArray.Count > sectionIndex)
+                        if (sectionsArray.Count > 0 &&
+                            sectionsArray.Count > sectionIndex)
                         {
-                            JObject tempSectionArray = sectionsArray[sectionIndex] as JObject;
+                            JObject? tempSectionArray =
+                                sectionsArray[sectionIndex] as JObject;
+
                             Int32 mainSectionIndex = 0;
-                            if (section["mainsection"] != null)
+
+                            // ====================================================
+                            // MAIN SECTION
+                            // ====================================================
+
+                            if (section["mainsection"] != null &&
+                                tempSectionArray != null)
                             {
                                 foreach (var mainSection in section["mainsection"])
                                 {
-                                    JArray mainSectionArray = tempSectionArray?["mainsection"] as JArray;
+                                    JArray? mainSectionArray =
+                                        tempSectionArray["mainsection"] as JArray;
+
                                     if (mainSectionArray == null)
                                     {
-                                        var mainSectionToken = new JArray();
-                                        mainSectionToken.Add(mainSection);
-                                        tempSectionArray["mainsection"] = mainSectionToken;
+                                        var mainSectionToken =
+                                            new JArray();
+
+                                        mainSectionToken.Add(
+                                            mainSection);
+
+                                        tempSectionArray["mainsection"] =
+                                            mainSectionToken;
                                     }
                                     else if (mainSectionArray.Count == 0)
                                     {
-                                        var mainSectionToken = new JArray();
-                                        mainSectionToken.Add(mainSection);
-                                        tempSectionArray["mainsection"] = mainSectionToken;
+                                        var mainSectionToken =
+                                            new JArray();
+
+                                        mainSectionToken.Add(
+                                            mainSection);
+
+                                        tempSectionArray["mainsection"] =
+                                            mainSectionToken;
                                     }
+
                                     mainSectionIndex++;
                                 }
                             }
-                            // add followup section if not available
-                            var followupToken = tempSectionArray?["followupsections"];
-                            if (section["followupsections"] != null)
+
+                            // ====================================================
+                            // FOLLOWUP SECTION
+                            // ====================================================
+
+                            var followupToken =
+                                tempSectionArray?["followupsections"];
+
+                            if (section["followupsections"] != null &&
+                                tempSectionArray != null)
                             {
                                 if (followupToken != null)
                                 {
                                     if (followupToken is JArray followSectionArray)
                                     {
-                                        List<JToken> newItems = new List<JToken>();
-                                        foreach (var followSection in section["followupsections"])
+                                        List<JToken> newItems =
+                                            new List<JToken>();
+
+                                        foreach (
+                                            var followSection
+                                            in section["followupsections"])
                                         {
-                                            if (followSectionArray != null && followSectionArray.Count > 0)
+                                            if (followSectionArray.Count > 0)
                                             {
-                                                var followup = followSectionArray.Where(f => f["question"]?.ToString().Length > 0)
-                                                .FirstOrDefault(f => f["question"]?.ToString() == followSection["question"].ToString());
+                                                var followup =
+                                                    followSectionArray
+                                                        .Where(
+                                                            f =>
+                                                                f["question"]?
+                                                                    .ToString()
+                                                                    .Length > 0)
+                                                        .FirstOrDefault(
+                                                            f =>
+                                                                f["question"]?
+                                                                    .ToString()
+                                                                ==
+                                                                followSection[
+                                                                    "question"]
+                                                                    ?.ToString());
+
                                                 if (followup == null)
                                                 {
-                                                    newItems.Add(followSection);
+                                                    newItems.Add(
+                                                        followSection);
                                                 }
                                             }
-                                            else if (followSectionArray != null && followSectionArray.Count == 0)
+                                            else
                                             {
-                                                newItems.Add(followSection);
+                                                newItems.Add(
+                                                    followSection);
                                             }
                                         }
+
                                         foreach (var newItem in newItems)
                                         {
-                                            followSectionArray.Add(newItem);
+                                            followSectionArray.Add(
+                                                newItem);
                                         }
                                     }
                                 }
                                 else
                                 {
-                                    tempSectionArray.Add(section["followupsections"]);
+                                    tempSectionArray.Add(
+                                        section["followupsections"]);
                                 }
-
                             }
-
                         }
                         else
                         {
-                            sectionsArray.Add(section);
+                            sectionsArray.Add(
+                                section);
                         }
+
                         sectionIndex++;
                     }
 
-                    var endMessage = jsonObject["endmessage"];
+                    // ============================================================
+                    // END MESSAGE
+                    // ============================================================
+
+                    var endMessage =
+                        jsonObject["endmessage"];
+
                     if (endMessage != null)
                     {
-                        objInputObject["endmessage"] = endMessage;
+                        objInputObject["endmessage"] =
+                            endMessage;
                     }
 
-                    JArray? allSections = objInputObject["allsections"] as JArray;
-                    JArray? mergedSections = objInputObject["sections"] as JArray;
+                    // ============================================================
+                    // EPA SECTIONS
+                    // ============================================================
 
-                    if (allSections != null && mergedSections != null)
+                    JArray? allSections =
+                        objInputObject["allsections"] as JArray;
+
+                    JArray? mergedSections =
+                        objInputObject["sections"] as JArray;
+
+                    if (allSections != null &&
+                        mergedSections != null)
                     {
-                        string totalSections = objInputObject["totalsections"]?.ToString() ?? "";
+                        string totalSections =
+                            objInputObject["totalsections"]?.ToString()
+                            ?? "";
+
                         int sectionNo = 1;
-                        foreach (JObject section in mergedSections.OfType<JObject>())
+
+                        foreach (
+                            JObject section
+                            in mergedSections.OfType<JObject>())
                         {
-                            JObject? epaAssessment = section["epaassessment"] as JObject;
+                            JObject? epaAssessment =
+                                section["epaassessment"] as JObject;
+
                             if (epaAssessment == null)
+                            {
+                                sectionNo++;
                                 continue;
+                            }
 
-                            string fullName = section["fullname"]?.ToString() ?? "";
+                            string fullName =
+                                section["fullname"]?.ToString()
+                                ?? "";
 
-                            JObject? allSection = allSections
-                                .OfType<JObject>()
-                                .FirstOrDefault(x =>
-                                    string.Equals(
-                                        x["fullname"]?.ToString(),
-                                        fullName,
-                                        StringComparison.OrdinalIgnoreCase));
+                            // ====================================================
+                            // Find matching allsection
+                            // ====================================================
+
+                            JObject? allSection =
+                                allSections
+                                    .OfType<JObject>()
+                                    .FirstOrDefault(
+                                        x =>
+                                            string.Equals(
+                                                x["fullname"]?.ToString(),
+                                                fullName,
+                                                StringComparison.OrdinalIgnoreCase));
 
                             if (allSection == null)
+                            {
+                                sectionNo++;
                                 continue;
+                            }
 
-                            // Create/Get epasections object
-                            JObject epasectionsObject = allSection["epasections"] as JObject ?? new JObject();
+                            // ====================================================
+                            // Create/Get EPA Sections
+                            // ====================================================
+
+                            JObject epasectionsObject =
+                                allSection["epasections"] as JObject
+                                ?? new JObject();
 
                             if (epasectionsObject["name"] == null)
-                                epasectionsObject["name"] = "EPA Assessment";
+                            {
+                                epasectionsObject["name"] =
+                                    "EPA Assessment";
+                            }
 
-                            JArray epasections = epasectionsObject["sections"] as JArray ?? new JArray();
-
-                            //string sectionNo = Regex.Match(fullName, @"Section\\s+(\\d+)")
-                            //                        .Groups[1].Value;
+                            JArray epasections =
+                                epasectionsObject["sections"] as JArray
+                                ?? new JArray();
 
                             int index = 1;
 
-                            JToken? competencies =
-                                epaAssessment["epagroup"]?["competencies"] ??
-                                epaAssessment["competencies"];
+                            // ====================================================
+                            // FIXED EPA GROUP HANDLING
+                            // ====================================================
+                            //
+                            // epagroup can be:
+                            //
+                            // 1. JArray
+                            //
+                            // "epagroup": [
+                            //    {
+                            //       "id": "719",
+                            //       "competencies": [...]
+                            //    },
+                            //    {
+                            //       "id": "710",
+                            //       "competencies": [...]
+                            //    }
+                            // ]
+                            //
+                            // 2. JObject
+                            //
+                            // "epagroup": {
+                            //     "competencies": [...]
+                            // }
+                            //
+                            // 3. No epagroup
+                            //
+                            // "competencies": [...]
+                            //
+                            // ====================================================
 
-                            if (competencies is JArray competencyArray)
+                            JArray competencyArray =
+                                new JArray();
+
+                            JToken? epaGroupToken =
+                                epaAssessment["epagroup"];
+
+                            // ====================================================
+                            // CASE 1: epagroup is JArray
+                            // ====================================================
+
+                            if (epaGroupToken is JArray epaGroups)
                             {
-                                foreach (JObject competency in competencyArray.OfType<JObject>())
+                                foreach (
+                                    JObject epaGroup
+                                    in epaGroups.OfType<JObject>())
                                 {
-                                    if (!(competency["epas"] is JArray epas))
-                                        continue;
-
-                                    foreach (JObject epa in epas.OfType<JObject>())
+                                    if (epaGroup["competencies"] is JArray groupCompetencies)
                                     {
-                                        string epaSectionName =
-                                            $"Section {sectionNo.ToString()}{(char)('a' + index)} of {totalSections}";
-
-                                        // Check by EPA ID (recommended)
-                                        bool exists = epasections
-                                            .OfType<JObject>()
-                                            .Any(x =>
-                                                string.Equals(
-                                                    x["epaid"]?.ToString(),
-                                                    epa["id"]?.ToString(),
-                                                    StringComparison.OrdinalIgnoreCase));
-
-                                        if (!exists)
+                                        foreach (
+                                            JToken competency
+                                            in groupCompetencies)
                                         {
-                                            epasections.Add(new JObject
-                                            {
-                                                ["name"] = epaSectionName,
-                                                ["epaid"] = epa["id"]?.ToString() ?? ""
-                                            });
+                                            competencyArray.Add(
+                                                competency);
                                         }
-
-                                        index++;
                                     }
                                 }
                             }
 
+                            // ====================================================
+                            // CASE 2: epagroup is JObject
+                            // ====================================================
+
+                            else if (
+                                epaGroupToken is JObject epaGroup)
+                            {
+                                if (epaGroup["competencies"] is JArray groupCompetencies)
+                                {
+                                    foreach (
+                                        JToken competency
+                                        in groupCompetencies)
+                                    {
+                                        competencyArray.Add(
+                                            competency);
+                                    }
+                                }
+                            }
+
+                            // ====================================================
+                            // CASE 3: competencies directly under
+                            // epaassessment
+                            // ====================================================
+
+                            else if (
+                                epaAssessment["competencies"] is JArray directCompetencies)
+                            {
+                                foreach (
+                                    JToken competency
+                                    in directCompetencies)
+                                {
+                                    competencyArray.Add(
+                                        competency);
+                                }
+                            }
+
+                            // ====================================================
+                            // Process ALL competencies
+                            // ====================================================
+
+                            foreach (
+                                JObject competency
+                                in competencyArray.OfType<JObject>())
+                            {
+                                if (!(competency["epas"] is JArray epas))
+                                    continue;
+
+                                // =================================================
+                                // Process ALL EPAs
+                                // =================================================
+
+                                foreach (
+                                    JObject epa
+                                    in epas.OfType<JObject>())
+                                {
+                                    string epaId =
+                                        epa["id"]?.ToString()
+                                        ?? "";
+
+                                    if (string.IsNullOrWhiteSpace(epaId))
+                                        continue;
+
+                                    string epaSectionName =
+                                        $"Section {sectionNo}{(char)('a' + index - 1)} of {totalSections}";
+
+                                    // =================================================
+                                    // Check EPA already exists
+                                    // =================================================
+
+                                    bool exists =
+                                        epasections
+                                            .OfType<JObject>()
+                                            .Any(
+                                                x =>
+                                                    string.Equals(
+                                                        x["epaid"]?.ToString(),
+                                                        epaId,
+                                                        StringComparison.OrdinalIgnoreCase));
+
+                                    if (!exists)
+                                    {
+                                        epasections.Add(
+                                            new JObject
+                                            {
+                                                ["name"] =
+                                                    epaSectionName,
+
+                                                ["epaid"] =
+                                                    epaId
+                                            });
+                                    }
+
+                                    index++;
+                                }
+                            }
+
+                            // ====================================================
+                            // Save EPA Sections
+                            // ====================================================
+
                             if (epasections.Count > 0)
                             {
-                                epasectionsObject["sections"] = epasections;
-                                allSection["epasections"] = epasectionsObject;
+                                epasectionsObject["sections"] =
+                                    epasections;
+
+                                allSection["epasections"] =
+                                    epasectionsObject;
                             }
 
                             sectionNo++;
                         }
                     }
 
+                    // ============================================================
+                    // SERIALIZE
+                    // ============================================================
+
                     if (objInputObject != null)
                     {
-                        updatedJSON = JsonConvert.SerializeObject(objInputObject, Formatting.None);
+                        updatedJSON =
+                            JsonConvert.SerializeObject(
+                                objInputObject,
+                                Formatting.None);
                     }
                     else
                     {
                         updatedJSON = inputJSON;
                     }
                 }
+
                 return updatedJSON;
             }
             catch (Exception ex)
@@ -590,403 +836,1275 @@ namespace SystemComments.Utilities
         static string ConvertXmlToJson(XDocument xmlDoc)
         {
             var root = xmlDoc.Root;
-            if (root == null) return "{}";
+
+            if (root == null)
+                return "{}";
 
             var jsonData = new Dictionary<string, object>();
 
+            // ============================================================
             // Get total sections
-            XElement totalSectionsElement = root.Element("totalsections");
-            jsonData["totalsections"] = totalSectionsElement != null ? (object)totalSectionsElement.Value : null;
+            // ============================================================
 
+            XElement totalSectionsElement =
+                root.Element("totalsections");
+
+            jsonData["totalsections"] =
+                totalSectionsElement != null
+                    ? (object)totalSectionsElement.Value
+                    : null;
+
+            // ============================================================
             // Get sections
-            var sections = new List<Dictionary<string, object>>();
+            // ============================================================
+
+            var sections =
+                new List<Dictionary<string, object>>();
+
             Int16 sectionNumber = 1;
-            List<Dictionary<string, object>> lstMainQuestions = new List<Dictionary<string, object>>();
-            List<Dictionary<string, object>> lstAllSections = new List<Dictionary<string, object>>();
-            //var allSections = new Dictionary<string, object>();
-            if (root.Elements("allsections") != null && root.Elements("allsections").Count() > 0)
+
+            List<Dictionary<string, object>> lstMainQuestions =
+                new List<Dictionary<string, object>>();
+
+            List<Dictionary<string, object>> lstAllSections =
+                new List<Dictionary<string, object>>();
+
+            // ============================================================
+            // ALL SECTIONS
+            // ============================================================
+
+            if (root.Elements("allsections") != null &&
+                root.Elements("allsections").Count() > 0)
             {
-                foreach (XElement section in root.Elements("allsections").Elements("section"))
+                foreach (
+                    XElement section
+                    in root.Elements("allsections").Elements("section"))
                 {
-                    var sectionData = new Dictionary<string, object>();
-                    XElement sectionNameElement = section.Element("sectionname");
-                    XElement sectionFullNameElement = section.Element("sectionfullname");
-                    sectionData["name"] = HttpUtility.HtmlDecode(sectionNameElement?.Value ?? "Unknown Section");
-                    sectionData["fullname"] = HttpUtility.HtmlDecode(sectionFullNameElement?.Value ?? "Unknown Section");
-                    //var questionData = new Dictionary<string, object>
-                    //{
-                    //    { "section", sectionData }                        
-                    //};
+                    var sectionData =
+                        new Dictionary<string, object>();
+
+                    XElement sectionNameElement =
+                        section.Element("sectionname");
+
+                    XElement sectionFullNameElement =
+                        section.Element("sectionfullname");
+
+                    sectionData["name"] =
+                        HttpUtility.HtmlDecode(
+                            sectionNameElement?.Value ??
+                            "Unknown Section");
+
+                    sectionData["fullname"] =
+                        HttpUtility.HtmlDecode(
+                            sectionFullNameElement?.Value ??
+                            "Unknown Section");
+
                     lstAllSections.Add(sectionData);
                 }
             }
-            //allSections["allsections"] = lstAllSections;
-            if (root.Elements("sections") != null && root.Elements("sections").Count() > 0)
+
+            // ============================================================
+            // SECTIONS
+            // ============================================================
+
+            if (root.Elements("sections") != null &&
+                root.Elements("sections").Count() > 0)
             {
+                // ========================================================
+                // End Message
+                // ========================================================
+
                 if (root.Elements("endmessage") != null)
                 {
-                    XElement endmessageElement = root.Elements("endmessage")
-                                      .FirstOrDefault();
+                    XElement endmessageElement =
+                        root.Elements("endmessage")
+                            .FirstOrDefault();
+
                     if (endmessageElement != null)
                     {
-                        jsonData["endmessage"] = endmessageElement != null ? (object)endmessageElement.Value : null;
+                        jsonData["endmessage"] =
+                            endmessageElement.Value;
                     }
                 }
-                else if (root.Elements("sections").Elements("endmessage") != null)
+                else if (
+                    root.Elements("sections")
+                        .Elements("endmessage") != null)
                 {
-                    XElement endmessageElement = root.Elements("sections")
-                                      .Elements("endmessage")
-                                      .FirstOrDefault();
+                    XElement endmessageElement =
+                        root.Elements("sections")
+                            .Elements("endmessage")
+                            .FirstOrDefault();
+
                     if (endmessageElement != null)
                     {
-                        jsonData["endmessage"] = endmessageElement != null ? (object)endmessageElement.Value : null;
+                        jsonData["endmessage"] =
+                            endmessageElement.Value;
                     }
                 }
 
+                // ========================================================
+                // Process Sections
+                // ========================================================
 
-
-                foreach (XElement section in root.Elements("sections").Elements("section"))
+                foreach (
+                    XElement section
+                    in root.Elements("sections").Elements("section"))
                 {
-                    lstMainQuestions = new List<Dictionary<string, object>>();
-                    var sectionData = new Dictionary<string, object>();
-                    var waitData = new Dictionary<string, object>();
-                    XElement sectionNameElement = section.Element("sectionname");
-                    XElement sectionFullNameElement = section.Element("sectionfullname");
-                    XElement waitElement = section.Element("wait");
-                    sectionData["name"] = HttpUtility.HtmlDecode(sectionNameElement != null ? sectionNameElement.Value : "Unknown Section");
-                    sectionData["fullname"] = HttpUtility.HtmlDecode(sectionFullNameElement != null ? sectionFullNameElement.Value : "Unknown Section");
-                    sectionData["sectionnum"] = sectionNumber;
-                    sectionData["iscomplete"] = "0";
+                    lstMainQuestions =
+                        new List<Dictionary<string, object>>();
 
-                    // Extract mainsection
-                    XElement mainSectionElement = section.Element("mainsection");
-                    var mainSectionData = new Dictionary<string, object>();
+                    var sectionData =
+                        new Dictionary<string, object>();
+
+                    var waitData =
+                        new Dictionary<string, object>();
+
+                    XElement sectionNameElement =
+                        section.Element("sectionname");
+
+                    XElement sectionFullNameElement =
+                        section.Element("sectionfullname");
+
+                    XElement waitElement =
+                        section.Element("wait");
+
+                    sectionData["name"] =
+                        HttpUtility.HtmlDecode(
+                            sectionNameElement != null
+                                ? sectionNameElement.Value
+                                : "Unknown Section");
+
+                    sectionData["fullname"] =
+                        HttpUtility.HtmlDecode(
+                            sectionFullNameElement != null
+                                ? sectionFullNameElement.Value
+                                : "Unknown Section");
+
+                    sectionData["sectionnum"] =
+                        sectionNumber;
+
+                    sectionData["iscomplete"] =
+                        "0";
+
+                    // ====================================================
+                    // MAIN SECTION
+                    // ====================================================
+
+                    XElement mainSectionElement =
+                        section.Element("mainsection");
+
+                    var mainSectionData =
+                        new Dictionary<string, object>();
+
                     if (mainSectionElement != null)
                     {
-                        foreach (XElement mainNodeQuestions in mainSectionElement.Descendants("mainquestions"))
+                        foreach (
+                            XElement mainNodeQuestions
+                            in mainSectionElement.Descendants("mainquestions"))
                         {
-                            foreach (XElement mainNodeQuestion in mainNodeQuestions.Descendants("question"))
+                            foreach (
+                                XElement mainNodeQuestion
+                                in mainNodeQuestions.Descendants("question"))
                             {
-                                var mainQuestions = new List<Dictionary<string, object>>();
-                                var guideQuestions = new List<Dictionary<string, object>>();
+                                var mainQuestions =
+                                    new List<Dictionary<string, object>>();
 
-                                XElement mainElement = mainNodeQuestion.Element("main");
-                                //if (mainElement != null)
-                                //{
-                                //    mainSectionData["description"] = mainElement.Value;
-                                //    //mainSectionData["wait"] = waitElement != null ? waitElement.Value : "Please provide an assessment based on the question and guiding prompts.";
-                                //}
-                                XElement guideElement = mainNodeQuestion.Element("guide");
-                                XElement mainQuestion = mainNodeQuestion.Element("mainquestion");
-                                XElement mainQuestionAnswer = mainNodeQuestion.Element("answer");
-                                XElement mainQuestionWait = mainNodeQuestion.Element("wait");
+                                var guideQuestions =
+                                    new List<Dictionary<string, object>>();
 
-                                if (mainNodeQuestion.Elements("guidequestions") != null)
+                                XElement mainElement =
+                                    mainNodeQuestion.Element("main");
+
+                                XElement guideElement =
+                                    mainNodeQuestion.Element("guide");
+
+                                XElement mainQuestion =
+                                    mainNodeQuestion.Element("mainquestion");
+
+                                XElement mainQuestionAnswer =
+                                    mainNodeQuestion.Element("answer");
+
+                                XElement mainQuestionWait =
+                                    mainNodeQuestion.Element("wait");
+
+                                // =================================================
+                                // Guide Questions
+                                // =================================================
+
+                                if (
+                                    mainNodeQuestion.Elements("guidequestions")
+                                    != null)
                                 {
-                                    foreach (XElement guideQuestionElement in mainNodeQuestion.Elements("guidequestions").Elements("guidequestion"))
+                                    foreach (
+                                        XElement guideQuestionElement
+                                        in mainNodeQuestion
+                                            .Elements("guidequestions")
+                                            .Elements("guidequestion"))
                                     {
-                                        guideQuestions.Add(new Dictionary<string, object> { { "guidequestion", HttpUtility.HtmlDecode(guideQuestionElement.Value) }, { "id", "0" } });
+                                        guideQuestions.Add(
+                                            new Dictionary<string, object>
+                                            {
+                                        {
+                                            "guidequestion",
+                                            HttpUtility.HtmlDecode(
+                                                guideQuestionElement.Value)
+                                        },
+                                        {
+                                            "id",
+                                            "0"
+                                        }
+                                            });
                                     }
                                 }
-                                //if (guideElement != null)
-                                //{
-                                //    mainSectionData["guide"] = new { description = guideElement.Value, guidequestions = guideQuestions };
-                                //}
-                                var questionData = new Dictionary<string, object>
+
+                                // =================================================
+                                // Question
+                                // =================================================
+
+                                var questionData =
+                                    new Dictionary<string, object>
+                                    {
                                 {
-                                    { "description", HttpUtility.HtmlDecode(mainElement?.Value ?? "") },
-                                    { "mainquestion", HttpUtility.HtmlDecode(mainQuestion?.Value ?? "") }
-                                    //,{"answer", HttpUtility.HtmlDecode(mainQuestionAnswer?.Value ?? "")}
-                                    ,{"answer", "" }
-                                    ,{"id", "0" }
-                                    ,{"wait", HttpUtility.HtmlDecode(mainQuestionWait?.Value ?? "Please provide an assessment based on the question and guiding prompts.")}
-                                    ,{"guide", new { description = HttpUtility.HtmlDecode(guideElement?.Value??""), guidequestions = guideQuestions }}
-                                };
-                                lstMainQuestions.Add(questionData);
+                                    "description",
+                                    HttpUtility.HtmlDecode(
+                                        mainElement?.Value ?? "")
+                                },
+                                {
+                                    "mainquestion",
+                                    HttpUtility.HtmlDecode(
+                                        mainQuestion?.Value ?? "")
+                                },
+                                {
+                                    "answer",
+                                    ""
+                                },
+                                {
+                                    "id",
+                                    "0"
+                                },
+                                {
+                                    "wait",
+                                    HttpUtility.HtmlDecode(
+                                        mainQuestionWait?.Value ??
+                                        "Please provide an assessment based on the question and guiding prompts.")
+                                },
+                                {
+                                    "guide",
+                                    new
+                                    {
+                                        description =
+                                            HttpUtility.HtmlDecode(
+                                                guideElement?.Value ?? ""),
+
+                                        guidequestions =
+                                            guideQuestions
+                                    }
+                                }
+                                    };
+
+                                lstMainQuestions.Add(
+                                    questionData);
                             }
                         }
 
-                        sectionData["mainsection"] = lstMainQuestions;
+                        sectionData["mainsection"] =
+                            lstMainQuestions;
                     }
 
-                    // Extract EPA Assessment
-                    XElement epaAssessmentElement = section.Element("epaassessment");
+                    // ============================================================
+                    // EPA ASSESSMENT
+                    // ============================================================
+                    //
+                    // IMPORTANT:
+                    // Use Elements("epagroup") instead of
+                    // Element("epagroup") so ALL EPA groups are processed.
+                    //
+                    // Also supports EPA assessment without epagroup.
+                    // ============================================================
+
+                    XElement epaAssessmentElement =
+                        section.Element("epaassessment");
 
                     if (epaAssessmentElement != null)
                     {
-                        var epaAssessment = new Dictionary<string, object>();
+                        var epaAssessment =
+                            new Dictionary<string, object>();
 
-                        // epaAssessment attributes
-                        foreach (var attribute in epaAssessmentElement.Attributes())
+                        // ========================================================
+                        // EPA Assessment Attributes
+                        // ========================================================
+
+                        foreach (
+                            var attribute
+                            in epaAssessmentElement.Attributes())
                         {
-                            epaAssessment[attribute.Name.LocalName] =
-                                HttpUtility.HtmlDecode(attribute.Value);
+                            epaAssessment[
+                                attribute.Name.LocalName] =
+                                HttpUtility.HtmlDecode(
+                                    attribute.Value);
                         }
 
-                        XElement epaGroupElement = epaAssessmentElement.Element("epagroup");
+                        // ========================================================
+                        // ALL EPA GROUPS
+                        // ========================================================
 
-                        // Parent that contains competency elements
-                        XElement competencyParent = epaGroupElement ?? epaAssessmentElement;
+                        var epaGroups =
+                            new List<Dictionary<string, object>>();
 
-                        Dictionary<string, object> epaGroup = null;
-
-                        if (epaGroupElement != null)
+                        foreach (
+                            XElement epaGroupElement
+                            in epaAssessmentElement.Elements("epagroup"))
                         {
-                            epaGroup = new Dictionary<string, object>();
+                            var epaGroup =
+                                new Dictionary<string, object>();
 
-                            foreach (var attribute in epaGroupElement.Attributes())
+                            // ----------------------------------------------------
+                            // EPA Group Attributes
+                            // ----------------------------------------------------
+
+                            foreach (
+                                var attribute
+                                in epaGroupElement.Attributes())
                             {
-                                epaGroup[attribute.Name.LocalName] =
-                                    HttpUtility.HtmlDecode(attribute.Value);
-                            }
-                        }
-
-                        var competencies = new List<Dictionary<string, object>>();
-
-                        foreach (XElement competencyElement in competencyParent.Elements("competency"))
-                        {
-                            var competency = new Dictionary<string, object>();
-
-                            // Competency attributes
-                            foreach (var attribute in competencyElement.Attributes())
-                            {
-                                competency[attribute.Name.LocalName] =
-                                    HttpUtility.HtmlDecode(attribute.Value);
+                                epaGroup[
+                                    attribute.Name.LocalName] =
+                                    HttpUtility.HtmlDecode(
+                                        attribute.Value);
                             }
 
-                            competency["name"] =
-                                HttpUtility.HtmlDecode(competencyElement.Element("name")?.Value ?? "");
+                            // ----------------------------------------------------
+                            // Competencies
+                            // ----------------------------------------------------
 
-                            // ----------------------------
-                            // Rating Scale
-                            // ----------------------------
-                            XElement ratingScaleElement = competencyElement.Element("ratingscale");
+                            var competencies =
+                                new List<Dictionary<string, object>>();
 
-                            if (ratingScaleElement != null)
+                            foreach (
+                                XElement competencyElement
+                                in epaGroupElement.Elements("competency"))
                             {
-                                var ratingScale = new Dictionary<string, object>();
+                                var competency =
+                                    new Dictionary<string, object>();
 
-                                foreach (var attribute in ratingScaleElement.Attributes())
+                                // ------------------------------------------------
+                                // Competency Attributes
+                                // ------------------------------------------------
+
+                                foreach (
+                                    var attribute
+                                    in competencyElement.Attributes())
                                 {
-                                    ratingScale[attribute.Name.LocalName] =
-                                        HttpUtility.HtmlDecode(attribute.Value);
+                                    competency[
+                                        attribute.Name.LocalName] =
+                                        HttpUtility.HtmlDecode(
+                                            attribute.Value);
                                 }
 
-                                var options = new List<Dictionary<string, object>>();
+                                competency["name"] =
+                                    HttpUtility.HtmlDecode(
+                                        competencyElement
+                                            .Element("name")
+                                            ?.Value ?? "");
 
-                                foreach (XElement optionElement in ratingScaleElement.Elements("option"))
+                                // =================================================
+                                // Rating Scale
+                                // =================================================
+
+                                XElement ratingScaleElement =
+                                    competencyElement.Element(
+                                        "ratingscale");
+
+                                if (ratingScaleElement != null)
                                 {
-                                    var option = new Dictionary<string, object>();
+                                    var ratingScale =
+                                        new Dictionary<string, object>();
 
-                                    foreach (var attribute in optionElement.Attributes())
+                                    foreach (
+                                        var attribute
+                                        in ratingScaleElement.Attributes())
                                     {
-                                        option[attribute.Name.LocalName] =
-                                            HttpUtility.HtmlDecode(attribute.Value);
+                                        ratingScale[
+                                            attribute.Name.LocalName] =
+                                            HttpUtility.HtmlDecode(
+                                                attribute.Value);
                                     }
 
-                                    option["label"] =
-                                        HttpUtility.HtmlDecode(optionElement.Value);
+                                    var options =
+                                        new List<Dictionary<string, object>>();
 
-                                    options.Add(option);
-                                }
-
-                                ratingScale["options"] = options;
-                                competency["ratingscale"] = ratingScale;
-                            }
-
-                            // ----------------------------
-                            // EPAs
-                            // ----------------------------
-                            var epas = new List<Dictionary<string, object>>();
-
-                            foreach (XElement epaElement in competencyElement.Elements("epa"))
-                            {
-                                var epa = new Dictionary<string, object>();
-
-                                // EPA attributes
-                                foreach (var attribute in epaElement.Attributes())
-                                {
-                                    epa[attribute.Name.LocalName] =
-                                        HttpUtility.HtmlDecode(attribute.Value);
-                                }
-
-                                epa["title"] =
-                                    HttpUtility.HtmlDecode(epaElement.Element("title")?.Value ?? "");
-
-                                //epa["answer"] =
-                                //    HttpUtility.HtmlDecode(epaElement.Element("answer")?.Value ?? "");
-
-                                //epa["answerid"] =
-                                //    HttpUtility.HtmlDecode(epaElement.Element("answerid")?.Value ?? "");
-
-                                // ----------------------------
-                                // Milestones
-                                // ----------------------------
-                                XElement milestonesElement = epaElement.Element("milestones");
-
-                                if (milestonesElement != null)
-                                {
-                                    var milestones = new List<Dictionary<string, object>>();
-
-                                    foreach (XElement milestoneElement in milestonesElement.Elements("milestone"))
+                                    foreach (
+                                        XElement optionElement
+                                        in ratingScaleElement.Elements("option"))
                                     {
-                                        var milestone = new Dictionary<string, object>();
+                                        var option =
+                                            new Dictionary<string, object>();
 
-                                        // milestone attributes
-                                        foreach (var attribute in milestoneElement.Attributes())
+                                        foreach (
+                                            var attribute
+                                            in optionElement.Attributes())
                                         {
-                                            milestone[attribute.Name.LocalName] =
-                                                HttpUtility.HtmlDecode(attribute.Value);
+                                            option[
+                                                attribute.Name.LocalName] =
+                                                HttpUtility.HtmlDecode(
+                                                    attribute.Value);
                                         }
 
-                                        milestone["title"] =
-                                            HttpUtility.HtmlDecode(milestoneElement.Element("title")?.Value ?? "");
+                                        option["label"] =
+                                            HttpUtility.HtmlDecode(
+                                                optionElement.Value);
 
-                                        milestone["answer"] =
-                                            HttpUtility.HtmlDecode(milestoneElement.Element("answer")?.Value ?? "");
-
-                                        milestone["answerid"] =
-                                            HttpUtility.HtmlDecode(milestoneElement.Element("answerid")?.Value ?? "");
-
-                                        milestones.Add(milestone);
+                                        options.Add(option);
                                     }
 
-                                    epa["milestones"] = milestones;
+                                    ratingScale["options"] =
+                                        options;
+
+                                    competency["ratingscale"] =
+                                        ratingScale;
                                 }
 
-                                epas.Add(epa);
+                                // =================================================
+                                // EPAs
+                                // =================================================
+
+                                var epas =
+                                    new List<Dictionary<string, object>>();
+
+                                foreach (
+                                    XElement epaElement
+                                    in competencyElement.Elements("epa"))
+                                {
+                                    var epa =
+                                        new Dictionary<string, object>();
+
+                                    // --------------------------------------------
+                                    // EPA Attributes
+                                    // --------------------------------------------
+
+                                    foreach (
+                                        var attribute
+                                        in epaElement.Attributes())
+                                    {
+                                        epa[
+                                            attribute.Name.LocalName] =
+                                            HttpUtility.HtmlDecode(
+                                                attribute.Value);
+                                    }
+
+                                    epa["title"] =
+                                        HttpUtility.HtmlDecode(
+                                            epaElement
+                                                .Element("title")
+                                                ?.Value ?? "");
+
+                                    // =================================================
+                                    // Milestones
+                                    // =================================================
+
+                                    XElement milestonesElement =
+                                        epaElement.Element("milestones");
+
+                                    if (milestonesElement != null)
+                                    {
+                                        var milestones =
+                                            new List<Dictionary<string, object>>();
+
+                                        foreach (
+                                            XElement milestoneElement
+                                            in milestonesElement.Elements("milestone"))
+                                        {
+                                            var milestone =
+                                                new Dictionary<string, object>();
+
+                                            foreach (
+                                                var attribute
+                                                in milestoneElement.Attributes())
+                                            {
+                                                milestone[
+                                                    attribute.Name.LocalName] =
+                                                    HttpUtility.HtmlDecode(
+                                                        attribute.Value);
+                                            }
+
+                                            milestone["title"] =
+                                                HttpUtility.HtmlDecode(
+                                                    milestoneElement
+                                                        .Element("title")
+                                                        ?.Value ?? "");
+
+                                            milestone["answer"] =
+                                                HttpUtility.HtmlDecode(
+                                                    milestoneElement
+                                                        .Element("answer")
+                                                        ?.Value ?? "");
+
+                                            milestone["answerid"] =
+                                                HttpUtility.HtmlDecode(
+                                                    milestoneElement
+                                                        .Element("answerid")
+                                                        ?.Value ?? "");
+
+                                            milestones.Add(
+                                                milestone);
+                                        }
+
+                                        epa["milestones"] =
+                                            milestones;
+                                    }
+
+                                    epas.Add(epa);
+                                }
+
+                                competency["epas"] =
+                                    epas;
+
+                                competencies.Add(
+                                    competency);
                             }
 
-                            competency["epas"] = epas;
+                            epaGroup["competencies"] =
+                                competencies;
 
-                            competencies.Add(competency);
+                            epaGroups.Add(
+                                epaGroup);
                         }
 
-                        if (epaGroup != null)
+                        // ========================================================
+                        // Save ALL EPA Groups
+                        // ========================================================
+
+                        if (epaGroups.Count > 0)
                         {
-                            epaGroup["competencies"] = competencies;
-                            epaAssessment["epagroup"] = epaGroup;
+                            epaAssessment["epagroup"] =
+                                epaGroups;
                         }
                         else
                         {
-                            epaAssessment["competencies"] = competencies;
+                            // ====================================================
+                            // EPAASSESSMENT WITHOUT EPAGROUP
+                            // ====================================================
+
+                            var competencies =
+                                new List<Dictionary<string, object>>();
+
+                            foreach (
+                                XElement competencyElement
+                                in epaAssessmentElement.Elements("competency"))
+                            {
+                                var competency =
+                                    new Dictionary<string, object>();
+
+                                competency["name"] =
+                                    HttpUtility.HtmlDecode(
+                                        competencyElement
+                                            .Element("name")
+                                            ?.Value ?? "");
+
+                                var epas =
+                                    new List<Dictionary<string, object>>();
+
+                                foreach (
+                                    XElement epaElement
+                                    in competencyElement.Elements("epa"))
+                                {
+                                    var epa =
+                                        new Dictionary<string, object>();
+
+                                    foreach (
+                                        var attribute
+                                        in epaElement.Attributes())
+                                    {
+                                        epa[
+                                            attribute.Name.LocalName] =
+                                            HttpUtility.HtmlDecode(
+                                                attribute.Value);
+                                    }
+
+                                    epa["title"] =
+                                        HttpUtility.HtmlDecode(
+                                            epaElement
+                                                .Element("title")
+                                                ?.Value ?? "");
+
+                                    epas.Add(epa);
+                                }
+
+                                competency["epas"] =
+                                    epas;
+
+                                competencies.Add(
+                                    competency);
+                            }
+
+                            epaAssessment["competencies"] =
+                                competencies;
                         }
 
-                        sectionData["epaassessment"] = epaAssessment;
+                        sectionData["epaassessment"] =
+                            epaAssessment;
                     }
 
-                    // Extract follow-up sections dynamically
-                    var followUpSections = new Dictionary<string, object>();
-                    var questions = new List<Dictionary<string, object>>();
-                    List<Dictionary<string, object>> lstfollowUps = new List<Dictionary<string, object>>();
-                    var otherSections = new Dictionary<string, object>();
+                    // ============================================================
+                    // FOLLOW-UP SECTIONS
+                    // ============================================================
 
-                    foreach (XElement childElement in section.Elements())
+                    var followUpSections =
+                        new Dictionary<string, object>();
+
+                    var questions =
+                        new List<Dictionary<string, object>>();
+
+                    List<Dictionary<string, object>> lstfollowUps =
+                        new List<Dictionary<string, object>>();
+
+                    var otherSections =
+                        new Dictionary<string, object>();
+
+                    foreach (
+                        XElement childElement
+                        in section.Elements())
                     {
-                        if (childElement.Name.LocalName.StartsWith("followupsection"))
-                        {
-                            followUpSections = new Dictionary<string, object>();
-                            if (childElement.Name.LocalName == "followupsection")
-                            {
-                                XElement followupElement = childElement.Element("followup");
-                                //followUpSections["description"] = HttpUtility.HtmlDecode((followupElement != null) ? followupElement.Value : "Follow-up Question:");
+                        // ========================================================
+                        // Followup
+                        // ========================================================
 
-                                foreach (XElement question in childElement.Elements("question"))
+                        if (
+                            childElement.Name.LocalName
+                                .StartsWith("followupsection"))
+                        {
+                            followUpSections =
+                                new Dictionary<string, object>();
+
+                            if (
+                                childElement.Name.LocalName ==
+                                "followupsection")
+                            {
+                                XElement followupElement =
+                                    childElement.Element("followup");
+
+                                foreach (
+                                    XElement question
+                                    in childElement.Elements("question"))
                                 {
-                                    XElement followupQuestion = question.Element("followupquestion");
-                                    XElement answer = question.Element("answer");
-                                    XElement followupWait = question.Element("wait");
-                                    if (followupQuestion != null && followupQuestion.Value.Length > 0)
+                                    XElement followupQuestion =
+                                        question.Element(
+                                            "followupquestion");
+
+                                    XElement answer =
+                                        question.Element("answer");
+
+                                    XElement followupWait =
+                                        question.Element("wait");
+
+                                    if (
+                                        followupQuestion != null &&
+                                        followupQuestion.Value.Length > 0)
                                     {
-                                        var questionData = new Dictionary<string, object>
-                                    {
-                                        { "description", HttpUtility.HtmlDecode((followupElement != null) ? followupElement.Value : "Follow-up Question:") },
-                                        { "question", HttpUtility.HtmlDecode(followupQuestion != null ? followupQuestion.Value : "") },
-                                        { "answer", HttpUtility.HtmlDecode(answer != null ? answer.Value : "") },{"id", "0" },
-                                        { "wait", HttpUtility.HtmlDecode(followupWait?.Value ?? "Please provide additional details.") }
-                                    };
-                                        questions.Add(questionData);
+                                        var questionData =
+                                            new Dictionary<string, object>
+                                            {
+                                        {
+                                            "description",
+                                            HttpUtility.HtmlDecode(
+                                                followupElement != null
+                                                    ? followupElement.Value
+                                                    : "Follow-up Question:")
+                                        },
+                                        {
+                                            "question",
+                                            HttpUtility.HtmlDecode(
+                                                followupQuestion.Value)
+                                        },
+                                        {
+                                            "answer",
+                                            HttpUtility.HtmlDecode(
+                                                answer != null
+                                                    ? answer.Value
+                                                    : "")
+                                        },
+                                        {
+                                            "id",
+                                            "0"
+                                        },
+                                        {
+                                            "wait",
+                                            HttpUtility.HtmlDecode(
+                                                followupWait?.Value ??
+                                                "Please provide additional details.")
+                                        }
+                                            };
+
+                                        questions.Add(
+                                            questionData);
                                     }
                                 }
-                                //followUpSections["question"] = questions;
-                                //lstfollowUps.Add(followUpSections);
                             }
                         }
-                        else if (childElement.Name.LocalName == "othersection")
-                        {
-                            followUpSections = new Dictionary<string, object>();
-                            //var otherSection = new Dictionary<string, object>
-                            //{
-                            //    { "description", "Other Questions" }
-                            //};
-                            //var otherQuestions = new List<Dictionary<string, object>>();
-                            //followUpSections["description"] = "Other Questions:";
-                            foreach (XElement question in childElement.Elements("question"))
-                            {
-                                XElement otherQuestion = question.Element("otherquestion");
-                                XElement answer = question.Element("answer");
-                                XElement otherWait = question.Element("wait");
 
-                                var questionData = new Dictionary<string, object>
+                        // ========================================================
+                        // Other Section
+                        // ========================================================
+
+                        else if (
+                            childElement.Name.LocalName ==
+                            "othersection")
+                        {
+                            followUpSections =
+                                new Dictionary<string, object>();
+
+                            foreach (
+                                XElement question
+                                in childElement.Elements("question"))
+                            {
+                                XElement otherQuestion =
+                                    question.Element("otherquestion");
+
+                                XElement answer =
+                                    question.Element("answer");
+
+                                XElement otherWait =
+                                    question.Element("wait");
+
+                                var questionData =
+                                    new Dictionary<string, object>
+                                    {
                                 {
-                                    { "description", "Other Questions:" },
-                                    { "followupquestion", HttpUtility.HtmlDecode(otherQuestion != null ? otherQuestion.Value : "") },
-                                    { "answer", HttpUtility.HtmlDecode(answer != null ? answer.Value : "") },{"id", "0" },
-                                    { "wait", HttpUtility.HtmlDecode(otherWait?.Value ?? "Please provide additional details.") }
-                                };
-                                questions.Add(questionData);
+                                    "description",
+                                    "Other Questions:"
+                                },
+                                {
+                                    "followupquestion",
+                                    HttpUtility.HtmlDecode(
+                                        otherQuestion != null
+                                            ? otherQuestion.Value
+                                            : "")
+                                },
+                                {
+                                    "answer",
+                                    HttpUtility.HtmlDecode(
+                                        answer != null
+                                            ? answer.Value
+                                            : "")
+                                },
+                                {
+                                    "id",
+                                    "0"
+                                },
+                                {
+                                    "wait",
+                                    HttpUtility.HtmlDecode(
+                                        otherWait?.Value ??
+                                        "Please provide additional details.")
+                                }
+                                    };
+
+                                questions.Add(
+                                    questionData);
                             }
-                            //followUpSections["question"] = otherQuestions;
-                            //lstfollowUps.Add(followUpSections);
-                            //sectionData.Add("followupsection", followUpSections);
-                            //otherSections["othersection"] = otherSection;
                         }
                     }
-                    sectionData["followupsections"] = questions;
-                    //if (lstfollowUps.Count > 0)
-                    //    sectionData["followupsections"] = lstfollowUps;
 
-                    //if (otherSections.Count > 0)
-                    //    sectionData["othersection"] = otherSections;
+                    sectionData["followupsections"] =
+                        questions;
 
-                    sections.Add(sectionData);
+                    sections.Add(
+                        sectionData);
+
                     sectionNumber++;
                 }
             }
-      
-            sections = sections
-                .GroupBy(s => s["fullname"]?.ToString())
-                .Select(g => g.First())
-                .ToList();
 
-            // Reorder sections based on allsections
-            sections.Sort((x, y) =>
+            // ============================================================
+            // MERGE DUPLICATE SECTIONS
+            //
+            // IMPORTANT:
+            // Only EPA ASSESSMENT is merged.
+            //
+            // The FIRST section remains the base section.
+            //
+            // mainsection       -> NOT merged
+            // followupsections  -> NOT merged
+            // other properties  -> NOT merged
+            //
+            // Only:
+            // epaassessment
+            //     -> epagroup
+            //         -> competencies
+            //             -> epas
+            // ============================================================
+
+            var mergedSections =
+                new List<Dictionary<string, object>>();
+
+            foreach (
+                var currentSection
+                in sections)
             {
-                var xIndex = lstAllSections.FindIndex(a =>
-                    string.Equals(
-                        a["fullname"]?.ToString(),
-                        x["fullname"]?.ToString(),
-                        StringComparison.OrdinalIgnoreCase));
+                string currentFullName =
+                    currentSection.ContainsKey("fullname")
+                        ? currentSection["fullname"]?.ToString() ?? ""
+                        : "";
 
-                var yIndex = lstAllSections.FindIndex(a =>
-                    string.Equals(
-                        a["fullname"]?.ToString(),
-                        y["fullname"]?.ToString(),
-                        StringComparison.OrdinalIgnoreCase));
+                // ------------------------------------------------------------
+                // Find existing section with same fullname
+                // ------------------------------------------------------------
 
-                return xIndex.CompareTo(yIndex);
-            });
+                var existingSection =
+                    mergedSections.FirstOrDefault(
+                        x =>
+                            string.Equals(
+                                x.ContainsKey("fullname")
+                                    ? x["fullname"]?.ToString() ?? ""
+                                    : "",
+                                currentFullName,
+                                StringComparison.OrdinalIgnoreCase));
 
-            // Update section numbers
-            for (short i = 0; i < sections.Count; i++)
-            {
-                sections[i]["sectionnum"] = (short)(i + 1);
+                // ------------------------------------------------------------
+                // First section
+                // ------------------------------------------------------------
+
+                if (existingSection == null)
+                {
+                    mergedSections.Add(
+                        currentSection);
+
+                    continue;
+                }
+
+                // ============================================================
+                // SAME SECTION
+                //
+                // ONLY MERGE EPA ASSESSMENT
+                // ============================================================
+
+                JObject? existingEpaAssessment =
+                    null;
+
+                JObject? currentEpaAssessment =
+                    null;
+
+                // Dictionary -> JObject conversion is avoided.
+                // EPA assessment is stored as Dictionary.
+                // ============================================================
+
+                var existingEpa =
+                    existingSection.ContainsKey("epaassessment")
+                        ? existingSection["epaassessment"]
+                            as Dictionary<string, object>
+                        : null;
+
+                var currentEpa =
+                    currentSection.ContainsKey("epaassessment")
+                        ? currentSection["epaassessment"]
+                            as Dictionary<string, object>
+                        : null;
+
+                if (currentEpa == null)
+                {
+                    // Nothing to merge.
+                    continue;
+                }
+
+                // ============================================================
+                // First section does not have EPA assessment
+                // ============================================================
+
+                if (existingEpa == null)
+                {
+                    existingSection["epaassessment"] =
+                        currentEpa;
+
+                    continue;
+                }
+
+                // ============================================================
+                // CURRENT EPA GROUPS
+                // ============================================================
+
+                var currentGroups =
+                    currentEpa.ContainsKey("epagroup")
+                        ? currentEpa["epagroup"]
+                            as List<Dictionary<string, object>>
+                        : null;
+
+                // ============================================================
+                // EXISTING EPA GROUPS
+                // ============================================================
+
+                var existingGroups =
+                    existingEpa.ContainsKey("epagroup")
+                        ? existingEpa["epagroup"]
+                            as List<Dictionary<string, object>>
+                        : null;
+
+                // ============================================================
+                // If current has EPA groups
+                // ============================================================
+
+                if (currentGroups != null &&
+                    currentGroups.Count > 0)
+                {
+                    // --------------------------------------------------------
+                    // Existing has no groups
+                    // --------------------------------------------------------
+
+                    if (existingGroups == null)
+                    {
+                        existingEpa["epagroup"] =
+                            currentGroups;
+                    }
+                    else
+                    {
+                        // ====================================================
+                        // Merge ALL EPA groups
+                        // ====================================================
+
+                        foreach (
+                            var currentGroup
+                            in currentGroups)
+                        {
+                            string currentGroupId =
+                                currentGroup.ContainsKey("id")
+                                    ? currentGroup["id"]?.ToString() ?? ""
+                                    : "";
+
+                            var existingGroup =
+                                existingGroups.FirstOrDefault(
+                                    x =>
+                                        string.Equals(
+                                            x.ContainsKey("id")
+                                                ? x["id"]?.ToString() ?? ""
+                                                : "",
+                                            currentGroupId,
+                                            StringComparison.OrdinalIgnoreCase));
+
+                            // ------------------------------------------------
+                            // New EPA Group
+                            // ------------------------------------------------
+
+                            if (existingGroup == null)
+                            {
+                                existingGroups.Add(
+                                    currentGroup);
+
+                                continue;
+                            }
+
+                            // =================================================
+                            // Same EPA Group
+                            // Merge competencies
+                            // =================================================
+
+                            var currentCompetencies =
+                                currentGroup.ContainsKey("competencies")
+                                    ? currentGroup["competencies"]
+                                        as List<Dictionary<string, object>>
+                                    : null;
+
+                            if (currentCompetencies == null)
+                                continue;
+
+                            var existingCompetencies =
+                                existingGroup.ContainsKey("competencies")
+                                    ? existingGroup["competencies"]
+                                        as List<Dictionary<string, object>>
+                                    : null;
+
+                            if (existingCompetencies == null)
+                            {
+                                existingGroup["competencies"] =
+                                    currentCompetencies;
+
+                                continue;
+                            }
+
+                            // =================================================
+                            // Merge competencies
+                            // =================================================
+
+                            foreach (
+                                var currentCompetency
+                                in currentCompetencies)
+                            {
+                                string currentCompetencyName =
+                                    currentCompetency.ContainsKey("name")
+                                        ? currentCompetency["name"]?.ToString() ?? ""
+                                        : "";
+
+                                var existingCompetency =
+                                    existingCompetencies.FirstOrDefault(
+                                        x =>
+                                            string.Equals(
+                                                x.ContainsKey("name")
+                                                    ? x["name"]?.ToString() ?? ""
+                                                    : "",
+                                                currentCompetencyName,
+                                                StringComparison.OrdinalIgnoreCase));
+
+                                // ----------------------------------------------
+                                // New competency
+                                // ----------------------------------------------
+
+                                if (existingCompetency == null)
+                                {
+                                    existingCompetencies.Add(
+                                        currentCompetency);
+
+                                    continue;
+                                }
+
+                                // =================================================
+                                // Same competency
+                                // Merge EPAs
+                                // =================================================
+
+                                var currentEpas =
+                                    currentCompetency.ContainsKey("epas")
+                                        ? currentCompetency["epas"]
+                                            as List<Dictionary<string, object>>
+                                        : null;
+
+                                if (currentEpas == null)
+                                    continue;
+
+                                var existingEpas =
+                                    existingCompetency.ContainsKey("epas")
+                                        ? existingCompetency["epas"]
+                                            as List<Dictionary<string, object>>
+                                        : null;
+
+                                if (existingEpas == null)
+                                {
+                                    existingCompetency["epas"] =
+                                        currentEpas;
+
+                                    continue;
+                                }
+
+                                // =================================================
+                                // Merge EPAs by ID
+                                // =================================================
+
+                                foreach (
+                                    var currentEpaItem
+                                    in currentEpas)
+                                {
+                                    string currentEpaId =
+                                        currentEpaItem.ContainsKey("id")
+                                            ? currentEpaItem["id"]?.ToString() ?? ""
+                                            : "";
+
+                                    if (
+                                        string.IsNullOrWhiteSpace(
+                                            currentEpaId))
+                                    {
+                                        continue;
+                                    }
+
+                                    bool exists =
+                                        existingEpas.Any(
+                                            x =>
+                                                string.Equals(
+                                                    x.ContainsKey("id")
+                                                        ? x["id"]?.ToString() ?? ""
+                                                        : "",
+                                                    currentEpaId,
+                                                    StringComparison.OrdinalIgnoreCase));
+
+                                    if (!exists)
+                                    {
+                                        existingEpas.Add(
+                                            currentEpaItem);
+                                    }
+                                }
+                            }
+                        }
+
+                        existingEpa["epagroup"] =
+                            existingGroups;
+                    }
+                }
+                else
+                {
+                    // ========================================================
+                    // EPA GROUP IS OPTIONAL
+                    //
+                    // Support:
+                    //
+                    // "epaassessment": {
+                    //     "competencies": [...]
+                    // }
+                    // ========================================================
+
+                    var currentCompetencies =
+                        currentEpa.ContainsKey("competencies")
+                            ? currentEpa["competencies"]
+                                as List<Dictionary<string, object>>
+                            : null;
+
+                    if (currentCompetencies != null &&
+                        currentCompetencies.Count > 0)
+                    {
+                        var existingCompetencies =
+                            existingEpa.ContainsKey("competencies")
+                                ? existingEpa["competencies"]
+                                    as List<Dictionary<string, object>>
+                                : null;
+
+                        if (existingCompetencies == null)
+                        {
+                            existingEpa["competencies"] =
+                                currentCompetencies;
+                        }
+                        else
+                        {
+                            foreach (
+                                var currentCompetency
+                                in currentCompetencies)
+                            {
+                                string currentCompetencyName =
+                                    currentCompetency.ContainsKey("name")
+                                        ? currentCompetency["name"]?.ToString() ?? ""
+                                        : "";
+
+                                var existingCompetency =
+                                    existingCompetencies.FirstOrDefault(
+                                        x =>
+                                            string.Equals(
+                                                x.ContainsKey("name")
+                                                    ? x["name"]?.ToString() ?? ""
+                                                    : "",
+                                                currentCompetencyName,
+                                                StringComparison.OrdinalIgnoreCase));
+
+                                if (existingCompetency == null)
+                                {
+                                    existingCompetencies.Add(
+                                        currentCompetency);
+
+                                    continue;
+                                }
+
+                                var currentEpas =
+                                    currentCompetency.ContainsKey("epas")
+                                        ? currentCompetency["epas"]
+                                            as List<Dictionary<string, object>>
+                                        : null;
+
+                                if (currentEpas == null)
+                                    continue;
+
+                                var existingEpas =
+                                    existingCompetency.ContainsKey("epas")
+                                        ? existingCompetency["epas"]
+                                            as List<Dictionary<string, object>>
+                                        : null;
+
+                                if (existingEpas == null)
+                                {
+                                    existingCompetency["epas"] =
+                                        currentEpas;
+
+                                    continue;
+                                }
+
+                                foreach (
+                                    var currentEpaItem
+                                    in currentEpas)
+                                {
+                                    string currentEpaId =
+                                        currentEpaItem.ContainsKey("id")
+                                            ? currentEpaItem["id"]?.ToString() ?? ""
+                                            : "";
+
+                                    if (
+                                        string.IsNullOrWhiteSpace(
+                                            currentEpaId))
+                                    {
+                                        continue;
+                                    }
+
+                                    bool exists =
+                                        existingEpas.Any(
+                                            x =>
+                                                string.Equals(
+                                                    x.ContainsKey("id")
+                                                        ? x["id"]?.ToString() ?? ""
+                                                        : "",
+                                                    currentEpaId,
+                                                    StringComparison.OrdinalIgnoreCase));
+
+                                    if (!exists)
+                                    {
+                                        existingEpas.Add(
+                                            currentEpaItem);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
             }
 
-            jsonData["sections"] = sections;
-            jsonData["allsections"] = lstAllSections;
-            return JsonConvert.SerializeObject(jsonData, Newtonsoft.Json.Formatting.Indented);
-        }       
+            // ============================================================
+            // Use merged sections
+            // ============================================================
+
+            sections =
+                mergedSections;
+
+            // ============================================================
+            // Reorder sections based on allsections
+            // ============================================================
+
+            sections.Sort(
+                (x, y) =>
+                {
+                    var xIndex =
+                        lstAllSections.FindIndex(
+                            a =>
+                                string.Equals(
+                                    a["fullname"]?.ToString(),
+                                    x["fullname"]?.ToString(),
+                                    StringComparison.OrdinalIgnoreCase));
+
+                    var yIndex =
+                        lstAllSections.FindIndex(
+                            a =>
+                                string.Equals(
+                                    a["fullname"]?.ToString(),
+                                    y["fullname"]?.ToString(),
+                                    StringComparison.OrdinalIgnoreCase));
+
+                    return xIndex.CompareTo(yIndex);
+                });
+
+            // ============================================================
+            // Update section numbers
+            // ============================================================
+
+            for (short i = 0;
+                 i < sections.Count;
+                 i++)
+            {
+                sections[i]["sectionnum"] =
+                    (short)(i + 1);
+            }
+
+            // ============================================================
+            // Final JSON
+            // ============================================================
+
+            jsonData["sections"] =
+                sections;
+
+            jsonData["allsections"] =
+                lstAllSections;
+
+            return JsonConvert.SerializeObject(
+                jsonData,
+                Newtonsoft.Json.Formatting.Indented);
+        }
 
         public static DataSet ConvertJsonToDataSet(string json)
         {
@@ -1262,27 +2380,118 @@ namespace SystemComments.Utilities
             return sb.ToString();
         }
 
-        public static string ConvertJsonToXmlContext(string json)
+        public static (string xmlString, string answerString) ConvertJsonToXmlContext(string json)
         {
             var jobj = JObject.Parse(json);
 
-            // Extract only the last completed section XML (not the whole JSON)
+            // Extract only the last completed section XML
             var xmlBuilder = new StringBuilder();
+
+            // Separate answer string
+            var answerBuilder = new StringBuilder();
 
             if (jobj["sections"] is JArray sections)
             {
                 var lastSection = sections.LastOrDefault();
+
                 if (lastSection != null)
                 {
+                    var sectionName =
+                        lastSection["name"]?.ToString() ?? "";
+
+                    var sectionFullName =
+                        lastSection["fullname"]?.ToString() ?? "";
+
                     xmlBuilder.Append("<section>");
-                    xmlBuilder.Append($"<sectionname>{lastSection["name"]}</sectionname>");
-                    xmlBuilder.Append($"<sectionfullname>{lastSection["fullname"]}</sectionfullname>");
 
-                    var answer = lastSection["mainsection"]?[0]?["answer"]?.ToString();
-                    if (!string.IsNullOrEmpty(answer))
-                        xmlBuilder.Append($"<answer>{answer}</answer>");
+                    xmlBuilder.Append(
+                        $"<sectionname>{sectionName}</sectionname>");
 
-                    if (lastSection["followupsections"] is JArray followups && followups.Any())
+                    xmlBuilder.Append(
+                        $"<sectionfullname>{sectionFullName}</sectionfullname>");
+
+                    // ============================================================
+                    // Main Section Answer
+                    // ============================================================
+
+                    var answer = "";
+
+                    if (lastSection["mainsection"] is JArray mainSections)
+                    {
+                        foreach (var mainSection in mainSections)
+                        {
+                            // Your actual JSON structure can be:
+                            //
+                            // mainsection
+                            //   -> mainquestions
+                            //       -> question
+                            //           -> answer
+                            //
+                            if (mainSection["mainquestions"] is JArray mainQuestions)
+                            {
+                                foreach (var question in mainQuestions)
+                                {
+                                    var questionAnswer =
+                                        question["answer"]?.ToString();
+
+                                    if (!string.IsNullOrWhiteSpace(questionAnswer))
+                                    {
+                                        if (!string.IsNullOrWhiteSpace(answer))
+                                        {
+                                            answer += Environment.NewLine;
+                                        }
+
+                                        answer += questionAnswer;
+                                    }
+                                }
+                            }
+                            else
+                            {
+                                // Keep compatibility with your existing structure
+                                var questionAnswer =
+                                    mainSection["answer"]?.ToString();
+
+                                if (!string.IsNullOrWhiteSpace(questionAnswer))
+                                {
+                                    if (!string.IsNullOrWhiteSpace(answer))
+                                    {
+                                        answer += Environment.NewLine;
+                                    }
+
+                                    answer += questionAnswer;
+                                }
+                            }
+                        }
+                    }
+
+                    // ============================================================
+                    // Add main answer to XML
+                    // ============================================================
+
+                    if (!string.IsNullOrWhiteSpace(answer))
+                    {
+                        xmlBuilder.Append(
+                            $"<answer>{answer}</answer>");
+
+                        // ========================================================
+                        // Add to separate answer string
+                        //
+                        // Section Name:
+                        // Answer
+                        // ========================================================
+
+                        answerBuilder.Append(
+                            sectionName +
+                            ":\n" +
+                            answer);
+                    }
+
+                    // ============================================================
+                    // Follow-up Sections
+                    // ============================================================
+
+                    if (lastSection["followupsections"] is JArray followups &&
+                        followups.Any())
                     {
                         xmlBuilder.Append("<followupsection>");
 
@@ -1290,13 +2499,37 @@ namespace SystemComments.Utilities
                         {
                             xmlBuilder.Append("<question>");
 
-                            var followupQuestion = followup["question"]?.ToString();
-                            if (!string.IsNullOrEmpty(followupQuestion))
-                                xmlBuilder.Append($"<followupquestion>{followupQuestion}</followupquestion>");
+                            var followupQuestion =
+                                followup["question"]?.ToString();
 
-                            var followupAnswer = followup["answer"]?.ToString();
+                            if (!string.IsNullOrEmpty(followupQuestion))
+                            {
+                                xmlBuilder.Append(
+                                    $"<followupquestion>{followupQuestion}</followupquestion>");
+                            }
+
+                            var followupAnswer =
+                                followup["answer"]?.ToString();
+
                             if (!string.IsNullOrEmpty(followupAnswer))
-                                xmlBuilder.Append($"<answer>{followupAnswer}</answer>");
+                            {
+                                xmlBuilder.Append(
+                                    $"<answer>{followupAnswer}</answer>");
+
+                                // ==================================================
+                                // Add follow-up answer to separate answer string
+                                // ==================================================
+
+                                if (answerBuilder.Length > 0)
+                                {
+                                    answerBuilder.Append("\n");
+                                }
+
+                                answerBuilder.Append(
+                                    sectionName +
+                                    ":\n" +
+                                    followupAnswer);
+                            }
 
                             xmlBuilder.Append("</question>");
                         }
@@ -1305,12 +2538,13 @@ namespace SystemComments.Utilities
                     }
 
                     xmlBuilder.Append("</section>");
-
-
                 }
             }
 
-            return xmlBuilder.ToString();
+            return (
+                xmlBuilder.ToString(),
+                answerBuilder.ToString()
+            );
         }
 
         public static string ConvertJsonToFormattedText(string json, ref Int32 lastSection, ref Int32 noOfSections)
@@ -1679,7 +2913,7 @@ namespace SystemComments.Utilities
                     else
                     {
 
-                        exists = sections1.Any(s => s["name"].ToString().Replace("&", "and") == sectionName.Replace("&", "and"));                        
+                        exists = sections1.Any(s => s["name"].ToString().Replace("&", "and") == sectionName.Replace("&", "and"));
                         if (!exists)
                         {
                             sectionsCount++;

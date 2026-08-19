@@ -2135,8 +2135,13 @@ namespace SystemComments.Controllers
                     //ChatMessage.CreateAssistantMessage(UpdateXMLTags(SageExtraction.ConvertJsonToXmlContext(previousResponse), true))
                 };
                     if (previousResponse.Length > 2)
-                    {
-                        string previousUpdatedResponse = UpdateXMLTags(SageExtraction.ConvertJsonToXmlContext(previousResponse), true);
+                    {                       
+
+                        (string xmlString, string answersString) = SageExtraction.ConvertJsonToXmlContext(previousResponse);
+                        xmlString = UpdateXMLTags(xmlString, true);
+
+                        string previousUpdatedResponse = answersString + "\n" + xmlString;
+
                         messages.Add(ChatMessage.CreateAssistantMessage(previousUpdatedResponse));
                         if(isSageFocus == 1)
                         {
