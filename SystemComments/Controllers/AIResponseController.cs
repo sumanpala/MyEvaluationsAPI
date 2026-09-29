@@ -781,6 +781,7 @@ namespace SystemComments.Controllers
             string aiResponse = "";
             string minifiedJson = "[]";
             string epaJSON = "";
+            string experienceDescription = "", experienceObjective = "";
             Stopwatch totalTime = Stopwatch.StartNew();
             double totalSeconds = 0, promptDBSeconds = 0, historySeconds = 0;
             int apiAttempts = 0;
@@ -825,6 +826,8 @@ namespace SystemComments.Controllers
                             templateDepartmentID = Convert.ToInt64(dtPrompt.Rows[0]["TemplateDepartmentID"].ToString());
                             isSageFocus = Convert.ToInt16(dtPrompt.Rows[0]["IsSageFocus"].ToString());
                             epaJSON = dtPrompt.Rows[0]["EPAJSON"].ToString();
+                            experienceDescription = dtPrompt.Rows[0]["ExperienceDescription"].ToString();
+                            experienceObjective = dtPrompt.Rows[0]["ExperienceObjective"].ToString();
                         }                        
 
 
@@ -845,7 +848,9 @@ namespace SystemComments.Controllers
                                 comments = comments.Replace("[User Name]", dtPrompt.Rows[0]["SubjectUserName"].ToString());
                                 comments = comments.Replace("[Name]", dtPrompt.Rows[0]["SubjectUserName"].ToString());
                                 comments = comments.Replace("[Assessment Date]", dtPrompt.Rows[0]["AssessmentDate"].ToString());
-                                comments = comments.Replace("[Date]", dtPrompt.Rows[0]["AssessmentDate"].ToString());
+                                comments = comments.Replace("[Date]", dtPrompt.Rows[0]["AssessmentDate"].ToString());                               
+                                comments = comments.Replace("[Experience Description]", experienceDescription);
+                                comments = comments.Replace("[Experience Objectives]", experienceObjective);
                             }
                         }
                         else
@@ -893,6 +898,8 @@ namespace SystemComments.Controllers
                                 comments = comments.Replace("[Name]", dtPrompt.Rows[0]["SubjectUserName"].ToString());
                                 comments = comments.Replace("[Assessment Date]", dtPrompt.Rows[0]["AssessmentDate"].ToString());
                                 comments = comments.Replace("[Date]", dtPrompt.Rows[0]["AssessmentDate"].ToString());
+                                comments = comments.Replace("[Experience Description]", experienceDescription);
+                                comments = comments.Replace("[Experience Objectives]", experienceObjective);
 
                             }
                             else
