@@ -246,7 +246,7 @@ namespace SystemComments.Controllers
                         {
                             var objResponse = JToken.Parse(aiResponse);
                             JArray objChoices = (JArray)objResponse["choices"];
-                            if (objChoices.Count() > 0)
+                            if (objChoices != null && objChoices.Count() > 0)
                             {
                                 JObject objMessages = (JObject)objChoices[0]["message"];
                                 if (objMessages.Count > 0)
@@ -255,6 +255,10 @@ namespace SystemComments.Controllers
                                     aiComments = aiComments.Replace("```html", "");
 
                                 }
+                            }
+                            else
+                            {
+                                aiComments = aiResponse;
                             }
                         }
                         catch (Exception ex)
