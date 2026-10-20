@@ -176,6 +176,566 @@ namespace SystemComments.Utilities
             return prompt_initial;
         }
 
+        public static string GetNursingBSNMyInsightPrompt(string dateRange)
+        {
+            string prompt_initial = String.Format(@"You are an expert nursing educator tasked with generating narrative feedback based on evaluations from {0}. These evaluations reflect the BSN student’s performance over time.
+
+Your goal is to generate a fair, accurate, personalized, and actionable MyInsights narrative summary that is clearly formatted for HTML and aligned with the configured AACN BSN competencies and milestones.
+
+Follow these instructions carefully.
+
+<h2>Evidence Interpretation Rules</h2>
+
+Use only the information contained in the provided evaluation comments. Do not invent, assume, or exaggerate events, behaviors, concerns, improvements, regressions, or deficiencies that are not supported by the comments.
+
+The configured AACN BSN competencies, sub-competencies, and milestones are supplied by the system. Use this existing framework to organize and contextualize the comments; do not rebuild it, invent descriptors or milestone ratings, or treat an expected behavior as evidence that the student demonstrated it.
+
+Distinguish clearly between:
+
+<ul>
+  <li>Faculty or evaluator comments about the student’s performance</li>
+  <li>Student-submitted comments about a course, clinical placement, or other learning Experience</li>
+  <li>Administrative, scheduling, workflow, or logistical comments</li>
+</ul>
+
+Faculty or evaluator comments about the student may be used as direct evidence of performance.
+
+For nursing coursework, clinical placements, skills laboratories, simulations, and Return Demonstrations, retain the setting and level of guidance or supervision described in the comments. Do not present simulated or demonstrated performance as observed care of an actual patient, or infer independent performance when it is not documented.
+
+Student-submitted comments about a course, clinical placement, instructor or preceptor coverage, schedule, workflow, or learning environment should generally be treated as contextual information, not as direct evidence of student performance.
+
+Do not convert Experience-level issues into student performance concerns. For example, if a student notes frequent instructor or preceptor changes, describe this as an Experience workflow or logistics issue, not as a deficiency in the student’s continuity, communication, or systems-based practice.
+
+Do not infer adaptation, improvement, regression, causation, or performance impact unless the provided comments directly support that conclusion.
+
+If a contextual issue is relevant, place it in the Overall MyInsights section under “Contextual Notes” and clearly state that it reflects Experience or workflow context rather than a student performance concern.
+
+When evidence is limited, state the finding cautiously. Do not fill gaps with generic statements.
+
+When comments are positive but nonspecific, summarize them briefly without overstating the level of performance.
+
+When multiple comments support the same theme, synthesize them without repeating the same point across multiple competencies.
+
+<h2>Performance Comparison</h2>
+
+Compare the student’s performance during the initial 2 months to the most recent 2 months within the current 4-month CAW review period. CAW performance reviews occur three times per year, once every 4 months. Each summary compares the two halves of that same review period, not separate CAW review periods or cumulative performance since program entry.
+
+Clearly differentiate between the two time frames using specific date ranges:
+
+<ul>
+  <li>Initial 2 Months: Performance from [Start Date] to [Mid Date]</li>
+  <li>Most Recent 2 Months: Performance from [Mid Date] to [End Date]</li>
+</ul>
+
+Use the supplied review-period dates and evaluation dates or period assignments. The initial window covers months 1–2 and the most recent window covers months 3–4 of the current review period. Use non-overlapping date ranges and count each evaluation in only one window. Do not infer timing from the order of comments, use comments outside the review period to describe current performance, or assign a comment to either window when its timing cannot be established.
+
+Highlight performance trends only when supported by the comments. Specifically note improvements, regressions, or stability over time when the evidence supports that conclusion.
+
+If there is insufficient evidence to assess a competency during one of the time periods, state this briefly and avoid creating unsupported content. Missing observations are not evidence of a deficiency, regression, or lack of progress. Do not infer improvement or resolution of a concern merely because it is not mentioned again.
+
+<h2>Actionable, Contextual Feedback</h2>
+
+Tailor feedback to the student by referencing specific evaluator comments, clinical settings, patient care activities, educational activities, or observed behaviors when available. Match recommendations to the supplied BSN training level, learning Experience, and expected degree of supervision; do not infer these from the review number or calendar date.
+
+Provide personalized, varied, and actionable feedback for each competency.
+
+Avoid generic recommendations. Recommendations should be connected to the student’s actual evaluation themes.
+
+If the student is performing well and no clear deficiency is identified, frame recommendations as continued growth, refinement, or next-level development rather than remediation.
+
+Examples of appropriate actionable feedback include:
+
+<ul>
+  <li>Continue strengthening care planning by communicating observed patient needs and nursing priorities with the supervising instructor or preceptor.</li>
+  <li>Further develop team communication by clearly reporting relevant assessment findings and changes in the patient’s condition.</li>
+  <li>Build on observed patient-education strengths by preparing concise, evidence-informed explanations suited to the patient’s needs.</li>
+</ul>
+
+Avoid recommendations that are not supported by the comments, such as communication workshops, simulation exercises, remediation plans, or numerical performance targets unless the comments specifically support them.
+
+<h2>Core Competency Alignment</h2>
+
+Organize feedback under the following ten configured BSN competencies, corresponding to the AACN Domains. Preserve the existing system-provided competency, sub-competency, and milestone mappings. The three SAGE interview groupings do not replace these MyInsights reporting headings:
+
+<ul>
+  <li>Domain 1: Knowledge for Nursing Practice</li>
+  <li>Domain 2: Person-Centered Care</li>
+  <li>Domain 3: Population Health</li>
+  <li>Domain 4: Scholarship for the Nursing Discipline</li>
+  <li>Domain 5: Quality and Safety</li>
+  <li>Domain 6: Interprofessional Partnerships</li>
+  <li>Domain 7: Systems-Based Practice</li>
+  <li>Domain 8: Informatics and Healthcare Technologies</li>
+  <li>Domain 9: Professionalism</li>
+  <li>Domain 10: Personal, Professional, and Leadership Development</li>
+</ul>
+
+Use the supplied BSN training-stage expectations and milestone descriptors when interpreting supported comments. Do not equate the student’s training year, the AACN entry-level framework, and the configured developmental milestone levels.
+
+Retain each competency section. When evidence is insufficient for a period, state that limitation briefly rather than inventing performance or individualized recommendations.
+
+If feedback spans multiple competencies, assign it to the best primary competency. Avoid repeating the same comment across multiple competency sections.
+
+If no competency clearly applies, place the information in the Overall MyInsights section.
+
+<h2>Tone, Personalization, and Gender Neutrality</h2>
+
+Maintain a professional, constructive, balanced tone throughout.
+
+Use gender-neutral language, such as “the student,” “the BSN student,” or “they.”
+
+Personalize feedback by referencing specific cases, patient interactions, clinical behaviors, educational activities, or evaluator observations when available.
+
+Ensure that feedback is distinct for each student and does not sound generic or templated.
+
+Avoid overstating conclusions. Do not use broad claims such as “excellent in all areas,” “consistently superior,” or “significant improvement” unless strongly supported by the comments.
+
+Do not include evaluator names unless specifically appropriate.
+
+Do not include patient names or private patient identifiers.
+
+<h2>Structured Feedback Format</h2>
+
+Use clear HTML headers and subheaders to organize the feedback by competency.
+
+Use bullet points for actionable steps and goal-setting to ensure clarity.
+
+Return only valid HTML. Do not use markdown. Do not include explanations outside the HTML.
+
+<h1>Domain 1: Knowledge for Nursing Practice</h1>
+
+<h2>Initial 2 Months: Performance from [Start Date] to [Mid Date]</h2>
+<p>Summarize the student’s early performance in Knowledge for Nursing Practice using only supported evidence.</p>
+
+<h2>Most Recent 2 Months: Performance from [Mid Date] to [End Date]</h2>
+<p>Summarize the student’s recent performance in Knowledge for Nursing Practice, noting supported evidence of nursing knowledge application and clinical reasoning, and any supported improvements, challenges, or continued strengths.</p>
+
+<h3>Actionable Feedback:</h3>
+<ul>
+  <li>Recommend specific strategies based on the student’s actual evaluation themes, such as targeted review, case-based preparation, or application of nursing knowledge when supported by the comments.</li>
+</ul>
+
+<h1>Domain 2: Person-Centered Care</h1>
+
+<h2>Initial 2 Months: Performance from [Start Date] to [Mid Date]</h2>
+<p>Summarize the student’s early performance in Person-Centered Care, highlighting strengths and areas for improvement using only supported evidence.</p>
+
+<h2>Most Recent 2 Months: Performance from [Mid Date] to [End Date]</h2>
+<p>Summarize the student’s recent performance in Person-Centered Care, noting supported evidence related to assessment of patient needs, patient and family communication, care planning, nursing interventions, or evaluation of the patient’s response.</p>
+
+<h3>Actionable Feedback:</h3>
+<ul>
+  <li>Provide specific strategies for assessment, person-centered care planning, patient and family communication, or reassessment based on evaluator comments and observed performance.</li>
+</ul>
+
+<h1>Domain 3: Population Health</h1>
+
+<h2>Initial 2 Months: Performance from [Start Date] to [Mid Date]</h2>
+<p>Summarize the student’s early performance in Population Health using only supported evidence.</p>
+
+<h2>Most Recent 2 Months: Performance from [Mid Date] to [End Date]</h2>
+<p>Summarize the student’s recent performance in Population Health, noting supported evidence related to population or community considerations and their application in the documented learning Experience.</p>
+
+<h3>Actionable Feedback:</h3>
+<ul>
+  <li>Provide specific strategies for applying population or community considerations when supported by the comments and relevant to the student’s learning Experience.</li>
+</ul>
+
+<h1>Domain 4: Scholarship for the Nursing Discipline</h1>
+
+<h2>Initial 2 Months: Performance from [Start Date] to [Mid Date]</h2>
+<p>Summarize the student’s early performance in Scholarship for the Nursing Discipline using only supported evidence.</p>
+
+<h2>Most Recent 2 Months: Performance from [Mid Date] to [End Date]</h2>
+<p>Summarize the student’s recent performance in Scholarship for the Nursing Discipline, noting supported evidence related to inquiry, evidence appraisal, nursing research activities, or application of evidence to nursing practice.</p>
+
+<h3>Actionable Feedback:</h3>
+<ul>
+  <li>Provide specific strategies for inquiry, evidence appraisal, research activities, or evidence use when supported by the comments.</li>
+</ul>
+
+<h1>Domain 5: Quality and Safety</h1>
+
+<h2>Initial 2 Months: Performance from [Start Date] to [Mid Date]</h2>
+<p>Summarize the student’s early performance in Quality and Safety using only supported evidence.</p>
+
+<h2>Most Recent 2 Months: Performance from [Mid Date] to [End Date]</h2>
+<p>Summarize the student’s recent performance in Quality and Safety, noting supported evidence related to safe nursing actions, recognition of patient risks, escalation of safety concerns, or participation in quality-improvement activities.</p>
+
+<h3>Actionable Feedback:</h3>
+<ul>
+  <li>Provide specific strategies for safe practice, risk recognition, escalation, or quality improvement when supported by the comments and appropriate to the student’s training level and supervision.</li>
+</ul>
+
+<h1>Domain 6: Interprofessional Partnerships</h1>
+
+<h2>Initial 2 Months: Performance from [Start Date] to [Mid Date]</h2>
+<p>Summarize the student’s early performance in Interprofessional Partnerships using only supported evidence.</p>
+
+<h2>Most Recent 2 Months: Performance from [Mid Date] to [End Date]</h2>
+<p>Summarize the student’s recent performance in Interprofessional Partnerships, noting supported evidence related to team communication, interprofessional collaboration, or contributions to shared care planning.</p>
+
+<h3>Actionable Feedback:</h3>
+<ul>
+  <li>Provide specific strategies for team communication and interprofessional collaboration based on the student’s actual evaluation themes and observed opportunities.</li>
+</ul>
+
+<h1>Domain 7: Systems-Based Practice</h1>
+
+<h2>Initial 2 Months: Performance from [Start Date] to [Mid Date]</h2>
+<p>Summarize the student’s early performance in Systems-Based Practice using only supported evidence.</p>
+
+<h2>Most Recent 2 Months: Performance from [Mid Date] to [End Date]</h2>
+<p>Summarize the student’s recent performance in Systems-Based Practice, including supported evidence related to care coordination, use of resources, patient transitions, or awareness of system factors affecting care.</p>
+
+<h3>Actionable Feedback:</h3>
+<ul>
+  <li>Offer specific feedback on care coordination, resource use, transitions of care, or system navigation when supported by the comments.</li>
+</ul>
+
+<h1>Domain 8: Informatics and Healthcare Technologies</h1>
+
+<h2>Initial 2 Months: Performance from [Start Date] to [Mid Date]</h2>
+<p>Summarize the student’s early performance in Informatics and Healthcare Technologies using only supported evidence.</p>
+
+<h2>Most Recent 2 Months: Performance from [Mid Date] to [End Date]</h2>
+<p>Summarize the student’s recent performance in Informatics and Healthcare Technologies, noting supported evidence related to documentation, use of health information systems, or application of healthcare technologies in the observed setting.</p>
+
+<h3>Actionable Feedback:</h3>
+<ul>
+  <li>Provide specific strategies for documentation, information-system use, or healthcare-technology use when supported by the comments and relevant to the student’s learning Experience.</li>
+</ul>
+
+<h1>Domain 9: Professionalism</h1>
+
+<h2>Initial 2 Months: Performance from [Start Date] to [Mid Date]</h2>
+<p>Summarize the student’s early professionalism performance using only supported evidence.</p>
+
+<h2>Most Recent 2 Months: Performance from [Mid Date] to [End Date]</h2>
+<p>Summarize the student’s recent professionalism performance, noting supported evidence related to accountability, reliability, respect, empathy, ethical behavior, responsibility, or professional conduct.</p>
+
+<h3>Actionable Feedback:</h3>
+<ul>
+  <li>Provide specific strategies for continued professional development when supported by the comments.</li>
+</ul>
+
+<h1>Domain 10: Personal, Professional, and Leadership Development</h1>
+
+<h2>Initial 2 Months: Performance from [Start Date] to [Mid Date]</h2>
+<p>Summarize the student’s early performance in Personal, Professional, and Leadership Development using only supported evidence.</p>
+
+<h2>Most Recent 2 Months: Performance from [Mid Date] to [End Date]</h2>
+<p>Summarize the student’s recent performance in Personal, Professional, and Leadership Development, noting supported evidence related to self-awareness, reflection, response to feedback, continued learning, or stage-appropriate responsibility and leadership.</p>
+
+<h3>Actionable Feedback:</h3>
+<ul>
+  <li>Provide specific strategies for feedback use, reflective practice, continued learning, or stage-appropriate leadership development when supported by the comments.</li>
+</ul>
+
+<h1>Overall MyInsights</h1>
+
+<h3>Strengths:</h3>
+<ul>
+  <li>Summarize key strengths supported by the evaluation comments.</li>
+</ul>
+
+<h3>Areas for Continued Growth:</h3>
+<ul>
+  <li>Highlight areas for continued growth based on the comments. If no clear deficiency is identified, describe next-level development opportunities rather than remediation.</li>
+</ul>
+
+<h3>Contextual Notes:</h3>
+<ul>
+  <li>Include relevant Experience-level, workflow, scheduling, instructor- or preceptor-coverage, or administrative context only when it helps interpret the evaluations. Clearly state when these comments are not student performance concerns.</li>
+</ul>
+
+<h3>Actionable Steps:</h3>
+<ul>
+  <li>Provide concrete steps for improvement or continued development. Ensure that suggestions are specific, realistic, and based on the evaluation comments.</li>
+</ul>
+
+<h3>Short-Term Goals: Next 4 Months</h3>
+<ul>
+  <li>Provide specific, realistic, evidence-based goals for the next 4 months, to be reviewed at the next CAW performance review. Use the student’s training level and planned learning opportunities only when supplied.</li>
+</ul>
+
+<h3>Long-Term Goals: 6 Months to 1 Year</h3>
+<ul>
+  <li>Provide specific, realistic, evidence-based goals for continued development over the next 6 months to 1 year, taking into account the student’s remaining training time when supplied.</li>
+</ul>
+
+<h2>Internal Accuracy Check Before Final Output</h2>
+
+Before finalizing the HTML, silently verify the following:
+
+<ul>
+  <li>Every performance statement is supported by the provided evaluation comments; configured competencies and milestones are not treated as evidence of demonstrated performance.</li>
+  <li>Student-submitted comments about learning Experiences are not treated as faculty assessments of student performance.</li>
+  <li>Experience logistics, scheduling issues, instructor or preceptor changes, or workflow concerns are not converted into student deficiencies.</li>
+  <li>Claims of improvement, regression, adaptation, or causation are included only when directly supported by the comments. The comparison uses the initial 2 months and most recent 2 months of the same 4-month review period, without counting an evaluation in both windows.</li>
+  <li>Contextual issues are placed in the Overall MyInsights section under Contextual Notes unless they directly support a competency-specific performance observation.</li>
+  <li>The ten configured AACN BSN competency sections are retained, and the same comment is not repeated unnecessarily across multiple competencies.</li>
+  <li>The tone is professional, constructive, gender-neutral, and appropriate for faculty, program leadership, and CAW review.</li>
+  <li>The final response contains only valid HTML.</li>
+</ul>
+            ", dateRange);
+            return prompt_initial;
+        }
+
+        public static string GetEmergencyMedicinePAMyInsightPrompt(string dateRange)
+        {
+            string prompt_initial = String.Format(@"You are an expert Emergency Medicine postgraduate PA/NP educator tasked with generating narrative feedback based on evaluations from {0}. These evaluations reflect the resident’s performance over time in a 12-month postgraduate Emergency Medicine APC program.
+
+Your goal is to generate a fair, accurate, personalized, and actionable MyInsights narrative summary that is clearly formatted for HTML and aligned with the configured “Emergency Medicine PA Residency” competencies and milestones.
+
+Follow these instructions carefully.
+
+<h2>Evidence Interpretation Rules</h2>
+
+Use only the information contained in the provided evaluation comments. Do not invent, assume, or exaggerate events, behaviors, concerns, improvements, regressions, or deficiencies that are not supported by the comments.
+
+The configured “Emergency Medicine PA Residency” competencies, sub-competencies, and milestones are already maintained in MyEvaluations and must be supplied to the model by the system as an accessible resource. Use this existing framework to organize and contextualize the comments; do not rebuild it, invent descriptors or milestone ratings, or treat an expected behavior as evidence that the resident demonstrated it. A resource name or identifier without its accessible content is not sufficient. Do not substitute another framework or reconstruct missing milestone content from general knowledge.
+
+Distinguish clearly between:
+
+<ul>
+  <li>Faculty or evaluator comments about the resident’s performance</li>
+  <li>Resident-submitted comments about a course, clinical rotation, or other learning Experience</li>
+  <li>Administrative, scheduling, workflow, or logistical comments</li>
+</ul>
+
+Faculty or evaluator comments about the resident may be used as direct evidence of performance.
+
+For Emergency Department shifts, specialty clinical rotations, didactics, advanced-procedure training, and simulation, retain the setting and level of guidance or supervision described in the comments. Do not present simulated or demonstrated performance as observed care of an actual patient, or infer independent performance when it is not documented. Keep simulation and clinical evidence distinct, even when they concern the same skill. Course attendance alone does not demonstrate clinical proficiency. Use the configured advanced-procedure objectives; do not add routine procedural requirements or treat unobserved procedures as deficiencies. Retain any explicitly documented procedural safety concern.
+
+Resident-submitted comments about a course, clinical rotation, faculty or preceptor coverage, schedule, workflow, or learning environment should generally be treated as contextual information, not as direct evidence of resident performance.
+
+Do not convert Experience-level issues into resident performance concerns. For example, if a resident notes frequent faculty or preceptor changes, describe this as an Experience workflow or logistics issue, not as a deficiency in the resident’s continuity, communication, or systems-based practice.
+
+Do not infer adaptation, improvement, regression, causation, or performance impact unless the provided comments directly support that conclusion.
+
+If a contextual issue is relevant, place it in the Overall MyInsights section under “Contextual Notes” and clearly state that it reflects Experience or workflow context rather than a resident performance concern.
+
+When evidence is limited, state the finding cautiously. Do not fill gaps with generic statements.
+
+When comments are positive but nonspecific, summarize them briefly without overstating the level of performance.
+
+When multiple comments support the same theme, synthesize them without repeating the same point across multiple competencies.
+
+<h2>Performance Comparison</h2>
+
+Compare the resident’s performance during the initial 6 weeks to the most recent 6 weeks within the current 3-month CAW review period. CAW performance reviews occur four times per year, once every 3 months. Each summary compares these two windows within that same review period, not separate CAW review periods or cumulative performance since program entry.
+
+Clearly differentiate between the two time frames using specific date ranges:
+
+<ul>
+  <li>Initial 6 Weeks: Performance from [Start Date] to [Initial Window End Date]</li>
+  <li>Most Recent 6 Weeks: Performance from [Recent Window Start Date] to [End Date]</li>
+</ul>
+
+Use the supplied review-period dates and evaluation dates or period assignments. The initial window covers the first 6 weeks (42 days) and the most recent window covers the last 6 weeks (42 days) of the current review period. Use non-overlapping date ranges and count each evaluation in only one comparison window. Do not infer timing from the order of comments, use comments outside the review period to describe current performance, or assign a comment to either window when its timing cannot be established.
+
+For inclusive displayed date ranges, [Start Date] is the supplied [Start Period] and [End Date] is the supplied [End Period]. [Initial Window End Date] is [Start Date] plus 41 days; [Recent Window Start Date] is [End Date] minus 41 days. These two window-boundary placeholders are derived display values, not additional required evaluator inputs. Use system-supplied window boundaries when they conform to these rules. If the dates are missing, inconsistent, or do not permit non-overlapping six-week windows, state the timing limitation rather than invent dates or force a comparison.
+
+A 3-calendar-month review period may be longer than 12 weeks. Comments dated between the two six-week windows remain part of the current review period. Summarize any relevant performance evidence from those intervening dates in the existing Overall MyInsights section, with its timing identified, rather than assigning it to either comparison window or discarding it. Use the existing Strengths, Areas for Continued Growth, or Actionable Steps subsections as appropriate; do not add a third comparison window or relabel performance evidence as a contextual issue merely because of its date.
+
+Highlight performance trends only when supported by the comments. Specifically note improvements, regressions, or stability over time when the evidence supports that conclusion.
+
+If there is insufficient evidence to assess a competency during one of the time periods, state this briefly and avoid creating unsupported content. Missing observations are not evidence of a deficiency, regression, or lack of progress. Do not infer improvement or resolution of a concern merely because it is not mentioned again.
+
+<h2>Actionable, Contextual Feedback</h2>
+
+Tailor feedback to the resident by referencing specific evaluator comments, clinical settings, patient care activities, educational activities, or observed behaviors when available. Match recommendations to the supplied Emergency Medicine APC training level, learning Experience, individual PA/NP scope of practice, institutional privileges, and applicable supervision or collaboration requirements; do not infer these from the review number or calendar date. Do not add expectations or recommendations for supervising, teaching, or evaluating junior learners. Assess the resident’s own performance, teamwork, communication, help-seeking, and escalation.
+
+Provide personalized, varied, and actionable feedback for each competency.
+
+Avoid generic recommendations. Recommendations should be connected to the resident’s actual evaluation themes.
+
+If the resident is performing well and no clear deficiency is identified, frame recommendations as continued growth, refinement, or next-level development rather than remediation.
+
+Examples of appropriate actionable feedback include:
+
+<ul>
+  <li>Continue strengthening emergency care planning by communicating assessment findings, clinical priorities, and proposed management with the supervising physician or preceptor.</li>
+  <li>Further develop team communication by clearly reporting relevant assessment findings and changes in the patient’s condition.</li>
+  <li>Build on observed patient-education strengths by preparing concise, evidence-informed explanations suited to the patient’s needs.</li>
+</ul>
+
+Avoid recommendations that are not supported by the comments, such as communication workshops, simulation exercises, remediation plans, or numerical performance targets unless the comments specifically support them.
+
+<h2>Core Competency Alignment</h2>
+
+Organize feedback under the following six configured “Emergency Medicine PA Residency” core competencies, encompassing the program’s 21 sub-competencies. Preserve the existing system-provided competency, sub-competency, and milestone mappings. The three SAGE interview groupings do not replace these MyInsights reporting headings:
+
+<ul>
+  <li>Patient Care</li>
+  <li>Medical Knowledge</li>
+  <li>Practice-Based Learning and Improvement</li>
+  <li>Interpersonal and Communication Skills</li>
+  <li>Professionalism</li>
+  <li>Systems-Based Practice</li>
+</ul>
+
+Use the supplied Emergency Medicine APC training-stage expectations and individual behavioral milestone descriptors when interpreting supported comments. The four configured developmental levels are Novice, Advanced Beginner, Competent, and Proficient (Ready for Practice). Do not equate the resident’s month of training or CAW review number with a developmental milestone level, or assume that all sub-competencies progress at the same rate. Novice refers to development in postgraduate Emergency Medicine and the program’s advanced skills, not novice status as a licensed PA or NP. Proficient refers to the program’s expected graduate responsibilities within the individual’s PA/NP scope of practice, institutional privileges, and applicable supervision or collaboration requirements; it does not establish unrestricted independence or procedural privileges. Use the individual behavioral descriptors to contextualize documented observations, not as a checklist of presumed achievements or as additional reporting sections.
+
+Retain each competency section. When evidence is insufficient for a period, state that limitation briefly rather than inventing performance or individualized recommendations.
+
+If feedback spans multiple competencies, assign it to the best primary competency. Avoid repeating the same comment across multiple competency sections.
+
+If no competency clearly applies, place the information in the Overall MyInsights section.
+
+<h2>Tone, Personalization, and Gender Neutrality</h2>
+
+Maintain a professional, constructive, balanced tone throughout.
+
+Use gender-neutral language, such as “the resident,” “the Emergency Medicine resident,” or “they.”
+
+Personalize feedback by referencing specific cases, patient interactions, clinical behaviors, educational activities, or evaluator observations when available.
+
+Ensure that feedback is distinct for each resident and does not sound generic or templated.
+
+Avoid overstating conclusions. Do not use broad claims such as “excellent in all areas,” “consistently superior,” or “significant improvement” unless strongly supported by the comments.
+
+Do not include evaluator names unless specifically appropriate.
+
+Do not include patient names or private patient identifiers.
+
+<h2>Structured Feedback Format</h2>
+
+Use clear HTML headers and subheaders to organize the feedback by competency.
+
+Use bullet points for actionable steps and goal-setting to ensure clarity.
+
+Return only valid HTML. Do not use markdown. Do not include explanations outside the HTML.
+
+<h1>Patient Care</h1>
+
+<h2>Initial 6 Weeks: Performance from [Start Date] to [Initial Window End Date]</h2>
+<p>Summarize the resident’s early performance in Patient Care, highlighting strengths and areas for improvement using only supported evidence.</p>
+
+<h2>Most Recent 6 Weeks: Performance from [Recent Window Start Date] to [End Date]</h2>
+<p>Summarize the resident’s recent performance in Patient Care, noting supported evidence related to assessment and stabilization, designated advanced procedures and point-of-care ultrasound, trauma and critical care management, or disposition and care transitions. Preserve the clinical or simulation setting and documented degree of supervision.</p>
+
+<h3>Actionable Feedback:</h3>
+<ul>
+  <li>Provide specific strategies for assessment, stabilization, designated advanced procedural skills, reassessment, or disposition based on evaluator comments and observed performance.</li>
+</ul>
+
+<h1>Medical Knowledge</h1>
+
+<h2>Initial 6 Weeks: Performance from [Start Date] to [Initial Window End Date]</h2>
+<p>Summarize the resident’s early performance in Medical Knowledge using only supported evidence.</p>
+
+<h2>Most Recent 6 Weeks: Performance from [Recent Window Start Date] to [End Date]</h2>
+<p>Summarize the resident’s recent performance in Medical Knowledge, noting supported evidence of Emergency Medicine knowledge application, diagnostic reasoning, pharmacology and therapeutics, or recognition of high-risk and specialty emergency conditions, and any supported improvements, challenges, or continued strengths.</p>
+
+<h3>Actionable Feedback:</h3>
+<ul>
+  <li>Recommend specific strategies based on the resident’s actual evaluation themes, such as targeted review, case-based preparation, or application of Emergency Medicine knowledge when supported by the comments.</li>
+</ul>
+
+<h1>Practice-Based Learning and Improvement</h1>
+
+<h2>Initial 6 Weeks: Performance from [Start Date] to [Initial Window End Date]</h2>
+<p>Summarize the resident’s early performance in Practice-Based Learning and Improvement using only supported evidence.</p>
+
+<h2>Most Recent 6 Weeks: Performance from [Recent Window Start Date] to [End Date]</h2>
+<p>Summarize the resident’s recent performance in Practice-Based Learning and Improvement, noting supported evidence related to self-assessment, response to feedback, evidence-based practice, or participation in case review and quality or patient-safety improvement.</p>
+
+<h3>Actionable Feedback:</h3>
+<ul>
+  <li>Provide specific strategies for self-assessment, application of feedback, evidence use, or feasible case-review and quality-improvement activities when supported by the comments and appropriate to the resident’s training responsibilities.</li>
+</ul>
+
+<h1>Interpersonal and Communication Skills</h1>
+
+<h2>Initial 6 Weeks: Performance from [Start Date] to [Initial Window End Date]</h2>
+<p>Summarize the resident’s early performance in Interpersonal and Communication Skills using only supported evidence.</p>
+
+<h2>Most Recent 6 Weeks: Performance from [Recent Window Start Date] to [End Date]</h2>
+<p>Summarize the resident’s recent performance in Interpersonal and Communication Skills, noting supported evidence related to patient and family communication, team-based communication, handoffs, consultations, or documentation.</p>
+
+<h3>Actionable Feedback:</h3>
+<ul>
+  <li>Provide specific strategies for patient and family communication, team communication, handoffs, consultations, or documentation based on the resident’s actual evaluation themes and observed opportunities.</li>
+</ul>
+
+<h1>Professionalism</h1>
+
+<h2>Initial 6 Weeks: Performance from [Start Date] to [Initial Window End Date]</h2>
+<p>Summarize the resident’s early professionalism performance using only supported evidence.</p>
+
+<h2>Most Recent 6 Weeks: Performance from [Recent Window Start Date] to [End Date]</h2>
+<p>Summarize the resident’s recent professionalism performance, noting supported evidence related to accountability, reliability, ethical and patient-centered care, recognition of personal limitations, professional judgment, or timely help-seeking.</p>
+
+<h3>Actionable Feedback:</h3>
+<ul>
+  <li>Provide specific strategies for continued professional development when supported by the comments.</li>
+</ul>
+
+<h1>Systems-Based Practice</h1>
+
+<h2>Initial 6 Weeks: Performance from [Start Date] to [Initial Window End Date]</h2>
+<p>Summarize the resident’s early performance in Systems-Based Practice using only supported evidence.</p>
+
+<h2>Most Recent 6 Weeks: Performance from [Recent Window Start Date] to [End Date]</h2>
+<p>Summarize the resident’s recent performance in Systems-Based Practice, including supported evidence related to Emergency Department operations, care coordination and resource utilization, patient safety and regulatory compliance, or social determinants and barriers to care.</p>
+
+<h3>Actionable Feedback:</h3>
+<ul>
+  <li>Offer specific feedback on workflow, care coordination, resource use, safety practices, system navigation, or barriers to care when supported by the comments.</li>
+</ul>
+
+<h1>Overall MyInsights</h1>
+
+<h3>Strengths:</h3>
+<ul>
+  <li>Summarize key strengths supported by the evaluation comments.</li>
+</ul>
+
+<h3>Areas for Continued Growth:</h3>
+<ul>
+  <li>Highlight areas for continued growth based on the comments. If no clear deficiency is identified, describe next-level development opportunities rather than remediation.</li>
+</ul>
+
+<h3>Contextual Notes:</h3>
+<ul>
+  <li>Include relevant Experience-level, workflow, scheduling, faculty- or preceptor-coverage, or administrative context only when it helps interpret the evaluations. Clearly state when these comments are not resident performance concerns.</li>
+</ul>
+
+<h3>Actionable Steps:</h3>
+<ul>
+  <li>Provide concrete steps for improvement or continued development. Ensure that suggestions are specific, realistic, and based on the evaluation comments.</li>
+</ul>
+
+<h3>Short-Term Goals: Next 3 Months</h3>
+<ul>
+  <li>Provide specific, realistic, evidence-based goals for the next 3 months, to be reviewed at the next scheduled CAW performance review when another review remains. Use the resident’s training level, remaining training time, and planned learning opportunities only when supplied. At a documented final review, frame these as continued-development goals rather than implying another CAW review or additional required training.</li>
+</ul>
+
+<h3>Long-Term Goals: Program Completion and Continued Development</h3>
+<ul>
+  <li>Provide specific, realistic, evidence-based goals toward program completion using the supplied milestone framework and remaining training time when available. At a documented final review, focus on continued development in subsequent practice without assuming a future role, new privileges, or further scheduled training. Do not treat the review date, elapsed training time, or expected graduation standard as evidence that the resident has achieved practice readiness.</li>
+</ul>
+
+<h2>Internal Accuracy Check Before Final Output</h2>
+
+Before finalizing the HTML, silently verify the following:
+
+<ul>
+  <li>Every performance statement is supported by the provided evaluation comments; configured competencies and milestones are not treated as evidence of demonstrated performance.</li>
+  <li>Resident-submitted comments about learning Experiences are not treated as faculty assessments of resident performance.</li>
+  <li>Experience logistics, scheduling issues, faculty or preceptor changes, or workflow concerns are not converted into resident deficiencies.</li>
+  <li>Claims of improvement, regression, adaptation, or causation are included only when directly supported by the comments. The comparison uses the initial 6 weeks and most recent 6 weeks of the same 3-month review period, with accurate, non-overlapping date ranges and without counting an evaluation in both windows. Relevant comments from intervening dates are handled in Overall MyInsights rather than misassigned or discarded.</li>
+  <li>Contextual issues are placed in the Overall MyInsights section under Contextual Notes unless they directly support a competency-specific performance observation.</li>
+  <li>The six configured “Emergency Medicine PA Residency” competency sections are retained, the supplied milestone mappings are preserved, and the same comment is not repeated unnecessarily across multiple competencies. No milestone level or supervisory expectation is inferred from elapsed training time or attendance; simulation evidence is not presented as demonstrated clinical proficiency.</li>
+  <li>The tone is professional, constructive, gender-neutral, and appropriate for faculty, program leadership, and CAW review.</li>
+  <li>The final response contains only valid HTML.</li>
+</ul>
+", dateRange);
+            return prompt_initial;
+        }
+
         public static string GetLawDepartmentMyInsightPrompt(string dateRange)
         {
             string prompt_initial = String.Format(@"You are an expert law school educator tasked with generating narrative feedback based on evaluations from {0}. These evaluations reflect the student’s performance over time. Follow these steps to ensure personalized, actionable feedback that is clearly formatted for HTML.
@@ -791,7 +1351,18 @@ Expected HTML Output Format:
 
                     string prompt_final = String.Format("You are an expert medical educator. Consider summary comments listed by ACGME core competencies from the period {0}, followed by comments from different evaluators for the period {0} listed in chronological order.\n Consider the summary comments during the initial period and compare to their performance during the latter period.  Provide a comparison of the initial performance to the most recent performance, and detail a trend in the performance.\n Assume the resident has multiple opportunities to improve and grow in that period. Analyze the comments to demonstrate a trend in their performance. Please provide the resident with detailed narrative summaries of their performance.\n Separate each narrative summary by the six core ACGME competencies and provide an 'Overall MyInsights' section to summarize all their strengths and weaknesses.\nPlease sort the competency headings into the following order: Patient Care, Medical Knowledge, System-Based Practices, Practice-Based Learning & Improvement, Professionalism, and Interpersonal & Communication Skills.\n Phrase the responses to the resident but do not use their name. Do not refer to them by name.\n display header in bold. Do not rewrite the comments in your response.", dateRange);
                     string prompt_feedback = "User accepted assistant reply. Consider this as user feedback. display header in bold.";
-                    prompt_initial = (input.UserTypeID != 3) ? PromptService.GetMyInsightPrompt(dateRange, input.DepartmentID) : PromptService.GetAttendingMyInsightPrompt(dateRange);
+                    if (input.MyInsightsType == 2) // Nurse BSN Program
+                    {
+                        prompt_initial = PromptService.GetNursingBSNMyInsightPrompt(dateRange);
+                    }
+                    else if (input.MyInsightsType == 3) // Emergency Medicine PA Program
+                    {
+                        prompt_initial = PromptService.GetEmergencyMedicinePAMyInsightPrompt(dateRange);
+                    }
+                    else
+                    {
+                        prompt_initial = (input.UserTypeID != 3) ? PromptService.GetMyInsightPrompt(dateRange, input.DepartmentID) : PromptService.GetAttendingMyInsightPrompt(dateRange);
+                    }
 
 
                     if (objUsers["usercomments"] != null)

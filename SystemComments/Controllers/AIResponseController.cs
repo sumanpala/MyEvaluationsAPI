@@ -923,7 +923,7 @@ namespace SystemComments.Controllers
                             }
                             comments = comments.Replace("[Historical Data]", history);
 
-                            if (isSageFocus == 1)
+                            if (isSageFocus == 1 || comments.Contains("[Milestone Framework]"))
                             {
                                 (string milestoneFramework, string epaFramework, string priorEPAData, string epaInputJSON) = await Task.FromResult(BackEndService.GetSageFocusHistory(new AIRequest
                                 {
@@ -938,10 +938,8 @@ namespace SystemComments.Controllers
                                 comments = comments.Replace("[Milestone Framework]", milestoneFramework);
                                 comments = comments.Replace("[EPA Framework]", epaFramework);
                                 comments = comments.Replace("[Prior EPA Data]", priorEPAData);
-
                             }
-                        }
-                       
+                        }                       
 
                     }
                     comments = RemoveHTMLTags(comments);

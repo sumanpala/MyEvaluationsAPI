@@ -20,6 +20,10 @@ namespace SystemComments.Models.DataBase
 
         public Int64 DepartmentID { get; set; }
 
+        public Int64 ProgramID { get; set; }
+
+        public Int16 MyInsightsType { get; set; } = 1;
+
         public string SearchCriteria { get; set; }
 
         public string Feedback { get; set; }
