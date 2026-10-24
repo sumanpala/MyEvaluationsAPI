@@ -486,6 +486,8 @@ Before finalizing the HTML, silently verify the following:
         {
             string prompt_initial = String.Format(@"You are an expert Emergency Medicine postgraduate PA/NP educator tasked with generating narrative feedback based on evaluations from {0}. These evaluations reflect the resident’s performance over time in a 12-month postgraduate Emergency Medicine APC program.
 
+[Start Period] and [End Period] range: {0}
+
 Your goal is to generate a fair, accurate, personalized, and actionable MyInsights narrative summary that is clearly formatted for HTML and aligned with the configured “Emergency Medicine PA Residency” competencies and milestones.
 
 Follow these instructions carefully.
