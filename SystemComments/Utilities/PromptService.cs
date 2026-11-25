@@ -1416,6 +1416,231 @@ Expected HTML Output Format:
             return (comments, userComments);
         }
 
+        public static decimal CalculateEstimatedCostUsd(
+long inputTokens,
+long outputTokens,
+long actualInputTokens, IConfiguration config)
+        {
+            decimal inputCostPerMillion =
+                GetConfigurationDecimal(
+                    "AppSettings:APEInputCostPerMillion",
+                    2.0m, config["APEInputCostPerMillion"]);
+
+            decimal outputCostPerMillion =
+                GetConfigurationDecimal(
+                    "AppSettings:APEOutputCostPerMillion",
+                    10.0m, config["APEOutputCostPerMillion"]);
+
+            /*
+             * GPT-6.1 Sol long-context pricing:
+             * Input: 2x above 272K input tokens.
+             * Output: 1.5x above 272K input tokens.
+             *
+             * This estimates standard, uncached token costs.
+             * Cached input and other pricing modes may differ.
+             */
+
+            if (actualInputTokens > 272000)
+            {
+                inputCostPerMillion *= 2.0m;
+                outputCostPerMillion *= 1.5m;
+            }
+
+            decimal inputCost =
+                inputTokens / 1_000_000m *
+                inputCostPerMillion;
+
+            decimal outputCost =
+                outputTokens / 1_000_000m *
+                outputCostPerMillion;
+
+            return inputCost + outputCost;
+        }
+
+        private static decimal GetConfigurationDecimal(
+    string key,
+    decimal defaultValue, string configValue)
+        {
+            return decimal.TryParse(
+                configValue,
+                out decimal value)
+                    ? value
+                    : defaultValue;
+        }
+
+        public static async Task<long> CountOpenAIInputTokensAsync(
+    string model,
+    string systemPrompt,
+    string userPrompt,
+    string apiKey, HttpClient client)
+        {
+            var countRequestBody = new
+            {
+                model,
+
+                instructions = systemPrompt,
+
+                input = userPrompt
+            };
+
+            using HttpRequestMessage request =
+                new HttpRequestMessage(
+                    HttpMethod.Post,
+                    "https://api.openai.com/v1/responses/input_tokens");
+
+            request.Headers.Authorization =
+                new AuthenticationHeaderValue(
+                    "Bearer",
+                    apiKey);
+
+            request.Content = new StringContent(
+                JsonConvert.SerializeObject(countRequestBody),
+                Encoding.UTF8,
+                "application/json");
+
+            using HttpResponseMessage response =
+                await client.SendAsync(request);
+
+            string responseBody =
+                await response.Content.ReadAsStringAsync();
+
+            if (!response.IsSuccessStatusCode)
+            {
+                throw new InvalidOperationException(
+                    "OpenAI input-token counting failed. " +
+                    $"StatusCode: {(int)response.StatusCode}; " +
+                    $"Response: {responseBody}");
+            }
+
+            JObject json = JObject.Parse(responseBody);
+
+            long inputTokens =
+                ReadTokenValue(json, "input_tokens");
+
+            if (inputTokens <= 0)
+            {
+                throw new InvalidOperationException(
+                    "OpenAI returned an invalid input-token count.");
+            }
+
+            return inputTokens;
+        }
+
+        public static string ExtractResponsesOutputText(JObject json)
+        {
+            JArray output = json["output"] as JArray;
+
+            if (output == null)
+            {
+                return null;
+            }
+
+            StringBuilder result = new StringBuilder();
+
+            foreach (JToken outputItem in output)
+            {
+                if (!string.Equals(
+                        outputItem["type"]?.ToString(),
+                        "message",
+                        StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                JArray content = outputItem["content"] as JArray;
+
+                if (content == null)
+                {
+                    continue;
+                }
+
+                foreach (JToken contentItem in content)
+                {
+                    if (string.Equals(
+                            contentItem["type"]?.ToString(),
+                            "output_text",
+                            StringComparison.OrdinalIgnoreCase))
+                    {
+                        string text =
+                            contentItem["text"]?.ToString();
+
+                        if (!string.IsNullOrWhiteSpace(text))
+                        {
+                            result.Append(text);
+                        }
+                    }
+                }
+            }
+
+            return result.ToString();
+        }
+
+        public static void ValidateAPEOutputJson(JObject outputJson)
+        {
+            if (outputJson == null)
+            {
+                throw new InvalidOperationException(
+                    "The model returned an empty JSON object.");
+            }
+
+            /*
+             * Example required-property validation.
+             *
+             * Replace these property names with the properties
+             * required by your actual domain output schema.
+             */
+
+            string[] requiredProperties =
+            {
+        "ExecutiveSummary"
+    };
+
+            foreach (string property in requiredProperties)
+            {
+                if (outputJson[property] == null)
+                {
+                    throw new InvalidOperationException(
+                        $"The model output is missing required property: " +
+                        $"{property}");
+                }
+            }
+        }
+
+        private long EstimateTokenCount(string text, long charactersPerToken)
+        {
+            if (string.IsNullOrEmpty(text))
+            {
+                return 0;
+            }
+
+            charactersPerToken = Math.Max(1, charactersPerToken);
+
+            return (long)Math.Ceiling(
+                (double)text.Length / charactersPerToken);
+        }
+
+        public static long GetConfigurationInt64(string key, long defaultValue, string keyvalue)
+        {
+            return long.TryParse(keyvalue, out long value)
+                ? value
+                : defaultValue;
+        }
+
+        public static long ReadTokenValue(JObject json, params string[] paths)
+        {
+            foreach (string path in paths)
+            {
+                JToken token = json.SelectToken(path);
+
+                if (token != null && long.TryParse(token.ToString(), out long value))
+                {
+                    return value;
+                }
+            }
+
+            return 0;
+        }
+
         public static string GetSagePrompt(AIRequest input)
         {
             string comments = string.Empty;

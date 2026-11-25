@@ -146,8 +146,20 @@ namespace SystemComments.Models.DataBase
 
         public Int64 UserID { get; set; }
 
+    }
 
+    public class DIOGMERequest
+    {
+        public Int64 ID { get; set; }   
+        public Int64 DepartmentID { get; set; }
 
+        public Int32 AcademicYear { get; set; }
+
+        public string FieldName { get; set; }
+
+        public Int64 AssessmentID { get; set; }
+
+        public Int16 SummaryType { get; set; } 
     }
 
 

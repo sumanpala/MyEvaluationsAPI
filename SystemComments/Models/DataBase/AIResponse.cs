@@ -46,6 +46,30 @@ namespace SystemComments.Models.DataBase
         public string AFIProgramJSON { get; set; }
 
     }
+    public class APETokenUsage
+    {
+        public string Model { get; set; }
+
+        public long EstimatedInputTokens { get; set; }
+
+        public long InputTokens { get; set; }
+
+        public long OutputTokens { get; set; }
+
+        public long ReasoningTokens { get; set; }
+
+        public long TotalTokens { get; set; }
+
+        public decimal EstimatedCostUsd { get; set; } = 0;
+
+        public double DurationSeconds { get; set; } = 0;
+
+        public string Status { get; set; }
+
+        public string ErrorMessage { get; set; }
+
+        public short PromptType { get; set; }
+    }
 
     public class MyInsightsResponse
     {
@@ -211,7 +235,28 @@ namespace SystemComments.Models.DataBase
 
         public string ErrorMessage {  get; set; }
 
+    }
 
+    public class MyInsightsDIOGMECResponse
+    {
+        public string Prompt { get; set; }
+
+        public string ResultJSON { get; set; }
+
+        public string ErrorMessage { get; set; } = "";
+
+        public long InputTokens { get; set; } = 0;
+
+        public decimal EstimatedCostUsd { get; set; } = 0;
+
+        public double DurationSeconds { get; set; } = 0;
+
+    }
+    public class APESolAIResult
+    {
+        public string Response { get; set; }
+
+        public APETokenUsage TokenUsage { get; set; }
     }
 
 }

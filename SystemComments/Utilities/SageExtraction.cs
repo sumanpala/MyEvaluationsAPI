@@ -24,7 +24,7 @@ namespace SystemComments.Utilities
     {
         static int idCounter = 1;
 
-        public static string ExtractData(string airesponse)
+        public static string ExtractData(string airesponse, Int16 isSageFocus = 0)
         {
             airesponse = airesponse.Replace("```", "");
 
@@ -52,7 +52,7 @@ namespace SystemComments.Utilities
                 node.Value = SecurityElement.Escape(node.Value);
             }
 
-            return ConvertXmlToJson(doc);
+            return ConvertXmlToJson(doc, isSageFocus);
         }
 
 
@@ -833,7 +833,7 @@ namespace SystemComments.Utilities
                    (c >= 0x10000 && c <= 0x10FFFF));   // Supplementary Planes
         }
 
-        static string ConvertXmlToJson(XDocument xmlDoc)
+        static string ConvertXmlToJson(XDocument xmlDoc, Int16 isSageFocus = 0)
         {
             var root = xmlDoc.Root;
 
@@ -902,6 +902,22 @@ namespace SystemComments.Utilities
                     lstAllSections.Add(sectionData);
                 }
             }
+
+            // ============================================================
+            // SECTION NUMBER LOOKUP
+            // ============================================================
+
+            var sectionNumberLookup = lstAllSections
+                .Select((section, index) => new
+                {
+                    Name = section["name"]?.ToString(),
+                    SectionNumber = (short)(index + 1)
+                })
+                .Where(x => !string.IsNullOrWhiteSpace(x.Name))
+                .ToDictionary(
+                    x => x.Name!,
+                    x => x.SectionNumber,
+                    StringComparer.OrdinalIgnoreCase);
 
             // ============================================================
             // SECTIONS
@@ -980,8 +996,22 @@ namespace SystemComments.Utilities
                                 ? sectionFullNameElement.Value
                                 : "Unknown Section");
 
-                    sectionData["sectionnum"] =
-                        sectionNumber;
+                    if (isSageFocus == 0)
+                    {
+                        sectionData["sectionnum"] =
+                            sectionNumber;
+                    }
+                    else
+                    {
+                        string currentSectionName = sectionData["name"]?.ToString() ?? "";
+
+                        sectionData["sectionnum"] =
+                            sectionNumberLookup.TryGetValue(
+                                currentSectionName,
+                                out short sectionNum)
+                                    ? sectionNum
+                                    : sectionNumber;
+                    }
 
                     sectionData["iscomplete"] =
                         "0";
@@ -2850,7 +2880,7 @@ namespace SystemComments.Utilities
 
             return tableLookup[tableName];
         }
-        public static string MergeJson(string json1, string json2, ref bool isNewFollowup)
+        public static string MergeJson(string json1, string json2, ref bool isNewFollowup, short isSageFocus = 0)
         {
             try
             {
@@ -2899,6 +2929,26 @@ namespace SystemComments.Utilities
                 var sections1 = (JArray)obj1["sections"];
                 var sections2 = (JArray)obj2["sections"];
                 int sectionsCount = sections1.Count;
+
+                // ============================================================
+                // SECTION NUMBER LOOKUP
+                // ============================================================
+
+                var allSections = obj1["allsections"] as JArray;
+
+                var sectionNumberLookup = (allSections ?? new JArray())
+                    .Select((section, index) => new
+                    {
+                        Name = section["name"]?.ToString().Replace("&", "and"),
+                        SectionNumber = (short)(index + 1)
+                    })
+                    .Where(x => !string.IsNullOrWhiteSpace(x.Name))
+                    .GroupBy(x => x.Name!, StringComparer.OrdinalIgnoreCase)
+                    .ToDictionary(
+                        x => x.Key,
+                        x => x.First().SectionNumber,
+                        StringComparer.OrdinalIgnoreCase);
+
                 isNewFollowup = false;
                 // Merge sections from JSON 2 if sectionnum not in JSON 1
                 foreach (var section2 in sections2)
@@ -2917,7 +2967,10 @@ namespace SystemComments.Utilities
                         if (!exists)
                         {
                             sectionsCount++;
-                            section2["sectionnum"] = sectionsCount.ToString();
+                           short sectionIndex = sectionNumberLookup.TryGetValue(sectionName.Replace("&", "and"), out short sectionNum)
+                            ? sectionNum
+                            : (short)sectionsCount;
+                            section2["sectionnum"] = (isSageFocus == 1 && sectionIndex > 0) ? sectionIndex : sectionsCount.ToString();
                             sections1.Add(section2);
                         }
                         var existingSection = sections1.FirstOrDefault(s => s["name"].ToString().Replace("&", "and") == sectionName.Replace("&", "and")) as JObject;

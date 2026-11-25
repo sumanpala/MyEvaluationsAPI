@@ -41,6 +41,25 @@ namespace SystemComments.Utilities
             await Task.Run(() => _context.ExecuteStoredProcedure("InsertAPEMyInsightsData", parameters));
         }
 
+        public static async Task InsertDIOGMECSummaryInsights(DIOGMERequest input, MyInsightsDIOGMECResponse apeResponse, APIDataBaseContext _context)
+        {
+            SqlParameter[] parameters = new SqlParameter[]
+            {               
+                new SqlParameter("@ID", input.ID),
+                new SqlParameter("@DepartmentID", input.DepartmentID),
+                new SqlParameter("@AcademicYear", input.AcademicYear),
+                new SqlParameter("@AssessmentID", input.AssessmentID),               
+                new SqlParameter("@SummaryType", input.SummaryType),
+                new SqlParameter("@Prompt", apeResponse.Prompt),
+                new SqlParameter("@Response", apeResponse.ResultJSON),
+                new SqlParameter("@ErrorMessage", apeResponse.ErrorMessage),
+                new SqlParameter("@InputTokens", apeResponse.InputTokens),
+                new SqlParameter("@EstimatedCost", apeResponse.EstimatedCostUsd),
+                new SqlParameter("@DurationSeconds", apeResponse.DurationSeconds)
+            };
+            await Task.Run(() => _context.ExecuteStoredProcedure("InsertDIOGMECSummaryInsights", parameters));
+        }
+
         private static List<Int16> GetAudiences()
         {
             List<Int16> audiences = new List<Int16>();
@@ -625,6 +644,64 @@ namespace SystemComments.Utilities
                         prompt = prompt.Replace("[From uploaded file]", result);
                     }
                 }                
+
+            });
+
+            return prompt;
+        }
+
+        public static async Task<string> GetDIOGMECPromptResponse(DIOGMERequest input, APIDataBaseContext _context, IConfiguration _config)
+        {
+            string prompt = "";
+            SqlParameter[] parameters = new SqlParameter[]
+            {
+                new SqlParameter("@DepartmentID", input.DepartmentID),
+                new SqlParameter("@AcademicYear", input.AcademicYear),
+                new SqlParameter("@AssessmentID", input.AssessmentID),
+                new SqlParameter("@FieldName", input.FieldName)                
+            };
+
+
+            // Use Task.Run to ensure the method runs asynchronously
+            await Task.Run(async () =>
+            {
+                DataSet dsInsights = _context.ExecuteStoredProcedure("GetDIOGMECPrompt", parameters);
+
+                if (dsInsights != null)
+                {
+                    DataTable dtPrompt = dsInsights.Tables[0];
+                    if (dtPrompt.Rows.Count > 0)
+                    {
+                        prompt = await SageExtraction.FormatHtml(dtPrompt.Rows[0]["Prompt"].ToString());
+                        prompt = prompt.Replace("<br/>", "\n").Replace("</br>", "\n").Replace("<br>", "\n");
+                        prompt = prompt.Replace("[ProgramName]", dtPrompt.Rows[0]["ProgramName"].ToString());
+                        prompt = prompt.Replace("[ProgramID]", dtPrompt.Rows[0]["ProgramID"].ToString());
+                        prompt = prompt.Replace("[AcademicYear]", dtPrompt.Rows[0]["AcademicYear"].ToString());
+                        prompt = prompt.Replace("[DepartmentName]", dtPrompt.Rows[0]["DepartmentName"].ToString());
+                        prompt = prompt.Replace("[InputText]", dtPrompt.Rows[0]["InputText"].ToString());
+                        prompt = prompt.Replace("[SelectedProgramCount]", dtPrompt.Rows[0]["SelectedProgramCount"].ToString());
+                        prompt = prompt.Replace("[IncludedProgramCount]", dtPrompt.Rows[0]["IncludedProgramCount"].ToString());
+                        if (dtPrompt.Columns.Contains("DomainName"))
+                        {
+                            prompt = prompt.Replace("[InstitutionalCategoryName]", dtPrompt.Rows[0]["DomainName"].ToString());
+                            prompt = prompt.Replace("[SourceDomainName]", dtPrompt.Rows[0]["DomainName"].ToString());
+                        }
+                        if (dtPrompt.Columns.Contains("DomainName"))
+                        {
+                            prompt = prompt.Replace("[InstitutionalCategoryName]", dtPrompt.Rows[0]["DomainName"].ToString());
+                            prompt = prompt.Replace("[SourceDomainName]", dtPrompt.Rows[0]["DomainName"].ToString());
+                        }
+                        if (dtPrompt.Columns.Contains("ExpectedDomainNames"))
+                        {
+                            prompt = prompt.Replace("[ExpectedSourceDomains]", dtPrompt.Rows[0]["ExpectedDomainNames"].ToString());                           
+                        }
+                        if (dtPrompt.Columns.Contains("SummaryInsightText"))
+                        {
+                            prompt = prompt.Replace("[DomainExecutiveSummary]", dtPrompt.Rows[0]["SummaryInsightText"].ToString());
+                        }
+                    }
+
+                }
 
             });
 
